@@ -4,7 +4,13 @@
 
 import { resolveOptions } from './config.js'
 import type { ResolvedWorldOptions, WorldOptions } from './config.js'
-import { EntityStore, makeHandleLayout, reserveEntityBlock, returnReservedIds } from './entity/index.js'
+import {
+  EntityStore,
+  handleIndex,
+  makeHandleLayout,
+  reserveEntityBlock,
+  returnReservedIds,
+} from './entity/index.js'
 import type {
   EntityGeneration,
   EntityHandle,
@@ -14,6 +20,11 @@ import type {
   HandleLayout,
   HandleStats,
 } from './entity/index.js'
+import type { ComponentDef, ComponentId, Schema } from '@ecsia/schema'
+import { Buffers, probeCapabilities } from './memory/index.js'
+import type { WorkerMode } from './memory/index.js'
+import { ComponentRegistry } from './registry.js'
+import type { AccessorWorld } from './component/index.js'
 
 /** world.md §4: 'serial' during the serial slot (and always, single-threaded); 'wave' only while the scheduler dispatches worker waves. */
 export type WorldPhase = 'serial' | 'wave'
@@ -52,6 +63,13 @@ export interface World {
   encodeHandle(index: number, generation: number): EntityHandle
   decodeHandle(handle: EntityHandle): { index: EntityIndex; generation: EntityGeneration }
   handleStats(): HandleStats
+
+  /**
+   * Push (entityIndex, componentId[, fieldIndex]) to the reactivity write log for the `.changed`
+   * filter (world.md §9.1; Must-Fix #2). STUBBED as a no-op until M5 — the canonical signature and
+   * accessor-setter call sites are in place now so M5 only fills the body.
+   */
+  trackWrite(index: number, componentId: ComponentId, fieldIndex?: number): void
 }
 
 interface WorldState {
@@ -78,6 +96,32 @@ export function createWorld(options: WorldOptions = {}): World {
     maxEntities: resolved.maxEntities,
     shared: resolved.threaded,
   })
+
+  // --- buffers (world.md §7 step 2): one capability probe, one SAB-vs-AB decision (B-1) ---
+  const workerMode: WorkerMode = resolved.threaded
+    ? resolved.scheduler.workers === 'postMessage-fallback'
+      ? 'postMessage-fallback'
+      : 'auto'
+    : 'single'
+  const capabilities = probeCapabilities(workerMode, (message) => {
+    if (typeof console !== 'undefined') console.warn(`[ecsia] ${message}`)
+  })
+  const buffers = new Buffers({ capabilities, maxEntities: resolved.maxEntities })
+
+  // The accessor seam: a setter calls world.trackWrite (stubbed until M5); handleIndex strips the
+  // generation so the LOW handle bits index the write log (world.md §9.1, W-8).
+  const trackWrite = (_index: number, _componentId: ComponentId, _fieldIndex?: number): void => {
+    // M5 stub: no-op. Signature and call sites are canonical now (world.md §9.1 / I-ACC-4).
+  }
+  const accessorWorld: AccessorWorld = {
+    trackWrite,
+    handleIndex: (handle) => handleIndex(handle, handleLayout) as number,
+  }
+
+  // --- registry (world.md §7 step 1): mint dense user ids, wire accessor factories ---
+  const registry = new ComponentRegistry(buffers, accessorWorld)
+  registry.register(resolved.components as readonly ComponentDef<Schema>[])
+  entities.setAccessorResolver(registry)
 
   const world: World = {
     get options() {
@@ -119,6 +163,9 @@ export function createWorld(options: WorldOptions = {}): World {
     },
     handleStats() {
       return entities.handleStats()
+    },
+    trackWrite(index, componentId, fieldIndex) {
+      trackWrite(index, componentId, fieldIndex)
     },
   }
 
