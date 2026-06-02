@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/schema" },
+    { "path": "./packages/core" },
+    { "path": "./packages/relations" },
+    { "path": "./packages/scheduler" },
+    { "path": "./packages/serialization" },
+    { "path": "./packages/ecsia" }
+  ]
+}
