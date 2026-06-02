@@ -40,3 +40,101 @@ export type {
 
 export { allocU32 } from './memory/index.js'
 export type { AllocU32Options, U32Region } from './memory/index.js'
+
+export {
+  Buffers,
+  probeCapabilities,
+  selectBacking,
+  sharedBacking,
+  snapshotInto,
+  rowSlice,
+  columnKey,
+  elementCtor,
+  elementBytes,
+  makeColumnLayout,
+  tokenToColumnLayout,
+  fieldToColumnLayout,
+  stringIndexElement,
+  encodeEid,
+  decodeEid,
+  EID_NULL,
+} from './memory/index.js'
+export type {
+  Backing,
+  ColumnKey,
+  RegionKey,
+  WorkerMode,
+  BackingStrategy,
+  RuntimeCapabilities,
+  Column,
+  Region,
+  RegionOpts,
+  ViewHolder,
+  BuffersConfig,
+  SharedHandleManifest,
+  ExportedColumnHandle,
+  ExportedRegionHandle,
+  ElementKind,
+  TypedArray,
+  ColumnLayout,
+} from './memory/index.js'
+
+export {
+  defineComponent,
+  defineTag,
+  registerComponentId,
+  UNREGISTERED,
+  resolveDescriptor,
+  makeAccessorFactory,
+  bindingsFor,
+  buildColumnSet,
+  bindAccessorRow,
+} from './component/index.js'
+export type {
+  ComponentRuntime,
+  DefKind,
+  AccessorWorld,
+  AccessorBinding,
+  AccessorInstanceBase,
+  ColumnSet,
+  BuildColumnSetParams,
+} from './component/index.js'
+
+export { ComponentRegistry } from './registry.js'
+
+// Re-export the schema surface so users import tokens/inference from @ecsia/core (the umbrella).
+export {
+  vec,
+  vec2,
+  vec3,
+  vec4,
+  staticString,
+  object,
+  MAX_QUERY_ARITY,
+} from '@ecsia/schema'
+export type {
+  ScalarToken,
+  VecToken,
+  StaticStringToken,
+  ObjectToken,
+  FieldToken,
+  ScalarValue,
+  FieldValue,
+  VecView,
+  ReadonlyVecView,
+  FieldDescriptor,
+  TypedArrayCtor,
+  Schema,
+  ComponentDef,
+  ComponentOptions,
+  StorageStrategy,
+  ReadView,
+  WriteView,
+  ReadOf,
+  WriteOf,
+  SchemaOf,
+  AccessorInstance,
+  AccessorFactory,
+  TypedArrayLike,
+  ColumnBinding,
+} from '@ecsia/schema'
