@@ -1,0 +1,239 @@
+// The factory-closure accessor class (component-schema.md §8.2; type-system.md §9). ONE hidden
+// class per (archetype, component), closing over the column views and reading a mutable __idx.
+// This is NOT an ES Proxy on the accessor itself and NOT new Function() — it is a parameterised
+// closure returning a plain JS class (the permitted technique, type-system.md §10).
+//
+// Each instance is the single monomorphic singleton for its (archetype, component): read()/the
+// shorthand return it typed Readonly (I-ACC-3), write() returns it mutable. A getter reads the
+// captured view at __idx; a setter writes the slot AND calls world.trackWrite (I-ACC-4 / Must-Fix
+// #2). On the primary grow path captured views auto-widen (I-ACC-2, no call); on the fallback path
+// __rebind rebuilds them from the new backing (I-ACC-2b).
+
+import type {
+  AccessorFactory,
+  ColumnBinding,
+  ComponentDef,
+  ComponentId,
+  EntityHandle,
+  FieldDescriptor,
+  Schema,
+} from '@ecsia/schema'
+import type { Backing, ColumnLayout, TypedArray } from '../memory/index.js'
+import { columnKey, elementCtor } from '../memory/index.js'
+import type { ElementKind } from '../memory/index.js'
+
+// The seam the world hands the accessor: how a setter reports a tracked write. trackWrite is a
+// no-op stub until M5 (world.md §9.1 canonical signature); the call SITE is present and correct.
+export interface AccessorWorld {
+  trackWrite(index: number, componentId: ComponentId, fieldIndex?: number): void
+  handleIndex(handle: EntityHandle): number
+}
+
+// The per-(archetype, component) binding context the world/storage builds. M3 owns binding this
+// against a real archetype's column set; for M2 the column set is allocated directly.
+export interface AccessorBinding {
+  readonly world: AccessorWorld
+  readonly componentId: ComponentId
+}
+
+// Every accessor instance carries the mutable cursor (__idx), the current entity handle (__eid,
+// for the write-log index), the binding (the trackWrite seam), and the fallback rebind method.
+export interface AccessorInstanceBase {
+  __idx: number
+  __eid: EntityHandle
+  __binding: AccessorBinding | null
+  __rebind(newBacking: Backing): void
+}
+
+interface FieldPlan {
+  readonly fieldIndex: number
+  readonly name: string
+  readonly stride: number
+  readonly element: ElementKind
+  readonly encode: (v: unknown) => number
+  readonly decode: (slot: number) => unknown
+  readonly isVec: boolean
+}
+
+function columnElementOf(f: FieldDescriptor): ElementKind {
+  const ctor = f.ctor
+  if (ctor === Float32Array) return 'f32'
+  if (ctor === Float64Array) return 'f64'
+  if (ctor === Int8Array) return 'i8'
+  if (ctor === Uint8Array) return 'u8'
+  if (ctor === Uint8ClampedArray) return 'u8c'
+  if (ctor === Int16Array) return 'i16'
+  if (ctor === Uint16Array) return 'u16'
+  if (ctor === Int32Array) return 'i32'
+  if (ctor === Uint32Array) return 'u32'
+  throw new Error('unsupported column element ctor')
+}
+
+function planFields(def: ComponentDef<Schema>): FieldPlan[] {
+  const plans: FieldPlan[] = []
+  let fieldIndex = 0
+  for (const f of def.fields as readonly FieldDescriptor[]) {
+    // object<T> contributes no column (§3.8); skipped from the column-bound plan but its field
+    // index is still consumed so column keys stay stable across the field set.
+    if (f.ctor !== null) {
+      plans.push({
+        fieldIndex,
+        name: f.name,
+        stride: f.stride,
+        element: columnElementOf(f),
+        encode: f.encode,
+        decode: f.decode,
+        isVec: f.stride > 1,
+      })
+    }
+    fieldIndex += 1
+  }
+  return plans
+}
+
+// Build the per-(archetype, component) ColumnBinding[] for a column set the caller allocated. The
+// archetype-binding seam (M3) will produce these from a real archetype's columns; for M2 the
+// caller passes the freshly-allocated columns directly.
+export function bindingsFor(
+  columns: ReadonlyArray<{ view: TypedArray; layout: ColumnLayout }>,
+): ColumnBinding[] {
+  return columns.map((c) => ({
+    view: c.view as unknown as ColumnBinding['view'],
+    byteOffset: (c.view as unknown as { byteOffset: number }).byteOffset,
+    element: c.layout.element,
+  }))
+}
+
+const AXIS_NAMES = ['x', 'y', 'z', 'w'] as const
+
+export function makeAccessorFactory<S extends Schema>(def: ComponentDef<S>): AccessorFactory<S> {
+  const plans = planFields(def as ComponentDef<Schema>)
+  const componentId = def.id as ComponentId
+
+  return ((columns: ReadonlyArray<ColumnBinding>) => {
+    if (columns.length !== plans.length) {
+      throw new Error(`accessor factory for '${def.name}': expected ${plans.length} columns, got ${columns.length}`)
+    }
+
+    // Captured per-field state, closed over by every getter/setter. `views` is mutated in place on
+    // a fallback rebind so the closures keep seeing the live view without regeneration.
+    const views: TypedArray[] = columns.map((c) => c.view as unknown as TypedArray)
+    const offsets: number[] = columns.map((c) => c.byteOffset)
+    const elements: ElementKind[] = columns.map((c) => c.element as ElementKind)
+
+    // One reusable VecView per vec field (§1.3: no allocation on read). Lazily built on first get
+    // and cached here, then re-returned for every subsequent get; it reads owner.__idx lazily so it
+    // stays correct as __idx is re-poked, and resolves the live view from `views[i]` so a fallback
+    // rebind is transparent.
+    const vecViews: Array<VecAccess | undefined> = plans.map(() => undefined)
+
+    class Accessor implements AccessorInstanceBase {
+      __idx = 0
+      __eid = 0 as unknown as EntityHandle
+      __binding: AccessorBinding | null = null
+
+      __rebind(newBacking: Backing): void {
+        for (let i = 0; i < views.length; i++) {
+          const Ctor = elementCtor(elements[i] as ElementKind)
+          // No length argument (V-1): rebuild the length-tracking view at the captured byteOffset.
+          views[i] = new Ctor(newBacking as ArrayBufferLike, offsets[i]) as TypedArray
+        }
+      }
+    }
+
+    plans.forEach((plan, i) => {
+      const stride = plan.stride
+      const decode = plan.decode
+      const encode = plan.encode
+      const fieldIndex = plan.fieldIndex
+
+      // I-ACC-4: fieldIndex is forwarded ONLY by field-granular setters. M2 ships no changeTracking
+      // surface, so vec setters pass withField=true unconditionally. TODO: gate withField on the
+      // per-component changeTrackingDefault when reactivity config lands (M5), so component-granular
+      // components omit fieldIndex.
+      const track = (self: Accessor, withField: boolean): void => {
+        const b = self.__binding
+        if (b === null) return
+        if (withField) b.world.trackWrite(b.world.handleIndex(self.__eid), componentId, fieldIndex)
+        else b.world.trackWrite(b.world.handleIndex(self.__eid), componentId)
+      }
+
+      if (plan.isVec) {
+        Object.defineProperty(Accessor.prototype, plan.name, {
+          enumerable: true,
+          configurable: true,
+          get(this: Accessor): unknown {
+            let v = vecViews[i]
+            if (v === undefined) {
+              v = makeVecView(views, i, stride, this, decode, encode, () => track(this, true))
+              vecViews[i] = v
+            }
+            return v
+          },
+          set(this: Accessor, value: ArrayLike<number>): void {
+            const view = views[i] as TypedArray
+            const base = this.__idx * stride
+            for (let a = 0; a < stride; a++) view[base + a] = encode(value[a])
+            track(this, true)
+          },
+        })
+      } else {
+        Object.defineProperty(Accessor.prototype, plan.name, {
+          enumerable: true,
+          configurable: true,
+          get(this: Accessor): unknown {
+            const view = views[i] as TypedArray
+            return decode(view[this.__idx] as number)
+          },
+          set(this: Accessor, value: unknown): void {
+            const view = views[i] as TypedArray
+            view[this.__idx] = encode(value)
+            track(this, false)
+          },
+        })
+      }
+    })
+
+    return Accessor as unknown as new () => never
+  }) as unknown as AccessorFactory<S>
+}
+
+interface VecAccess {
+  readonly length: number
+  [index: number]: number
+}
+
+// A thin vec view, built ONCE per (accessor, vec field) and reused across gets (§1.3: no allocation
+// on read). It reads `owner.__idx` lazily so the single cached wrapper stays correct as __idx is
+// re-poked, and resolves the live view from `views[viewIndex]` so a fallback rebind is transparent.
+// Indexed/named axis reads decode; writes encode + report a field-granular write.
+function makeVecView(
+  views: TypedArray[],
+  viewIndex: number,
+  stride: number,
+  owner: { __idx: number },
+  decode: (slot: number) => unknown,
+  encode: (v: unknown) => number,
+  trackWrite: () => void,
+): VecAccess {
+  const read = (axis: number): unknown => decode((views[viewIndex] as TypedArray)[owner.__idx * stride + axis] as number)
+  const write = (axis: number, value: unknown): void => {
+    ;(views[viewIndex] as TypedArray)[owner.__idx * stride + axis] = encode(value)
+    trackWrite()
+  }
+  const obj: Record<string | number, unknown> = { length: stride }
+  for (let a = 0; a < stride; a++) {
+    const axis = a
+    const def: PropertyDescriptor = {
+      enumerable: true,
+      get: () => read(axis),
+      set: (v: unknown) => write(axis, v),
+    }
+    Object.defineProperty(obj, axis, def)
+    if (axis < AXIS_NAMES.length) Object.defineProperty(obj, AXIS_NAMES[axis] as string, def)
+  }
+  return obj as unknown as VecAccess
+}
+
+export { columnKey }
+export type { ColumnKey } from '../memory/index.js'

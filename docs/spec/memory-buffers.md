@@ -604,14 +604,20 @@ The grown byte region is zero-filled by the runtime. Only columns whose zero val
 desired default need explicit fill:
 
 ```
-fillGrownTail(col, oldCapacity, newCapacity):
+fillGrownTail(col, oldCapacity, actualCapacity):
+  // actualCapacity is the POST-GROW capacity (col.view.length / stride), NOT the requested
+  // newCapacity: the doubling protocol (§7.7) over-allocates beyond newCapacity, so filling only
+  // to newCapacity would leave eid rows in [newCapacity, actualCapacity) at 0 — a valid entity
+  // index (entity 0), not the -1 null sentinel. C-2 requires the WHOLE grown tail be filled.
   if col.layout is an eid column:
-      fillRange(col.view, oldCapacity * stride, newCapacity * stride, -1)   // null sentinel (C-2)
+      fillRange(col.view, oldCapacity * stride, actualCapacity * stride, -1)   // null sentinel (C-2)
   // all other kinds: zero is correct, no work
 ```
 
 `fillRange(view, start, end, value)` is `view.fill(value, start, end)`. This is the only
-per-growth O(newRows) cost on the primary path.
+per-growth O(newRows) cost on the primary path. Both paths pass the actual post-grow capacity:
+the primary path derives it from `col.backing.byteLength / rowBytes`; the fallback path allocates
+exactly `newCapacity * rowBytes` so the two coincide there.
 
 ### 7.4 Quiescence — why growth is always safe
 
@@ -700,7 +706,10 @@ maxCapacityFor(initialCapacity):
   // GROWTH_RESERVE_FACTOR = 16 (default); MIN_RESERVE_ROWS = 1024; both createWorld options.
 
 nextCapacityBytes(currentBytes, requiredBytes, maxBytes):
-  target := currentBytes
+  // The doubling base MUST be non-zero: from currentBytes==0 the loop never progresses (0*2==0)
+  // and spins forever. Seed from requiredBytes when the backing is empty so a grow off a
+  // zero-capacity column still terminates at the required size.
+  target := currentBytes > 0 ? currentBytes : requiredBytes
   while target < requiredBytes: target := target * 2          // double (report §2.9)
   return min(target, maxBytes)
   // If min(...) < requiredBytes (reservation exhausted), grow() will be given maxBytes and the

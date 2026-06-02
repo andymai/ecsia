@@ -12,6 +12,7 @@ import type { EntityIndexArrays, EntityIndexBounds } from './index-allocator.js'
 import { ARCHETYPE_NONE, EntityRecord } from './record.js'
 import type { EntityRecordArrays } from './record.js'
 import { EntityRef } from './ref.js'
+import type { AccessorResolver } from './ref.js'
 
 // EMPTY_ARCHETYPE_ID is normatively archetype-storage.md §3.1; the empty-signature archetype is
 // dense id 0 (a real archetype, distinct from the ARCHETYPE_NONE sentinel). Storage lands at M3;
@@ -158,6 +159,11 @@ export class EntityStore {
       index: ((handle & this.layout.indexMask) >>> 0) as EntityIndexBrand,
       generation: ((handle >>> this.layout.generationShift) & this.layout.generationMask) as EntityGeneration,
     }
+  }
+
+  /** Install the read/write accessor resolver onto the pooled ref (world wiring, world.md §7). */
+  setAccessorResolver(resolver: AccessorResolver): void {
+    this.#ref.__setResolver(resolver)
   }
 
   get index(): EntityIndex {

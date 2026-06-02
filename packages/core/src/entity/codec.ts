@@ -1,11 +1,15 @@
 // The generational handle: a packed u32 [generation : high][index : low] (entity-model.md §2).
 // Encode/decode are pure, branch-free bit ops; the brand is erased at runtime.
 
+// The handle/index brands are the canonical type-system.md §8 brands, shared with @ecsia/schema so
+// the eid field type, accessors, and the entity layer all agree on one EntityHandle/EntityIndex.
+import type { EntityHandle as SchemaEntityHandle, EntityIndex as SchemaEntityIndex } from '@ecsia/schema'
+
 /** A packed u32: [generation : generationBits][index : indexBits], generation in the HIGH bits. */
-export type EntityHandle = number & { readonly __ecsiaEntityHandle: unique symbol }
+export type EntityHandle = SchemaEntityHandle
 
 /** The low-bits index portion — the slot in the dense/sparse arrays. */
-export type EntityIndex = number & { readonly __ecsiaEntityIndex: unique symbol }
+export type EntityIndex = SchemaEntityIndex
 
 /** The generation (version) counter for a slot. */
 export type EntityGeneration = number & { readonly __ecsiaEntityGeneration: unique symbol }
@@ -55,6 +59,11 @@ export function makeHandleLayout(generationBits: number): HandleLayout {
 }
 
 export function makeHandle(index: number, generation: number, layout: HandleLayout): EntityHandle {
+  // Dev-mode guard (entity-model.md §2.3): a generation above maxGeneration would overflow the
+  // generation field and silently alias another slot's handle. Stripped in production builds.
+  if (process.env['NODE_ENV'] !== 'production' && generation > layout.maxGeneration) {
+    throw new RangeError(`makeHandle: generation ${generation} exceeds maxGeneration ${layout.maxGeneration}`)
+  }
   return (((generation << layout.generationShift) | index) >>> 0) as EntityHandle
 }
 
