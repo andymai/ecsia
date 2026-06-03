@@ -14,7 +14,7 @@ import type { Buffers, RegionKey } from '../memory/index.js'
 import { compileQuery } from './compile.js'
 import type { CompileContext, CompiledQuery } from './compile.js'
 import { LiveQuery } from './live-query.js'
-import type { LiveQueryDeps } from './live-query.js'
+import type { LiveQueryDeps, ReactivityQueryHooks } from './live-query.js'
 import { SparseSetU32 } from './sparse-set.js'
 
 export interface QueryEngineDeps extends LiveQueryDeps {
@@ -38,11 +38,18 @@ export class QueryEngine {
   readonly #byHash = new Map<string, LiveQuery>()
   /** componentId → the live queries that reference it (reverse maintenance index, §5.2 / §6.1). */
   readonly #referencing = new Map<number, Set<LiveQuery>>()
+  #reactivity: ReactivityQueryHooks | null = null
   #seq = 0
 
   constructor(deps: QueryEngineDeps) {
     this.#deps = deps
     deps.onArchetypeCreated((arch) => this.#onArchetypeCreated(arch))
+  }
+
+  /** Late-bind the reactivity write-log hooks so the Changed flavor works (world wiring). */
+  setReactivity(hooks: ReactivityQueryHooks): void {
+    this.#reactivity = hooks
+    for (const lq of this.#byHash.values()) lq.__setReactivity(hooks)
   }
 
   /** queries.md §4.3 getOrCreateLiveQuery: compile, dedup by canonical hash, seed on a miss. */
@@ -72,6 +79,7 @@ export class QueryEngine {
     const current = new SparseSetU32(this.#deps.buffers, denseKey, sparseKey, 64, this.#deps.maxEntities)
     const lq = new LiveQuery(compiled, terms, current, this.#deps.byId, this.#deps)
     lq.ensureValueSignature(compiled)
+    if (this.#reactivity !== null) lq.__setReactivity(this.#reactivity)
 
     if (!compiled.unsatisfiable) {
       for (const arch of this.#deps.byId) {

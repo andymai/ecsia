@@ -8,7 +8,7 @@ export { QueryEngine } from './engine.js'
 export type { QueryEngineDeps } from './engine.js'
 
 export { LiveQuery } from './live-query.js'
-export type { LiveQueryDeps, PooledElement } from './live-query.js'
+export type { LiveQueryDeps, PooledElement, ReactivityQueryHooks } from './live-query.js'
 
 export { SparseSetU32 } from './sparse-set.js'
 
