@@ -189,6 +189,16 @@ export class EntityStore {
     return this.#records
   }
 
+  /** The full (generational) handle occupying `index` — the query engine's index→handle resolver. */
+  handleOfIndex(index: number): EntityHandle {
+    return this.#index.handleOfIndex(index)
+  }
+
+  /** index → its (archetypeId, row) location — the query engine's resolveLocation seam. */
+  locationOfIndex(index: number): { archetypeId: number; row: number } {
+    return { archetypeId: this.#records.archetypeIdOf(index), row: this.#records.rowOf(index) }
+  }
+
   handleStats(): HandleStats {
     return {
       aliveCount: this.#index.aliveCount,

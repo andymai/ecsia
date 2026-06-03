@@ -131,6 +131,19 @@ export type {
 export { Bitmask } from './bitmask/index.js'
 export type { PhaseGate } from './bitmask/index.js'
 
+export { QueryEngine, LiveQuery, SparseSetU32, compileQuery } from './query/index.js'
+export type {
+  QueryEngineDeps,
+  LiveQueryDeps,
+  PooledElement,
+  CompiledQuery,
+  CompiledValueTerm,
+  CompileContext,
+  ResidualTerm,
+  ValueRole,
+  Word,
+} from './query/index.js'
+
 // Re-export the schema surface so users import tokens/inference from @ecsia/core (the umbrella).
 export {
   vec,
@@ -140,6 +153,11 @@ export {
   staticString,
   object,
   MAX_QUERY_ARITY,
+  read,
+  write,
+  With,
+  Without,
+  optional,
 } from '@ecsia/schema'
 export type {
   ScalarToken,
@@ -166,4 +184,24 @@ export type {
   AccessorFactory,
   TypedArrayLike,
   ColumnBinding,
+  // query DSL types (queries.md / type-system.md §5–§7)
+  QueryTerm,
+  ReadTerm,
+  WriteTerm,
+  WithTerm,
+  WithoutTerm,
+  OptionalTerm,
+  TermElement,
+  QueryElement,
+  UnionToIntersection,
+  Query,
+  WorldQuery,
+  LooseQueryElement,
+  Has,
+  HasWrite,
+  CompKey,
+  RelationDef,
+  RelationOptions,
+  PairDef,
+  WildcardToken,
 } from '@ecsia/schema'

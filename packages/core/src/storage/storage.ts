@@ -34,6 +34,16 @@ export interface StorageConfig {
   readonly stride: number
   readonly maxEntities: number
   enqueueRemoveLog(index: number, c: ComponentId): void
+  /** Single-entity incremental query maintenance (queries.md §6.1); wired by the world to the engine. */
+  maintainEntity(index: number, c: ComponentId): void
+  /**
+   * Spawn-time maintenance (queries.md §6.3): a component-less entity lands in EMPTY and never drives
+   * `maintainEntity`, so constraint-less queries are told about it here (keeps the incremental path
+   * symmetric with the §5.2 seed). No-op for component-constrained queries.
+   */
+  onEntitySpawned(index: number): void
+  /** Despawn eviction (queries.md §6.3): remove the index from EVERY live query unconditionally. */
+  dropEntity(index: number): void
   tick(): number
   handleIndex(handle: EntityHandle): number
 }
@@ -53,10 +63,35 @@ export class Storage {
       stride: cfg.stride,
       maxEntities: cfg.maxEntities,
       enqueueRemoveLog: cfg.enqueueRemoveLog,
+      maintainEntity: cfg.maintainEntity,
       tick: cfg.tick,
       defOf: (c) => cfg.registry.defOf(c),
       handleIndex: (h) => cfg.handleIndex(h as EntityHandle),
     })
+  }
+
+  /** Subscribe to archetypeCreated (queries.md §5.3); forwarded from the ArchetypeStore. */
+  onArchetypeCreated(fn: (arch: Archetype) => void): void {
+    this.archetypes.onArchetypeCreated(fn)
+  }
+
+  // --- cold-query support (queries.md §12): per-archetype residents + per-type cold value access ---
+
+  /** Entity indices currently resident in cold archetype `archetypeId` (O(rows in that archetype)). */
+  *coldResidentsOf(archetypeId: number): Iterable<number> {
+    for (const [index, archId] of this.archetypes.cold.archOf) {
+      if ((archId as number) === archetypeId) yield index
+    }
+  }
+
+  /** The per-TYPE cold ColumnSet for `componentId` (cold blocks are keyed by component, not archetype). */
+  coldColumnSet(componentId: ComponentId): ColumnSet | undefined {
+    return this.archetypes.cold.blocks.get(componentId)
+  }
+
+  /** The cold-block row holding `componentId`'s fields for entity `index`, or -1 if absent. */
+  coldRowOf(index: number, componentId: ComponentId): number {
+    return coldRowOf(this.archetypes.cold, index, componentId)
   }
 
   // --- entity lifecycle hooks (driven by EntityStore.spawn/despawn) ----------
@@ -69,6 +104,10 @@ export class Storage {
     // Empty signature → no bits set; bitmaskApplyDelta from empty to empty is a no-op but keeps the
     // coherence discipline explicit.
     this.#cfg.bitmask.bitmaskApplyDelta(index, empty.signature, empty.signature)
+    // §6.3: the component-less entity matches no component-constrained query, but a constraint-less
+    // query DOES match the empty signature. Tell those queries now (the seed already includes such
+    // entities, so this keeps the before-/after-spawn incremental paths symmetric).
+    this.#cfg.onEntitySpawned(index)
   }
 
   onDespawn(handle: EntityHandle): void {
@@ -84,6 +123,10 @@ export class Storage {
       this.#cfg.record.commitRecord(movedIndex, archId, newRow)
     })
     this.#cfg.bitmask.bitmaskClear(index)
+    // §6.3: the despawned entity leaves every query that held it, INCLUDING a constraint-less query
+    // (which a now-empty shape would otherwise still appear to match). dropEntity unconditionally
+    // evicts the index from every live query's `current` (recording a `removed` delta where declared).
+    this.#cfg.dropEntity(index)
   }
 
   // --- structural verbs ------------------------------------------------------

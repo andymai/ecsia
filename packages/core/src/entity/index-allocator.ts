@@ -151,6 +151,13 @@ export class EntityIndex {
     c.aliveCount = lastAlive
   }
 
+  /** The full (generational) handle currently occupying `index`, or NO_ENTITY-equivalent if dead. */
+  handleOfIndex(index: number): EntityHandle {
+    if (index >= this.#cursors.denseLen) return 0xffffffff as EntityHandle
+    const gen = this.#arrays.generation[index] as number
+    return makeHandle(index, gen, this.#layout)
+  }
+
   isAlive(handle: EntityHandle): boolean {
     const index = handleIndex(handle, this.#layout)
     if (index >= this.#cursors.denseLen) return false
