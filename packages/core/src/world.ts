@@ -27,6 +27,10 @@ import { ComponentRegistry } from './registry.js'
 import type { AccessorWorld } from './component/index.js'
 import { Bitmask } from './bitmask/index.js'
 import { Storage } from './storage/index.js'
+import type { Archetype, Signature } from './storage/index.js'
+import { QueryEngine } from './query/index.js'
+import type { LiveQuery } from './query/index.js'
+import type { ComponentDef as SchemaComponentDef, QueryTerm, WorldQuery } from '@ecsia/schema'
 
 /** world.md §4: 'serial' during the serial slot (and always, single-threaded); 'wave' only while the scheduler dispatches worker waves. */
 export type WorldPhase = 'serial' | 'wave'
@@ -89,6 +93,19 @@ export interface World {
    * accessor-setter call sites are in place now so M5 only fills the body.
    */
   trackWrite(index: number, componentId: ComponentId, fieldIndex?: number): void
+
+  /**
+   * Compile (or fetch the cached) LiveQuery for `terms` and return it (queries.md §4, §9). Identical
+   * term sets share one LiveQuery by canonical hash (order-independent, pair-target-encoded). The
+   * arity-cap overload family (1..8 inferred, 9+ → LooseQueryElement) is the WorldQuery type.
+   */
+  query: WorldQuery
+
+  /**
+   * Reset every live query's per-frame transient flavor (added/removed) lists. The kernel-only frame
+   * loop calls this at frame start (queries.md §8.2 / world.md §3.4); the scheduler drives it at M6.
+   */
+  frameReset(): void
 }
 
 interface WorldState {
@@ -148,6 +165,13 @@ export function createWorld(options: WorldOptions = {}): World {
   const bitmask = new Bitmask(buffers, registry.nextComponentId, resolved.maxEntities, () => state.phase)
   const stride = bitmask.stride
   const records = entities.records
+  const handleIndexOf = (handle: number): number => handleIndex(handle as EntityHandle, handleLayout) as number
+
+  // The query engine is created AFTER storage (it subscribes to storage.onArchetypeCreated), but
+  // storage's single-entity maintenance hooks must call into the engine. Late-bind through a mutable
+  // reference so the wiring stays acyclic (storage → engine, set once below).
+  let engine: QueryEngine | null = null
+
   const storage = new Storage({
     buffers,
     accessorWorld,
@@ -161,9 +185,42 @@ export function createWorld(options: WorldOptions = {}): World {
       // M5 stub: removal reactivity (writeLog / shapeLog). The call SITE + ordering are canonical
       // now (archetype-storage.md §5.5 step 3 / §6.3 step 2); M5 fills the body.
     },
+    maintainEntity: (index, c) => engine?.maintainEntity(index, c),
+    onEntitySpawned: (index) => engine?.onEntitySpawned(index, storage.archetypes.emptyArchetype),
+    dropEntity: (index) => engine?.dropEntity(index),
     tick: () => state.tick,
-    handleIndex: (handle) => handleIndex(handle, handleLayout) as number,
+    handleIndex: handleIndexOf,
   })
+
+  // --- queries (world.md §7 step 5): the canonical-hash dedup cache + per-archetype matching, kept
+  // current by the archetypeCreated hook. fixedBitCount = stride*32 (ids below it pack into the
+  // signature words; larger pair ids are residual — queries.md §3.5).
+  engine = new QueryEngine({
+    buffers,
+    bitmask,
+    maxEntities: resolved.maxEntities,
+    byId: storage.archetypes.byId as Archetype[],
+    onArchetypeCreated: (fn) => storage.onArchetypeCreated(fn),
+    compileContext: {
+      idOf: (def) => {
+        const id = registry.idOf(def)
+        if (id === undefined) throw new Error(`component '${def.name}' is not registered with this world`)
+        return id
+      },
+      fixedBitCount: stride * 32,
+    },
+    resolveLocation: (index) => entities.locationOfIndex(index),
+    handleOf: (index) => entities.handleOfIndex(index),
+    indexOfHandle: handleIndexOf,
+    coldResidentsOf: (archetypeId) => storage.coldResidentsOf(archetypeId),
+    coldColumnSet: (componentId) => storage.coldColumnSet(componentId),
+    coldRowOf: (index, componentId) => storage.coldRowOf(index, componentId),
+    signatureOf: (index) => {
+      const archId = records.archetypeIdOf(index)
+      return (storage.archetypes.byId[archId] as Archetype).signature as Signature
+    },
+  })
+
   entities.setAccessorResolver(storage)
   entities.setLifecycle({
     onSpawn: (handle) => storage.onSpawn(handle),
@@ -232,6 +289,14 @@ export function createWorld(options: WorldOptions = {}): World {
     },
     trackWrite(index, componentId, fieldIndex) {
       trackWrite(index, componentId, fieldIndex)
+    },
+    query: ((...terms: QueryTerm[]): LiveQuery => {
+      // The LiveQuery structurally satisfies Query<T> (terms, each, [Symbol.iterator], flavors,
+      // count); the WorldQuery overload family supplies the element typing per the actual terms.
+      return (engine as QueryEngine).query(terms)
+    }) as unknown as WorldQuery,
+    frameReset() {
+      ;(engine as QueryEngine).frameReset()
     },
   }
 

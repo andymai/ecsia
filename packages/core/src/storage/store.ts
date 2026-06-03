@@ -49,6 +49,13 @@ export interface StorageDeps {
   readonly maxEntities: number
   /** Removal-reactivity hook for components in fromArch \ toArch (M5 fills the body). */
   enqueueRemoveLog(index: number, c: ComponentId): void
+  /**
+   * Single-entity incremental query maintenance (queries.md §6.1): called once per component in the
+   * symmetric difference of a migration AFTER the bitmask delta is applied, so matchesEntityNow reads
+   * a coherent shape. Optional so a query-less harness (M3 unit tests) constructs the store directly.
+   * M5 re-routes this through reactivity's MAINTAIN_STRUCTURAL shape-log drain.
+   */
+  maintainEntity?(index: number, c: ComponentId): void
   tick(): number
   defOf(c: ComponentId): ComponentDef<Schema> | undefined
   handleIndex(handle: number): number
@@ -61,6 +68,8 @@ export class ArchetypeStore {
   #hotCount = 0
   readonly cold: ColdStore = makeColdStore()
   readonly #initialRows: number
+  /** archetypeCreated subscribers (queries.md §5.3): tested against each new archetype once. */
+  readonly #onCreated: Array<(arch: Archetype) => void> = []
 
   constructor(deps: StorageDeps) {
     this.#deps = deps
@@ -110,7 +119,15 @@ export class ArchetypeStore {
       this.#byHash.set(hash, bucket)
     }
     bucket.push(arch)
+    // queries.md §5.3: each registered query AND-tests this new archetype's sigWords once and, on
+    // match, appends it to its matchingArchetypes. Emitted AFTER the archetype is fully interned.
+    for (const fn of this.#onCreated) fn(arch)
     return arch
+  }
+
+  /** Subscribe to archetypeCreated (queries.md §5.3 / world.md §7 step 4 hook). Serial-phase only. */
+  onArchetypeCreated(fn: (arch: Archetype) => void): void {
+    this.#onCreated.push(fn)
   }
 
   // --- §5.4 lazy edge graph (both directions cached on a miss) ---------------
@@ -285,6 +302,21 @@ export class ArchetypeStore {
 
     this.#deps.record.commitRecord(index, toArch.id as number, newRow)
     this.#deps.bitmask.bitmaskApplyDelta(index, fromArch.signature, toArch.signature)
+
+    // §6.1 single-entity incremental query maintenance: re-test this one entity against the queries
+    // referencing each component in the symmetric difference (added OR removed). Runs AFTER the
+    // bitmask delta so matchesEntityNow sees the coherent post-migration shape.
+    const maintain = this.#deps.maintainEntity
+    if (maintain !== undefined) {
+      for (let i = 0; i < toArch.signature.length; i++) {
+        const c = toArch.signature[i] as number as ComponentId
+        if (!sigHas(fromArch.signature, c)) maintain(index, c)
+      }
+      for (let i = 0; i < fromArch.signature.length; i++) {
+        const c = fromArch.signature[i] as number as ComponentId
+        if (!sigHas(toArch.signature, c)) maintain(index, c)
+      }
+    }
     return newRow
   }
 
