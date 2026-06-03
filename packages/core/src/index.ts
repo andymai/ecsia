@@ -14,6 +14,14 @@ export type {
 } from './config.js'
 export { createWorld } from './world.js'
 export type { World, WorldPhase, WorldApplySurface, RelationsHost } from './world.js'
+export type {
+  SerializationSurface,
+  SerializeArchetype,
+  SerializeComponentColumns,
+  SerializeComponentMeta,
+  SerializePair,
+  SerializeRelationProvider,
+} from './serialize-surface.js'
 
 export {
   makeHandle,

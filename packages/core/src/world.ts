@@ -35,7 +35,16 @@ import type { ColumnSet } from './component/index.js'
 import type { Buffers as BuffersType } from './memory/index.js'
 import { Reactivity, ObserverCommandBuffer, onAdd, onRemove, onChange } from './reactivity/index.js'
 import type { ObserverCommandApply, ObserverHandle, ObserverHandler, ObserverTerm } from './reactivity/index.js'
-import type { ComponentDef as SchemaComponentDef, QueryTerm, WorldQuery } from '@ecsia/schema'
+import type { ComponentDef as SchemaComponentDef, FieldDescriptor, QueryTerm, WorldQuery } from '@ecsia/schema'
+import type {
+  SerializationSurface,
+  SerializeArchetype,
+  SerializeComponentColumns,
+  SerializeComponentMeta,
+  SerializeRelationProvider,
+} from './serialize-surface.js'
+import type { Column } from './memory/index.js'
+import type { ComponentRuntime } from './component/index.js'
 
 /** world.md §4: 'serial' during the serial slot (and always, single-threaded); 'wave' only while the scheduler dispatches worker waves. */
 export type WorldPhase = 'serial' | 'wave'
@@ -107,6 +116,13 @@ export interface RelationsHost {
     addPair: (subject: EntityHandle, relationId: RelationId, target: EntityHandle, payload: Record<string, unknown> | undefined) => void,
     removePair: (subject: EntityHandle, relationId: RelationId, target: EntityHandle) => void,
   ): void
+  /**
+   * Install the relation snapshot/apply provider the serialization module reads through `world.__serialize`
+   * (serialization.md §4.6, §8.3). Lets @ecsia/serialization enumerate live pairs and re-establish them
+   * WITHOUT importing @ecsia/relations directly off the world — the relations runtime hands the provider
+   * in, core relays it, the acyclic boundary holds.
+   */
+  setSerializationProvider(provider: SerializeRelationProvider): void
   readonly maxEntities: number
   readonly indexBits: number
 }
@@ -145,6 +161,12 @@ export interface World {
   __installRelations(): RelationsHost
   /** Export the SAB buffer-set manifest for one-time worker transfer (memory-buffers.md §6.3). */
   __exportShared(): SharedHandleManifest
+  /**
+   * Serialization seam (serialization.md M10). @ecsia/serialization reads archetype columns + the
+   * registry + the relation provider through this, and drives deserialize-side spawn/migrate. Serial /
+   * main-thread only; @ecsia/core never imports @ecsia/serialization (acyclic boundary). Not for user code.
+   */
+  readonly __serialize: SerializationSurface
   /**
    * Merge ONE worker's staged value writes into the reactivity write log (reactivity.md §9.1/§9.2,
    * R-4). `pairs` is the worker's raw `[index, componentId, …]` corral payload and `count` the number
@@ -318,6 +340,7 @@ export function createWorld(options: WorldOptions = {}): World {
     | ((s: EntityHandle, r: RelationId, t: EntityHandle, p: Record<string, unknown> | undefined) => void)
     | null = null
   let applyRemovePair: ((s: EntityHandle, r: RelationId, t: EntityHandle) => void) | null = null
+  let serializationProvider: SerializeRelationProvider | null = null
 
   // The query engine is created AFTER storage (it subscribes to storage.onArchetypeCreated), but
   // storage's single-entity maintenance hooks must call into the engine. Late-bind through a mutable
@@ -447,6 +470,139 @@ export function createWorld(options: WorldOptions = {}): World {
     removePair: (subject, relationId, target) => applyRemovePair?.(subject, relationId, target),
   }
 
+  // --- serialization surface (serialization.md M10) -------------------------
+  // Reads archetype columns/signatures + the registry + the relation provider; drives deserialize-side
+  // spawn/migrate. The user-component metadata is the registered defs in dense-id order. Synthetic ids
+  // (pair/presence/overflow) are intentionally excluded from `components()` — they are reconstructed by
+  // re-minting on the receiver (serialization.md §3.2), never shipped as schema.
+  const userComponents = resolved.components as readonly ComponentDef<Schema>[]
+  const componentIdByName = new Map<string, ComponentId>()
+  for (const def of userComponents) {
+    const id = registry.idOf(def)
+    if (id !== undefined) componentIdByName.set(def.name, id)
+  }
+
+  const computeSchemaHash = (): number => {
+    // FNV-1a over the canonical (componentName, fieldName, token)* + relation names (§3.2). The receiver
+    // recomputes it from ITS defineComponent set and must match — a fail-fast guard against stale code.
+    let h = 0x811c9dc5
+    const fnv = (s: string): void => {
+      for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i)
+        h = Math.imul(h, 0x01000193)
+      }
+    }
+    for (const def of userComponents) {
+      fnv(def.name)
+      for (const f of def.fields as readonly FieldDescriptor[]) {
+        fnv(f.name)
+        fnv(typeof f.token === 'string' ? f.token : JSON.stringify(f.token))
+      }
+    }
+    const prov = serializationProvider
+    if (prov !== null) for (const r of prov.relations()) fnv(r.name)
+    return h >>> 0
+  }
+
+  const archetypeView = (arch: Archetype): SerializeArchetype => {
+    const components: SerializeComponentColumns[] = []
+    // Iterate the signature in canonical (sorted) order so column order is deterministic (§4.4).
+    for (let i = 0; i < arch.signature.length; i++) {
+      const c = arch.signature[i] as number as ComponentId
+      const set = arch.columnSets.get(c)
+      if (set === undefined) continue // tag / pair / no column (§4.5)
+      const def = registry.defOf(c)
+      if (def === undefined) continue
+      const fields: FieldDescriptor[] = []
+      for (const f of def.fields as readonly FieldDescriptor[]) if (f.ctor !== null) fields.push(f)
+      components.push({ componentId: c, columns: set.columns, fields })
+    }
+    return {
+      id: arch.id as number,
+      signature: arch.signature as unknown as readonly number[],
+      count: arch.count,
+      rows: arch.rows,
+      components,
+    }
+  }
+
+  const serialize: SerializationSurface = {
+    schemaHash: computeSchemaHash,
+    components(): readonly SerializeComponentMeta[] {
+      const out: SerializeComponentMeta[] = []
+      for (const def of userComponents) {
+        const id = registry.idOf(def)
+        if (id === undefined) continue
+        const rt = def as ComponentRuntime<Schema>
+        out.push({ name: def.name, id, fieldCount: def.fields.length, storage: rt.options.storage })
+      }
+      return out
+    },
+    fieldsOf(id) {
+      return registry.defOf(id)?.fields as readonly FieldDescriptor[] | undefined
+    },
+    componentIdByName(name) {
+      return componentIdByName.get(name)
+    },
+    numComponentTypes() {
+      return registry.nextComponentId
+    },
+    archetypes(): readonly SerializeArchetype[] {
+      const out: SerializeArchetype[] = []
+      for (const arch of storage.archetypes.byId as Archetype[]) {
+        if (arch.cold || arch.count === 0) continue
+        out.push(archetypeView(arch))
+      }
+      // id-ascending (byId is already in id order, but tag/cold gaps are filtered above).
+      out.sort((a, b) => a.id - b.id)
+      return out
+    },
+    relations() {
+      return serializationProvider ?? undefined
+    },
+    spawn() {
+      return entities.spawn()
+    },
+    spawnInto(handle, componentIds) {
+      if (componentIds.length === 0) return
+      const defs: ComponentDef<Schema>[] = []
+      for (const c of componentIds) {
+        const def = registry.defOf(c as ComponentId)
+        if (def !== undefined) defs.push(def)
+      }
+      storage.addMany(handle, defs)
+    },
+    columnsOf(handle, componentId) {
+      if (!entities.isAlive(handle)) return null
+      const index = handleIndexOf(handle as number)
+      const archId = records.archetypeIdOf(index)
+      const arch = storage.archetypes.byId[archId] as Archetype | undefined
+      if (arch === undefined || arch.cold) return null
+      const set = arch.columnSets.get(componentId as ComponentId)
+      if (set === undefined) return null
+      const def = registry.defOf(componentId as ComponentId)
+      if (def === undefined) return null
+      const fields: FieldDescriptor[] = []
+      for (const f of def.fields as readonly FieldDescriptor[]) if (f.ctor !== null) fields.push(f)
+      return { columns: set.columns as readonly Column[], fields, row: records.rowOf(index) }
+    },
+    clearAll() {
+      // Collect alive handles from every hot archetype first (despawn shuffle-pops rows mid-iteration).
+      const handles: EntityHandle[] = []
+      for (const arch of storage.archetypes.byId as Archetype[]) {
+        if (arch.cold) continue
+        for (let r = 0; r < arch.count; r++) handles.push((arch.rows[r] as number) as EntityHandle)
+      }
+      for (const h of handles) if (entities.isAlive(h)) entities.despawn(h)
+    },
+    aliveCount() {
+      return entities.handleStats().aliveCount
+    },
+    indexBits: handleLayout.indexBits,
+    handleIndex: (handle) => handleIndexOf(handle as number),
+    capabilities: () => capabilities,
+  }
+
   const world: World = {
     get options() {
       return resolved
@@ -531,6 +687,9 @@ export function createWorld(options: WorldOptions = {}): World {
           applyAddPair = addPair
           applyRemovePair = removePair
         },
+        setSerializationProvider: (provider) => {
+          serializationProvider = provider
+        },
         maxEntities: resolved.maxEntities,
         indexBits: handleLayout.indexBits,
       }
@@ -549,6 +708,7 @@ export function createWorld(options: WorldOptions = {}): World {
       }
       return { columns: base.columns, regions: [...base.regions, ...extra] }
     },
+    __serialize: serialize,
     __mergeWorkerWrites(pairs, count) {
       ;(reactivity as Reactivity).mergeWorkerWrites(pairs, count)
     },
