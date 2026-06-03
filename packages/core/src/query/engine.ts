@@ -114,6 +114,27 @@ export class QueryEngine {
     return true
   }
 
+  /**
+   * queries.md §10.2(a) row filter for the single-entity matcher: an exclusive specific-target pair
+   * matches the archetype by presence, then this checks the entity's own eid target column value so
+   * `current` stays precise (count/has agree with the iteration filter in LiveQuery).
+   */
+  #passesRowFilters(index: number, q: CompiledQuery): boolean {
+    if (q.rowFilters.length === 0) return true
+    const loc = this.#deps.resolveLocation(index)
+    const arch = this.#deps.byId[loc.archetypeId]
+    if (arch === undefined || arch.cold) return q.rowFilters.length === 0
+    for (const rf of q.rowFilters) {
+      const cs = arch.columnSets.get(rf.presenceId)
+      if (cs === undefined) return false
+      const col = cs.columns[rf.targetFieldIndex]
+      if (col === undefined) return false
+      const stored = col.view[loc.row * col.layout.stride] as number
+      if (stored === -1 || (stored >>> 0) !== (rf.targetEid >>> 0)) return false
+    }
+    return true
+  }
+
   /** §5.5: add every live row's entity index to `current`. New archetypes start empty. */
   #seedCurrentFromArchetype(lq: LiveQuery, arch: Archetype): void {
     if (arch.cold) {
@@ -124,11 +145,26 @@ export class QueryEngine {
       return
     }
     const count = arch.count
+    const filters = lq.compiled.rowFilters
     for (let row = 0; row < count; row++) {
       const handle = arch.rows[row] as number
       const index = this.#handleIndex(handle)
+      if (filters.length > 0 && !this.#rowPasses(arch, row, lq.compiled)) continue
       lq.addEntity(index)
     }
+  }
+
+  /** Row-filter test against a known (archetype, row) for seeding (queries.md §10.2(a)). */
+  #rowPasses(arch: Archetype, row: number, q: CompiledQuery): boolean {
+    for (const rf of q.rowFilters) {
+      const cs = arch.columnSets.get(rf.presenceId)
+      if (cs === undefined) return false
+      const col = cs.columns[rf.targetFieldIndex]
+      if (col === undefined) return false
+      const stored = col.view[row * col.layout.stride] as number
+      if (stored === -1 || (stored >>> 0) !== (rf.targetEid >>> 0)) return false
+    }
+    return true
   }
 
   #handleIndex(handle: number): number {
@@ -199,6 +235,7 @@ export class QueryEngine {
         if (r.negate ? present : !present) return false
       }
     }
+    if (!this.#passesRowFilters(index, q)) return false
     return true
   }
 

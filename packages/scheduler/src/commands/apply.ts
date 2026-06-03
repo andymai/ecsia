@@ -217,8 +217,10 @@ function applyBuffer(world: WorldApply, cb: CommandBuffer, newlyCreated: Set<num
         ) {
           drain(s)
           if (world.addPair !== undefined) {
-            // Relation payload decode lands with relations (M8): no relation codec is wired at M7, so
-            // the payload is undefined here. recordLen() still skips the payload words correctly (§4.6).
+            // relations.md §5.6 M8 deferral: worker-path pair PAYLOADS are deferred — the worker encoder
+            // emits payloadWordCount=0 (no relation-schema replication yet), so there are no payload
+            // words to decode and the pair is applied with an undefined payload. recordLen() still skips
+            // the (zero) payload words correctly (§4.6). The pair/presence/back-ref/mint are all applied.
             world.addPair(s, rid, t, undefined)
           } else {
             world.warn('ADD_PAIR encountered but relations are not wired (M8)')

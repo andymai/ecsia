@@ -273,6 +273,10 @@ export class WorkerPool {
       removeMany: (h, defs) => apply.removeMany(h, defs),
       has: (h, def) => world.has(h, def),
       writePayload: (h, def, values) => apply.writePayload(h, def, values),
+      // Relation apply (relations.md §5.6): forward to the core __apply surface that @ecsia/relations
+      // fills via createRelations(world). The scheduler does NOT import @ecsia/relations.
+      addPair: (s, rid, t, payload) => apply.addPair?.(s, rid, t, payload),
+      removePair: (s, rid, t) => apply.removePair?.(s, rid, t),
       returnUnused: (cb) => {
         const slot = this.#slots[cb.workerIndex]
         const block = slot?.command.lastReservation

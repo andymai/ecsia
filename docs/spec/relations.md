@@ -634,6 +634,17 @@ This is the entirety of the worker-side relation safety story: it reduces to the
 command-buffer validate-then-apply invariant, with the one relation-specific addition that the
 **target** (not just the subject) is liveness-checked.
 
+> **M8 deferral (worker-path pair payloads).** The `OP_ADD_PAIR [payload words…]` *payload* leg is
+> explicitly **deferred** in v1: the worker encoder resolves a relation payload codec from a
+> replicated relation-schema manifest, which is not yet plumbed through the worker boot path. Until
+> that lands, the worker encoder emits `payloadWordCount = 0` (no payload words) and apply mints/writes
+> the pair with an **undefined** payload — symmetrically dropped at both encode and apply, so a worker
+> that adds an exclusive/overflow pair carrying a payload silently loses *only the payload* (the pair
+> itself, its presence bit, back-ref, and minted id are all correct). The `relationCodec` seam on the
+> encoder env and the apply-side decode are in place; wiring them is a follow-up (worker relation-schema
+> replication), tracked alongside the Q-R1 `compactRelations` deferral (§2.3). Main-thread `addPair`
+> carries payloads fully today.
+
 ---
 
 ## 6. Main-thread sparse back-ref index
