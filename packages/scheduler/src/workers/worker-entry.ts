@@ -16,7 +16,7 @@
 import { parentPort, workerData } from 'node:worker_threads'
 import { makeEncoder, buildFieldCodec } from '../commands/index.js'
 import type { CommandBuffer, ComponentFieldCodec } from '../commands/index.js'
-import { buildWorkerWorldView } from './world-view.js'
+import { buildWorkerWorldView, makeWriteCorralWriter } from './world-view.js'
 import { completeWave, setWaveError } from './wave-sync.js'
 import { takeReserved } from './reservation.js'
 import type { WorkerReservationSab } from './reservation.js'
@@ -115,7 +115,8 @@ async function main(): Promise<void> {
     return baseCreate()
   }
 
-  const view = buildWorkerWorldView(boot.buffers, boot.indexBitsMask, encoder)
+  const writeCorral = makeWriteCorralWriter(boot.writeCorralSab)
+  const view = buildWorkerWorldView(boot.buffers, boot.indexBitsMask, encoder, writeCorral)
   const wake = new Int32Array(boot.wakeSab)
   const work = new Int32Array(boot.workSab)
   const workF32 = new Float32Array(boot.workSab)
@@ -139,6 +140,7 @@ async function main(): Promise<void> {
     cb.head = 0
     cb.recordCount = 0
     cb.overflowed = false
+    writeCorral.reset()
     const name = names[systemId]
     const kernel = name !== undefined ? kernels.get(name) : undefined
     try {

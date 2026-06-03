@@ -34,10 +34,44 @@ export interface WorkerWorldView {
   readonly commands: CommandEncoder
 }
 
+/**
+ * Worker write-corral writer (reactivity.md §9.1, R-4). Wraps the per-worker corral SAB. `push`
+ * stages one `(index, componentId)` value-write entry: word [0] is the running entry count, entries
+ * follow as `[index, componentId]` pairs. Single-writer (this worker only), no atomics — the main
+ * thread reads it only after the wave fence. On overflow the corral caps (the merge would read past
+ * the SAB otherwise); the cap is diagnosed at merge time by the pool.
+ */
+export interface WriteCorralWriter {
+  push(index: number, componentId: number): void
+  reset(): void
+}
+
+const CORRAL_COUNT_WORD = 0
+const CORRAL_HEADER_WORDS = 1
+
+export function makeWriteCorralWriter(sab: SharedArrayBuffer): WriteCorralWriter {
+  const view = new Uint32Array(sab)
+  const capacityPairs = (view.length - CORRAL_HEADER_WORDS) >>> 1
+  return {
+    push(index, componentId) {
+      const n = view[CORRAL_COUNT_WORD]!
+      if (n >= capacityPairs) return // capped; pool diagnoses on merge
+      const base = CORRAL_HEADER_WORDS + n * 2
+      view[base] = index >>> 0
+      view[base + 1] = componentId >>> 0
+      view[CORRAL_COUNT_WORD] = n + 1
+    },
+    reset() {
+      view[CORRAL_COUNT_WORD] = 0
+    },
+  }
+}
+
 export function buildWorkerWorldView(
   manifest: SharedHandleManifest,
   indexBitsMask: number,
   commands: CommandEncoder,
+  writeCorral?: WriteCorralWriter,
 ): WorkerWorldView {
   // archetypeId:componentId.fieldIndex → column view.
   const columns = new Map<string, ColumnView>()
@@ -73,6 +107,10 @@ export function buildWorkerWorldView(
       const col = columns.get(colKey(archetypeId, componentId, fieldIndex))
       if (col === undefined) return
       ;(col.view as unknown as { [i: number]: number })[row * col.stride] = value
+      // R-4: stage the value write into this worker's corral so the serial merge feeds the write log
+      // (drives onChange + `.changed` for worker writes). fieldIndex collapses to component granularity
+      // — matching the main-thread trackWrite default (reactivity.md §6.2).
+      writeCorral?.push(index, componentId)
     },
     commands,
   }
