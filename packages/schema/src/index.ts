@@ -232,3 +232,201 @@ export const NULL_ENTITY = NO_ENTITY
 export const MAX_QUERY_ARITY = 8
 
 export const SCHEMA_PACKAGE = 'schema' as const
+
+// ---------------------------------------------------------------------------
+// §7 Relation typing — the type-level contract the query DSL threads (the relations
+// RUNTIME lands at M8; M4 needs only the PairDef/Wildcard/RelationDef SHAPES so a
+// Pair(...) term type-checks through query([...])).
+// ---------------------------------------------------------------------------
+
+export interface RelationDef<P extends Schema | void> {
+  readonly id: RelationId
+  readonly name: string
+  readonly payload: P extends Schema ? P : null
+  readonly exclusive: boolean
+  readonly cascade: 'none' | 'deleteSubject' | 'removeRelation'
+  /** phantom payload carriers — never assigned a value; exist purely for inference. */
+  readonly __payloadRead?: P extends Schema ? ReadView<P> : never
+  readonly __payloadWrite?: P extends Schema ? WriteView<P> : never
+}
+
+export interface RelationOptions {
+  readonly exclusive?: boolean
+  readonly cascade?: 'none' | 'deleteSubject' | 'removeRelation'
+}
+
+/** The wildcard target sentinel: `Pair(R, Wildcard)` matches every `R`-pair via the presence bit. */
+export declare const Wildcard: unique symbol
+export type WildcardToken = typeof Wildcard
+
+export interface PairDef<R extends RelationDef<Schema | void>> {
+  readonly relation: R
+  readonly target: EntityHandle | WildcardToken
+  /** Synthetic ComponentId minted at addPair (relations.md §2.6); UNREGISTERED (-1) for a query-only pair. */
+  readonly id: ComponentId
+  /** A pair carries its relation's payload schema as its read/write views (type-system.md §7.2). */
+  readonly __read?: R extends RelationDef<infer P> ? (P extends Schema ? ReadView<P> : Record<never, never>) : Record<never, never>
+  readonly __write?: R extends RelationDef<infer P> ? (P extends Schema ? WriteView<P> : Record<never, never>) : Record<never, never>
+}
+
+// ---------------------------------------------------------------------------
+// §5.1 Query term DSL (the typed wrappers + value-level constructors). read/write fork the
+// inferred element mutability; With/Without are membership-only; optional narrows to `| undefined`.
+// A bare ComponentDef is treated as read (type-system.md §5.1).
+// ---------------------------------------------------------------------------
+
+export interface ReadTerm<C> {
+  readonly __term: 'read'
+  readonly c: C
+}
+export interface WriteTerm<C> {
+  readonly __term: 'write'
+  readonly c: C
+}
+export interface WithTerm<C> {
+  readonly __term: 'with'
+  readonly c: C
+}
+export interface WithoutTerm<C> {
+  readonly __term: 'without'
+  readonly c: C
+}
+export interface OptionalTerm<C> {
+  readonly __term: 'optional'
+  readonly c: C
+}
+
+export const read = <C>(c: C): ReadTerm<C> => ({ __term: 'read', c })
+export const write = <C>(c: C): WriteTerm<C> => ({ __term: 'write', c })
+export const With = <C>(c: C): WithTerm<C> => ({ __term: 'with', c })
+export const Without = <C>(c: C): WithoutTerm<C> => ({ __term: 'without', c })
+export const optional = <C>(c: C): OptionalTerm<C> => ({ __term: 'optional', c })
+
+export type QueryTerm =
+  | ReadTerm<unknown>
+  | WriteTerm<unknown>
+  | WithTerm<unknown>
+  | WithoutTerm<unknown>
+  | OptionalTerm<unknown>
+  | PairDef<RelationDef<Schema | void>>
+  | ComponentDef<Schema>
+
+// §5.4 Has<...> entity narrowing (the escape hatch + the read-only shorthand surface).
+export type Has<C extends ComponentDef<Schema>> = { readonly [K in CompKey<C>]: ReadOf<C> }
+export type HasWrite<C extends ComponentDef<Schema>> = { [K in CompKey<C>]: WriteOf<C> }
+
+// §3 CompKey: lift a component's per-component key (its name) for the element property name.
+export type CompKey<C> = C extends { name: infer N extends string } ? N : never
+
+// §7.3 pair value type in queries — the relation payload schema, forked by read/write.
+type PairValue<P extends PairDef<RelationDef<Schema | void>>, RW extends 'r' | 'w'> = P extends PairDef<infer R>
+  ? R extends RelationDef<infer Pay>
+    ? Pay extends Schema
+      ? RW extends 'r'
+        ? ReadView<Pay>
+        : WriteView<Pay>
+      : Record<never, never>
+    : Record<never, never>
+  : Record<never, never>
+
+// §5.2 term → element-contribution mapping. With/Without contribute nothing (membership-only);
+// optional contributes a possibly-undefined view; a Pair contributes its payload under the relation name.
+export type TermElement<T> = T extends WriteTerm<infer C>
+  ? { [K in CompKey<C>]: WriteOf<C> }
+  : T extends ReadTerm<infer C>
+    ? { [K in CompKey<C>]: ReadOf<C> }
+    : T extends OptionalTerm<infer C>
+      ? { [K in CompKey<C>]: ReadOf<C> | undefined }
+      : T extends WithTerm<infer _C>
+        ? Record<never, never>
+        : T extends WithoutTerm<infer _C>
+          ? Record<never, never>
+          : T extends PairDef<RelationDef<Schema | void>>
+            ? T extends { relation: { name: infer N extends string } }
+              ? { [K in N]: PairValue<T, 'r'> }
+              : Record<never, never>
+            : T extends ComponentDef<Schema>
+              ? { [K in CompKey<T>]: ReadOf<T> }
+              : Record<never, never>
+
+// §5.3 tuple fold → query element type: the INTERSECTION of each term's contribution. Intersection
+// (not deep recursion) keeps instantiation shallow — TS folds A & B & C left-to-right.
+export type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (k: infer I) => void ? I : never
+
+export type QueryElement<Terms extends readonly QueryTerm[]> = readonly QueryTerm[] extends Terms
+  ? LooseQueryElement
+  : UnionToIntersection<{ [I in keyof Terms]: TermElement<Terms[I]> }[number]>
+
+// §6.1 the loose fallback element when arity > the cap: every named slot present-but-loose (a typed
+// degradation, NEVER `any` — rejecting bitECS's ComponentRef = any).
+export type LooseQueryElement = Readonly<Record<string, Readonly<Record<string, unknown>>>> & {
+  handle: EntityHandle
+}
+
+// §9.1 the Query surface (runtime side lands in @ecsia/core; this fixes the typed shape).
+export interface Query<Terms extends readonly QueryTerm[]> {
+  readonly terms: Terms
+  /** Iterate every matching entity; `e` is the pooled element (do NOT store it across iterations). */
+  each(fn: (e: QueryElement<Terms> & { handle: EntityHandle }) => void): void
+  [Symbol.iterator](): Iterator<QueryElement<Terms> & { handle: EntityHandle }>
+  /** Flavor declarations (chainable; queries.md §8.1). */
+  added(): this
+  removed(): this
+  changed(...components: ComponentDef<Schema>[]): this
+  /** Flavor result iterators (entities entered/left/changed this frame). */
+  eachAdded(fn: (e: QueryElement<Terms> & { handle: EntityHandle }) => void): void
+  eachRemoved(fn: (index: number, handle: EntityHandle) => void): void
+  eachChanged(fn: (e: QueryElement<Terms> & { handle: EntityHandle }) => void): void
+  /** Count of currently-matching entities. O(1). */
+  readonly count: number
+}
+
+// §6.1 the arity-cap overload family: 1..8 fully inferred, 9+ → typed LooseQueryElement. Fixed-length
+// overloads bound TS instantiation to the matched arity; the catch-all stops recursion entirely (the
+// COMPILE-TIME budget assertion itself is M11 — this just lands the cap + escape hatch).
+export interface WorldQuery {
+  <T0 extends QueryTerm>(...terms: [T0]): Query<[T0]>
+  <T0 extends QueryTerm, T1 extends QueryTerm>(...terms: [T0, T1]): Query<[T0, T1]>
+  <T0 extends QueryTerm, T1 extends QueryTerm, T2 extends QueryTerm>(...terms: [T0, T1, T2]): Query<[T0, T1, T2]>
+  <T0 extends QueryTerm, T1 extends QueryTerm, T2 extends QueryTerm, T3 extends QueryTerm>(
+    ...terms: [T0, T1, T2, T3]
+  ): Query<[T0, T1, T2, T3]>
+  <T0 extends QueryTerm, T1 extends QueryTerm, T2 extends QueryTerm, T3 extends QueryTerm, T4 extends QueryTerm>(
+    ...terms: [T0, T1, T2, T3, T4]
+  ): Query<[T0, T1, T2, T3, T4]>
+  <
+    T0 extends QueryTerm,
+    T1 extends QueryTerm,
+    T2 extends QueryTerm,
+    T3 extends QueryTerm,
+    T4 extends QueryTerm,
+    T5 extends QueryTerm,
+  >(
+    ...terms: [T0, T1, T2, T3, T4, T5]
+  ): Query<[T0, T1, T2, T3, T4, T5]>
+  <
+    T0 extends QueryTerm,
+    T1 extends QueryTerm,
+    T2 extends QueryTerm,
+    T3 extends QueryTerm,
+    T4 extends QueryTerm,
+    T5 extends QueryTerm,
+    T6 extends QueryTerm,
+  >(
+    ...terms: [T0, T1, T2, T3, T4, T5, T6]
+  ): Query<[T0, T1, T2, T3, T4, T5, T6]>
+  <
+    T0 extends QueryTerm,
+    T1 extends QueryTerm,
+    T2 extends QueryTerm,
+    T3 extends QueryTerm,
+    T4 extends QueryTerm,
+    T5 extends QueryTerm,
+    T6 extends QueryTerm,
+    T7 extends QueryTerm,
+  >(
+    ...terms: [T0, T1, T2, T3, T4, T5, T6, T7]
+  ): Query<[T0, T1, T2, T3, T4, T5, T6, T7]>
+  /** 9+ : degraded overload — element collapses to LooseQueryElement; compile time stays bounded. */
+  (...terms: QueryTerm[]): Query<readonly QueryTerm[]>
+}
