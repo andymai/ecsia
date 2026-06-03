@@ -22,7 +22,7 @@ import type {
 } from './entity/index.js'
 import type { ComponentDef, ComponentId, Schema } from '@ecsia/schema'
 import { Buffers, probeCapabilities } from './memory/index.js'
-import type { WorkerMode } from './memory/index.js'
+import type { WorkerMode, SharedHandleManifest, RegionKey } from './memory/index.js'
 import { ComponentRegistry } from './registry.js'
 import type { AccessorWorld } from './component/index.js'
 import { Bitmask } from './bitmask/index.js'
@@ -37,11 +37,45 @@ import type { ComponentDef as SchemaComponentDef, QueryTerm, WorldQuery } from '
 /** world.md §4: 'serial' during the serial slot (and always, single-threaded); 'wave' only while the scheduler dispatches worker waves. */
 export type WorldPhase = 'serial' | 'wave'
 
+/**
+ * The ComponentId-keyed structural-apply verbs the command-buffer flush path drives (command-buffer.md
+ * §9). Built from the world's storage + registry; every call runs serial/main-thread.
+ */
+export interface WorldApplySurface {
+  defOf(id: ComponentId): ComponentDef<Schema> | undefined
+  addMany(handle: EntityHandle, defs: readonly ComponentDef<Schema>[]): void
+  removeMany(handle: EntityHandle, defs: readonly ComponentDef<Schema>[]): void
+  /** Overwrite `def`'s fields on `handle`'s current row + emit the `.changed` write-log entry. */
+  writePayload(handle: EntityHandle, def: ComponentDef<Schema>, values: Record<string, unknown>): void
+}
+
 export interface World {
   /** Fully-resolved, validated configuration (frozen). */
   readonly options: ResolvedWorldOptions
   /** Structural-change phase. Owned by the world; the scheduler is the only component that flips it to 'wave'. */
   readonly phase: WorldPhase
+  /**
+   * Phase-flip seam (scheduler.md §2.1 PHASE-2). The world OWNS the field and seeds it to 'serial';
+   * the scheduler is the SOLE caller of this, flipping to 'wave' across worker dispatch and back to
+   * 'serial' for the merge/apply flush slot. @ecsia/core never calls it (the acyclic boundary holds —
+   * the scheduler drives the world externally). Not for user code.
+   */
+  __setPhase(phase: WorldPhase): void
+  /**
+   * Command-buffer apply seam (command-buffer.md §7.4 `spawnReserved`). Place a handle that was
+   * already made alive by `reserveEntityBlock` (entity-model.md §5.1) into the EMPTY archetype and
+   * emit its Create shape entry — the deferred analogue of `world.spawn()` whose identity was minted
+   * before the wave. Serial-phase only. Called ONLY by the scheduler's flush path. Not for user code.
+   */
+  __spawnReserved(handle: EntityHandle): void
+  /**
+   * Command-buffer apply surface (command-buffer.md §9), exposed as ONE seam so the scheduler's flush
+   * path drives the same storage primitives a main-thread direct-apply would, keyed by ComponentId.
+   * Serial-phase only; called ONLY by the scheduler. Not for user code.
+   */
+  readonly __apply: WorldApplySurface
+  /** Export the SAB buffer-set manifest for one-time worker transfer (memory-buffers.md §6.3). */
+  __exportShared(): SharedHandleManifest
   /** Current frame tick. Advanced by reactivity at frame reset (world.md §8). */
   readonly tick: number
   /** Alias for `tick` (world.md §8). */
@@ -301,6 +335,41 @@ export function createWorld(options: WorldOptions = {}): World {
     },
     get phase() {
       return state.phase
+    },
+    __setPhase(phase) {
+      state.phase = phase
+    },
+    __spawnReserved(handle) {
+      storage.onSpawn(handle)
+    },
+    __apply: {
+      defOf(id) {
+        return registry.defOf(id)
+      },
+      addMany(handle, defs) {
+        storage.addMany(handle, defs)
+      },
+      removeMany(handle, defs) {
+        storage.removeMany(handle, defs)
+      },
+      writePayload(handle, def, values) {
+        const view = entities.entity(handle).write(def) as Record<string, unknown>
+        for (const k of Object.keys(values)) view[k] = values[k]
+      },
+    },
+    __exportShared() {
+      const base = buffers.exportSharedHandles()
+      // The entity-record regions are owned by EntityStore (allocU32), not the Buffers registry, so
+      // merge them into the manifest here — a worker needs them to resolve (archetypeId, row).
+      const rec = entities.sharedRecordRegions()
+      const extra: SharedHandleManifest['regions'][number][] = []
+      if (rec.archetypeId instanceof SharedArrayBuffer) {
+        extra.push({ key: 'entity.archetypeId' as RegionKey, backing: rec.archetypeId, element: 'u32' })
+      }
+      if (rec.archetypeRow instanceof SharedArrayBuffer) {
+        extra.push({ key: 'entity.archetypeRow' as RegionKey, backing: rec.archetypeRow, element: 'u32' })
+      }
+      return { columns: base.columns, regions: [...base.regions, ...extra] }
     },
     get tick() {
       return state.tick

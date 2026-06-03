@@ -13,7 +13,7 @@ export type {
   WorkerOption,
 } from './config.js'
 export { createWorld } from './world.js'
-export type { World, WorldPhase } from './world.js'
+export type { World, WorldPhase, WorldApplySurface } from './world.js'
 
 export {
   makeHandle,

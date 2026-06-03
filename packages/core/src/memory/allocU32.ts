@@ -30,8 +30,13 @@ export interface U32Region {
 
 const BYTES = Uint32Array.BYTES_PER_ELEMENT
 
+// Shareable iff the SharedArrayBuffer ctor exists AND cross-origin isolation is not explicitly off.
+// Node/worker_threads report `crossOriginIsolated === undefined` and CAN share SABs, so the gate is
+// `!== false` (matching the Buffers capability probe, memory-buffers.md §4.2 step 2/3) rather than
+// `=== true` — otherwise the entity-record regions would be AB in Node while columns are SAB, and a
+// worker could not read an entity's (archetypeId, row) from the shared record region (M7).
 const canShare = (): boolean =>
-  typeof SharedArrayBuffer !== 'undefined' && (globalThis as { crossOriginIsolated?: boolean }).crossOriginIsolated === true
+  typeof SharedArrayBuffer !== 'undefined' && (globalThis as { crossOriginIsolated?: boolean }).crossOriginIsolated !== false
 
 // Resizable {Shared}ArrayBuffer is ES2024; lib is ES2023, so the maxByteLength option is typed
 // through these ctor shims rather than the global lib type.
