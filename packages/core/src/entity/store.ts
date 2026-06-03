@@ -189,6 +189,19 @@ export class EntityStore {
     return this.#records
   }
 
+  /**
+   * The two entity-record region backings (archetypeId, archetypeRow), for the worker bootstrap
+   * manifest (scheduler.md §7). A worker resolves an entity's (archetypeId, row) from these shared
+   * regions — reading ARCHETYPE TABLES ONLY, never the bitmask (Must-Fix #1). Backings are SAB when
+   * threaded + isolation present; otherwise plain AB (the worker path then has nothing to share).
+   */
+  sharedRecordRegions(): { archetypeId: ArrayBufferLike; archetypeRow: ArrayBufferLike } {
+    return {
+      archetypeId: this.#regions.recordArchetypeId.backing,
+      archetypeRow: this.#regions.recordArchetypeRow.backing,
+    }
+  }
+
   /** The full (generational) handle occupying `index` — the query engine's index→handle resolver. */
   handleOfIndex(index: number): EntityHandle {
     return this.#index.handleOfIndex(index)
