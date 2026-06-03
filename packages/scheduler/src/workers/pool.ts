@@ -44,6 +44,8 @@ interface WorkerSlot {
   readonly reservation: WorkerReservationSab
   readonly work: { sab: SharedArrayBuffer; i32: Int32Array; f32: Float32Array }
   readonly wake: Int32Array
+  /** Write-corral mirror: [0]=count, then [index, componentId] pairs (reactivity.md §9.1). */
+  readonly writeCorral: Uint32Array
   ready: boolean
 }
 
@@ -63,6 +65,12 @@ export interface PoolConfig {
   /** Max matched entities per batch dispatch (work SAB sizing). Default: maxEntities. */
   readonly maxBatchEntities?: number
   readonly commandWords?: number
+  /**
+   * Max `(index, componentId)` value-write entries one worker may stage per wave (write-corral SAB
+   * sizing, reactivity.md §9.1). Default: maxBatchEntities × 4 (a kernel may write a few components
+   * per matched entity). Excess writes are capped (diagnosed at merge), never dropped silently.
+   */
+  readonly writeCorralEntries?: number
   readonly diagnostic?: (message: string) => void
   /**
    * Override the worker-entry module URL. Defaults to the dist sibling of this module. Tests running
@@ -124,6 +132,7 @@ export class WorkerPool {
     this.#waveSync = makeWaveSync(tier)
 
     const maxBatch = cfg.maxBatchEntities ?? cfg.world.options.maxEntities
+    const corralEntries = cfg.writeCorralEntries ?? maxBatch * 4
     const reservationCap = Math.max(...cfg.systems.map((s) => s.maxSpawnsPerWave), 1)
     const here = fileURLToPath(import.meta.url)
     const entryUrl = cfg.workerEntryUrl ?? here.replace(/pool\.(js|ts)$/, 'worker-entry.$1')
@@ -133,6 +142,8 @@ export class WorkerPool {
       const reservation = makeReservationSab(reservationCap)
       const workSab = new SharedArrayBuffer((WORK_HEADER_WORDS + maxBatch) * 4)
       const wakeSab = new SharedArrayBuffer(4)
+      // Write-corral SAB: 1 header word (count) + 2 words per staged entry.
+      const writeCorralSab = new SharedArrayBuffer((1 + corralEntries * 2) * 4)
       const boot: WorkerBootstrap = {
         workerIndex: i,
         kernelModule: cfg.kernelModule,
@@ -146,6 +157,7 @@ export class WorkerPool {
         waveSab: this.#waveCounter.sab,
         workSab,
         wakeSab,
+        writeCorralSab,
       }
       const worker = new Worker(entryUrl, { workerData: boot })
       const slot: WorkerSlot = {
@@ -155,6 +167,7 @@ export class WorkerPool {
         reservation,
         work: { sab: workSab, i32: new Int32Array(workSab), f32: new Float32Array(workSab) },
         wake: new Int32Array(wakeSab),
+        writeCorral: new Uint32Array(writeCorralSab),
         ready: false,
       }
       worker.on('message', (msg: { kind: string; message?: string; workerIndex?: number }) => {
@@ -226,6 +239,27 @@ export class WorkerPool {
     // ---- serial flush slot: flip back, merge command buffers deterministically ----
     this.#world.__setPhase('serial')
     if (waveErrored(this.#waveCounter)) this.#diag('a worker system threw; its command buffer is applied/dropped per CB-SAFE')
+
+    // Merge each worker's value-write corral into the shared write log in ASCENDING worker-index order
+    // (reactivity.md §9.2, R-4) BEFORE the command buffers apply — mirroring single-thread run-wave's
+    // mergeCorrals()→flushAll() order. This is what makes onChange observers + `.changed` filters fire
+    // for worker field writes (and stamp changeVersion, §6.4) deterministically.
+    const writers = active.map((b) => b.workerIndex).sort((a, z) => a - z)
+    const corralHeader = 1
+    for (const wi of writers) {
+      const slot = this.#slots[wi]!
+      const corral = slot.writeCorral
+      const count = corral[0]! >>> 0
+      const capPairs = (corral.length - corralHeader) >>> 1
+      if (count > capPairs) {
+        this.#diag(`worker ${wi} write-corral overflow (${count} > ${capPairs} entries); merged ${capPairs} (raise writeCorralEntries)`)
+      }
+      const merged = Math.min(count, capPairs)
+      if (merged > 0) {
+        this.#world.__mergeWorkerWrites(corral.subarray(corralHeader, corralHeader + merged * 2), merged)
+      }
+      corral[0] = 0
+    }
 
     const bufs: CommandBuffer[] = []
     for (const b of active) {

@@ -350,6 +350,28 @@ export class Reactivity {
   }
 
   /**
+   * §9.1/§9.2 + R-4: merge ONE worker's staged value writes into the shared write log. `pairs` is a
+   * flat `[index, componentId, index, componentId, …]` buffer (the worker's raw corral payload); the
+   * caller drives this in ASCENDING worker-index order so the merged stream is deterministic. We
+   * (re)pack each pair through the module's own packWrite so single/wide layout stays the single
+   * source of truth — the worker never duplicates the packing scheme. Writes flow into the SAME ring
+   * the main thread appends to, so `.changed` filters and onChange observers fire for worker writes
+   * exactly as for single-thread writes. §6.4 replay-stamp: when changeVersion is enabled we also
+   * stamp each row here (the worker hot path stays atomic-free; the stamp lands at the serial merge).
+   */
+  mergeWorkerWrites(pairs: Int32Array | Uint32Array, count: number): void {
+    for (let i = 0; i < count; i++) {
+      const index = (pairs[i * 2] as number) >>> 0
+      const componentId = (pairs[i * 2 + 1] as number) >>> 0
+      for (const w of this.#packWriteEntry(index, componentId)) this.#writeLog.pushWord(w)
+      if (this.#changeVersion.enabled) {
+        const { archetypeId, row } = this.#deps.resolveLocation(index)
+        this.#changeVersion.stamp(archetypeId, row, this.#deps.tick())
+      }
+    }
+  }
+
+  /**
    * §5.2 MAINTAIN_STRUCTURAL: drain the shape log, re-testing each affected entity against the queries
    * referencing the changed component. In single-thread mode M4 already maintains `current`
    * synchronously at the commit point, so this re-runs the same idempotent re-test off the log (the
@@ -377,6 +399,10 @@ export class Reactivity {
       return
     }
     this.#observers.resetChangeDedup()
+    // §7.4 frozen snapshot: capture BOTH log heads at drain entry. A structural (add/remove) handler may
+    // call entity.write(C), which appends to the write log; bounding the change consume to this snapshot
+    // defers that observer-issued write to the NEXT drain — no intra-drain write-cascade (review #2).
+    const writeHeadSnapshot = this.#writeLogHead()
     // Structural observers (add/remove) off the shape log.
     this.#shapeLog.consume(this.#observerShapePtr, (source, base) => {
       if (source.length === 1 && source[0] === OVERFLOW_SENTINEL) return
@@ -398,7 +424,7 @@ export class Reactivity {
       }
       const { index, componentId } = this.#unpackWrite(source, base)
       this.#observers.dispatchChange(index, componentId)
-    })
+    }, writeHeadSnapshot)
   }
 
   /** §8.2 FLUSH_LOGS: drain/merge spill (consumers already drained it), schedule next-frame resize. */

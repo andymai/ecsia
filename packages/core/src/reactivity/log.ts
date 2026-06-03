@@ -153,27 +153,40 @@ export class LogRing {
    * `ptr`. `visit` receives the BASE offset and a source array. On a generation mismatch it receives
    * the OVERFLOW_SENTINEL once and the pointer is conservatively advanced (§3.6).
    */
-  consume(ptr: LogPointer, visit: (source: Int32Array | Uint32Array | number[], base: number) => void): void {
+  consume(
+    ptr: LogPointer,
+    visit: (source: Int32Array | Uint32Array | number[], base: number) => void,
+    headLimit?: number,
+  ): void {
     const h = this.header
     // The ONE atomic read per consumer per frame (§3.2). Plain load in single-thread; Atomics on SAB.
     const curGen = Atomics.load(h, H_GENERATION)
-    const curHead = h[H_HEAD] as number
+    const ringHead = h[H_HEAD] as number
+    const spillHead = h[H_SPILL_COUNT] as number
     if (curGen !== ptr.generation) {
       visit([OVERFLOW_SENTINEL], 0)
-      ptr.cursor = curHead
+      ptr.cursor = ringHead
       ptr.generation = curGen
-      ptr.spillCursor = h[H_SPILL_COUNT] as number
+      ptr.spillCursor = spillHead
       return
     }
+    // `headLimit` (reactivity.md §7.4) bounds the ring scan to a head snapshotted at drain entry, so
+    // entries appended DURING this drain (observer-issued writes) are deferred to the next drain — no
+    // intra-drain write-cascade. The spill is likewise pinned to its snapshot, carried via spillCursor
+    // semantics (a snapshot below the limit leaves later spill entries unread until the next pass).
+    const curHead = headLimit !== undefined && headLimit < ringHead ? headLimit : ringHead
     for (let slot = ptr.cursor; slot < curHead; slot += this.entryWords) {
       visit(this.ring, slot)
     }
     ptr.cursor = curHead
-    const spillCount = h[H_SPILL_COUNT] as number
-    for (let slot = ptr.spillCursor; slot < spillCount; slot += this.entryWords) {
+    if (headLimit !== undefined && headLimit < ringHead) {
+      // A bounded drain does NOT advance past the spill (the snapshot predates any in-drain spill).
+      return
+    }
+    for (let slot = ptr.spillCursor; slot < spillHead; slot += this.entryWords) {
       visit(this.spill, slot)
     }
-    ptr.spillCursor = spillCount
+    ptr.spillCursor = spillHead
   }
 
   /** §8.2 step 1-2: record this frame's peak and schedule a next-frame resize if it spilled. */

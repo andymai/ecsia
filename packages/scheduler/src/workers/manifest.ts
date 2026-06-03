@@ -33,6 +33,13 @@ export interface WorkerBootstrap {
   readonly workSab: SharedArrayBuffer
   /** Wake SAB: the worker Atomics.waits on [0]; the main thread bumps it + notifies to dispatch. */
   readonly wakeSab: SharedArrayBuffer
+  /**
+   * Per-worker write-corral SAB (reactivity.md §9.1, R-4): the worker stages value writes here as
+   * `[count, index0, componentId0, index1, componentId1, …]`. Word [0] is the entry count; the main
+   * thread reads it after the fence and merges into the shared write log in worker-index order. No
+   * atomics on the worker push path — it is single-writer, drained only after the wave fence.
+   */
+  readonly writeCorralSab: SharedArrayBuffer
 }
 
 /** A message the main thread posts to ask a worker to run one batch (used in the postMessage tier). */
