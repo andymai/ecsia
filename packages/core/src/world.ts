@@ -30,6 +30,8 @@ import { Storage } from './storage/index.js'
 import type { Archetype, Signature } from './storage/index.js'
 import { QueryEngine } from './query/index.js'
 import type { LiveQuery } from './query/index.js'
+import { Reactivity, onAdd, onRemove, onChange } from './reactivity/index.js'
+import type { ObserverHandle, ObserverHandler, ObserverTerm } from './reactivity/index.js'
 import type { ComponentDef as SchemaComponentDef, QueryTerm, WorldQuery } from '@ecsia/schema'
 
 /** world.md §4: 'serial' during the serial slot (and always, single-threaded); 'wave' only while the scheduler dispatches worker waves. */
@@ -95,6 +97,33 @@ export interface World {
   trackWrite(index: number, componentId: ComponentId, fieldIndex?: number): void
 
   /**
+   * Register a deferred observer (reactivity.md §7). Fires ONLY at the serial observer slot
+   * (observerDrain), NEVER synchronously mid-system (R-3). Mutations inside the handler stage to the
+   * command buffer and apply at the next serial flush (R-3 re-entrancy safety).
+   */
+  observe(term: ObserverTerm, handler: ObserverHandler): ObserverHandle
+
+  /**
+   * Did any component on `handle` change strictly after tick `since`? (reactivity.md §6.3). Driven by
+   * the per-row changeVersion stamps, NOT the write log (R-2). Lazily enabled the first time a
+   * `.changed` query flavor or this predicate is used.
+   */
+  changedSince(handle: EntityHandle, since: number): boolean
+  /** The rows of `archetypeId` whose changeVersion stamp is > since (the delta serializer scan, §6.3). */
+  changedRows(archetypeId: number, since: number): Iterable<number>
+
+  /** Advance the frame tick (reactivity.frameReset calls this; world owns the counter, world.md §8). */
+  advanceTick(): void
+  /** §9.2 — merge per-worker write corrals into the ring (no-op single-threaded). */
+  mergeCorrals(): void
+  /** §5.2 — drain the shape log, re-testing affected entities against referencing queries. */
+  maintainStructural(): void
+  /** §7.3 — fire deferred observers at the serial observer slot. */
+  observerDrain(): void
+  /** §8.2 — drain/merge spill, schedule next-frame ring resize. */
+  flushLogs(): void
+
+  /**
    * Compile (or fetch the cached) LiveQuery for `terms` and return it (queries.md §4, §9). Identical
    * term sets share one LiveQuery by canonical hash (order-independent, pair-target-encoded). The
    * arity-cap overload family (1..8 inferred, 9+ → LooseQueryElement) is the WorldQuery type.
@@ -144,10 +173,12 @@ export function createWorld(options: WorldOptions = {}): World {
   })
   const buffers = new Buffers({ capabilities, maxEntities: resolved.maxEntities })
 
-  // The accessor seam: a setter calls world.trackWrite (stubbed until M5); handleIndex strips the
-  // generation so the LOW handle bits index the write log (world.md §9.1, W-8).
-  const trackWrite = (_index: number, _componentId: ComponentId, _fieldIndex?: number): void => {
-    // M5 stub: no-op. Signature and call sites are canonical now (world.md §9.1 / I-ACC-4).
+  // The accessor seam: a setter calls world.trackWrite. handleIndex strips the generation so the LOW
+  // handle bits index the write log (world.md §9.1, W-8). Routes to the reactivity module once built
+  // (late-bound so the acyclic construction order registry → buffers → storage → reactivity holds).
+  let reactivity: Reactivity | null = null
+  const trackWrite = (index: number, componentId: ComponentId, fieldIndex?: number): void => {
+    reactivity?.trackWrite(index, componentId, fieldIndex)
   }
   const accessorWorld: AccessorWorld = {
     trackWrite,
@@ -181,10 +212,9 @@ export function createWorld(options: WorldOptions = {}): World {
     maxHotArchetypes: resolved.maxHotArchetypes,
     stride,
     maxEntities: resolved.maxEntities,
-    enqueueRemoveLog: () => {
-      // M5 stub: removal reactivity (writeLog / shapeLog). The call SITE + ordering are canonical
-      // now (archetype-storage.md §5.5 step 3 / §6.3 step 2); M5 fills the body.
-    },
+    enqueueRemoveLog: (index, c) => reactivity?.enqueueRemoveLog(index, c),
+    hasRemoveObserver: (c) => reactivity?.hasRemoveObserver(c as number) ?? false,
+    trackShape: (index, c, kind) => reactivity?.trackShape(index, c as ComponentId, kind),
     maintainEntity: (index, c) => engine?.maintainEntity(index, c),
     onEntitySpawned: (index) => engine?.onEntitySpawned(index, storage.archetypes.emptyArchetype),
     dropEntity: (index) => engine?.dropEntity(index),
@@ -225,6 +255,44 @@ export function createWorld(options: WorldOptions = {}): World {
   entities.setLifecycle({
     onSpawn: (handle) => storage.onSpawn(handle),
     onDespawn: (handle) => storage.onDespawn(handle),
+  })
+
+  // --- reactivity (world.md §7 step 4): the write/shape rings, changeVersion stamps, deferred
+  // observers, and the query-flavor hooks. Wired AFTER storage + queries so trackWrite/trackShape and
+  // observer dispatch can resolve locations and re-test entities (reactivity.md §15 dependencies).
+  reactivity = new Reactivity({
+    buffers,
+    maxEntities: resolved.maxEntities,
+    indexBits: handleLayout.indexBits,
+    logEntryWords: resolved.reactivity.logEntryWords,
+    maxWritesPerFrame: resolved.reactivity.maxWritesPerFrame,
+    maxShapeChangesPerFrame: resolved.reactivity.maxShapeChangesPerFrame,
+    shrinkRings: resolved.reactivity.shrinkRings,
+    dev: process.env['NODE_ENV'] !== 'production',
+    resolveLocation: (index) => entities.locationOfIndex(index),
+    tick: () => state.tick,
+    advanceTick: () => {
+      state.tick = (state.tick + 1) >>> 0
+    },
+    idOf: (def) => {
+      const id = registry.idOf(def)
+      if (id === undefined) throw new Error(`component '${def.name}' is not registered with this world`)
+      return id
+    },
+    holdsAll: (index, componentIds) => {
+      for (const c of componentIds) if (!bitmask.bitmaskHas(index, c)) return false
+      return true
+    },
+    refOf: (index) => entities.entity(entities.handleOfIndex(index), { lenient: true }),
+  })
+  // The shape-log drain re-runs the same idempotent single-entity maintenance the M4 synchronous
+  // hook performs; the conservative overflow path needs a "current matches" source for change
+  // observers (§3.6).
+  reactivity.setMaintainHook((index, c) => engine?.maintainEntity(index, c as ComponentId))
+  reactivity.setCurrentMembersSource(() => collectCurrentMembers(engine as QueryEngine))
+  ;(engine as QueryEngine).setReactivity({
+    attachChangedFlavor: (q, ids) => (reactivity as Reactivity).attachChangedFlavor(q, ids),
+    drainChanged: (q) => (reactivity as Reactivity).drainChanged(q),
   })
 
   const world: World = {
@@ -290,15 +358,54 @@ export function createWorld(options: WorldOptions = {}): World {
     trackWrite(index, componentId, fieldIndex) {
       trackWrite(index, componentId, fieldIndex)
     },
+    observe(term, handler) {
+      return (reactivity as Reactivity).observe(term, handler)
+    },
+    changedSince(handle, since) {
+      ;(reactivity as Reactivity).enableChangeVersion()
+      return (reactivity as Reactivity).changedSince(handle, since)
+    },
+    changedRows(archetypeId, since) {
+      const arch = storage.archetypes.byId[archetypeId]
+      const count = arch === undefined ? 0 : arch.count
+      return (reactivity as Reactivity).changedRows(archetypeId, since, count)
+    },
+    advanceTick() {
+      state.tick = (state.tick + 1) >>> 0
+    },
+    mergeCorrals() {
+      ;(reactivity as Reactivity).mergeCorrals()
+    },
+    maintainStructural() {
+      ;(reactivity as Reactivity).maintainStructural()
+    },
+    observerDrain() {
+      ;(reactivity as Reactivity).observerDrain()
+    },
+    flushLogs() {
+      ;(reactivity as Reactivity).flushLogs()
+    },
     query: ((...terms: QueryTerm[]): LiveQuery => {
       // The LiveQuery structurally satisfies Query<T> (terms, each, [Symbol.iterator], flavors,
       // count); the WorldQuery overload family supplies the element typing per the actual terms.
       return (engine as QueryEngine).query(terms)
     }) as unknown as WorldQuery,
     frameReset() {
+      // §10.1: reactivity.frameReset advances the world tick + recycles the rings; then the query
+      // engine clears its per-frame added/removed delta lists.
+      ;(reactivity as Reactivity).frameReset()
       ;(engine as QueryEngine).frameReset()
     },
   }
 
   return Object.freeze(world)
+}
+
+/** Collect the union of every live query's current matching indices (the §3.6 conservative source). */
+function collectCurrentMembers(engine: QueryEngine): Iterable<number> {
+  const seen = new Set<number>()
+  for (const lq of engine.liveQueries) {
+    for (const index of lq.current) seen.add(index)
+  }
+  return seen
 }

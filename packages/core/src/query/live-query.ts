@@ -59,6 +59,14 @@ interface DeltaLists {
   hasRemoved: boolean
 }
 
+/** The reactivity write-log hooks the Changed flavor drives (reactivity.md §10 ReactivityQueryHooks). */
+export interface ReactivityQueryHooks {
+  /** §5.1: allocate this query's changed-flavor LogPointer + dedup bitset (idempotent). */
+  attachChangedFlavor(q: LiveQuery, componentIds: Iterable<number>): void
+  /** §5.3: drain this frame's changed entity indices (deduped, intersected with `current`). */
+  drainChanged(q: LiveQuery): Uint32Array
+}
+
 export interface LiveQueryDeps {
   /** index → its (archetypeId, row) — the entity record (entity-model.md §4.3). */
   resolveLocation(index: number): { archetypeId: number; row: number }
@@ -85,6 +93,8 @@ export class LiveQuery {
   readonly #deps: LiveQueryDeps
   readonly #bindings = new Map<string, ValueBinding>()
   #delta: DeltaLists | null = null
+  #reactivity: ReactivityQueryHooks | null = null
+  #changedDeclared = false
   lastMatchTick = 0
 
   constructor(
@@ -123,11 +133,38 @@ export class LiveQuery {
     this.#ensureDelta().hasRemoved = true
     return this
   }
-  changed(..._components: ReadonlyArray<unknown>): this {
-    // §8.3: the Changed flavor drains the reactivity write log (M5). Declaring it is a no-op until
-    // the write log exists; the chained surface is in place now so callers compile.
+  /** Install the reactivity write-log hooks (world wiring); enables the Changed flavor. */
+  __setReactivity(hooks: ReactivityQueryHooks): void {
+    this.#reactivity = hooks
+    if (this.#changedDeclared) this.#attachChanged()
+  }
+
+  changed(...components: ReadonlyArray<unknown>): this {
+    // §8.3: the Changed flavor drains the reactivity WRITE LOG (not changeVersion — R-2). The filtered
+    // component set is the explicit `components` argument, or the query's whole referenced set when
+    // omitted.
     this.#ensureDelta()
+    this.#changedDeclared = true
+    this.#changedComponents = this.#resolveChangedComponents(components)
+    this.#attachChanged()
     return this
+  }
+
+  #changedComponents: readonly number[] = []
+
+  #resolveChangedComponents(components: ReadonlyArray<unknown>): readonly number[] {
+    if (components.length === 0) return this.compiled.referencedIds as unknown as readonly number[]
+    const out: number[] = []
+    for (const c of components) {
+      const id = (c as { id?: number }).id
+      if (typeof id === 'number') out.push(id)
+    }
+    return out
+  }
+
+  #attachChanged(): void {
+    if (this.#reactivity === null || !this.#changedDeclared) return
+    this.#reactivity.attachChangedFlavor(this, this.#changedComponents)
   }
 
   /** Reset per-frame transient flavor lists (FRAME_RESET, queries.md §8.2). */
@@ -272,9 +309,12 @@ export class LiveQuery {
    * at M5; until then there are no recorded writes, so the changed set is empty. The matching surface
    * (binding the cursor per changed index, §9.5) is in place for M5 to fill the index source.
    */
-  eachChanged(_fn: (e: PooledElement) => void): void {
-    // M5: drain reactivity.drainChanged(this) (deduped, intersected with `current`) and reuse
-    // #eachScattered to bind the cursor per changed index. No-op until the write log exists.
+  eachChanged(fn: (e: PooledElement) => void): void {
+    // §5.3: drain the write-log changed set (deduped, intersected with `current`), then bind the
+    // cursor per scattered index. The changed set spans multiple archetypes, so reuse #eachScattered.
+    if (this.#reactivity === null || !this.#changedDeclared) return
+    const indices = this.#reactivity.drainChanged(this)
+    this.#eachScattered(indices, fn)
   }
 
   // --- internals -------------------------------------------------------------

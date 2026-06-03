@@ -19,6 +19,11 @@ import { coldRowOf } from './cold-store.js'
 import { canonicalize } from './signature.js'
 import type { Signature } from './signature.js'
 
+// ShapeKind ordinals (reactivity.md §4.1) for the lifecycle commit points.
+const SHAPE_CREATE = 0
+const SHAPE_DESTROY = 1
+const NO_COMPONENT_SHAPE = 0 as ComponentId
+
 export interface DefRegistry {
   idOf(def: ComponentDef<Schema>): ComponentId | undefined
   defOf(id: ComponentId): ComponentDef<Schema> | undefined
@@ -34,6 +39,14 @@ export interface StorageConfig {
   readonly stride: number
   readonly maxEntities: number
   enqueueRemoveLog(index: number, c: ComponentId): void
+  /**
+   * §7.4 gate: does any observer subscribe to `c`'s removal? When true for any held component, despawn
+   * defers the dying row's column reclaim (swap-pop) so an onRemove handler can read the last value.
+   * Optional so a query-less harness can construct storage without reactivity.
+   */
+  hasRemoveObserver?(c: ComponentId): boolean
+  /** Shape-log hook (reactivity.md §4.2): structural entry at the commit point. Wired by the world to reactivity. */
+  trackShape?(index: number, c: ComponentId, kind: number): void
   /** Single-entity incremental query maintenance (queries.md §6.1); wired by the world to the engine. */
   maintainEntity(index: number, c: ComponentId): void
   /**
@@ -63,6 +76,7 @@ export class Storage {
       stride: cfg.stride,
       maxEntities: cfg.maxEntities,
       enqueueRemoveLog: cfg.enqueueRemoveLog,
+      ...(cfg.trackShape !== undefined ? { trackShape: cfg.trackShape } : {}),
       maintainEntity: cfg.maintainEntity,
       tick: cfg.tick,
       defOf: (c) => cfg.registry.defOf(c),
@@ -104,6 +118,9 @@ export class Storage {
     // Empty signature → no bits set; bitmaskApplyDelta from empty to empty is a no-op but keeps the
     // coherence discipline explicit.
     this.#cfg.bitmask.bitmaskApplyDelta(index, empty.signature, empty.signature)
+    // reactivity.md §4.2: emit the Create shape entry once the entity is committed to the empty
+    // archetype (componentId = NO_COMPONENT; the kind disambiguates).
+    this.#cfg.trackShape?.(index, NO_COMPONENT_SHAPE, SHAPE_CREATE)
     // §6.3: the component-less entity matches no component-constrained query, but a constraint-less
     // query DOES match the empty signature. Tell those queries now (the seed already includes such
     // entities, so this keeps the before-/after-spawn incremental paths symmetric).
@@ -114,14 +131,32 @@ export class Storage {
     const index = this.#cfg.handleIndex(handle)
     const archId = this.#cfg.record.archetypeIdOf(index)
     const arch = this.archetypes.byId[archId] as Archetype
+    // reactivity.md §4.2 / R-8: emit Destroy BEFORE removeRow AND before identity invalidation
+    // (freeEntity runs after onDespawn in EntityStore), so a remove/destroy observer can still
+    // resolve the dying entity's last location. The full fixed sequence is: Destroy + remove-logs,
+    // then removeRow, then bitmask clear, then freeEntity (entity-model.md §6.3).
+    this.#cfg.trackShape?.(index, NO_COMPONENT_SHAPE, SHAPE_DESTROY)
     // Removal reactivity for every held component, BEFORE the row is reclaimed (§6.3 step 2).
+    // §7.4: if ANY held component has a remove-observer, defer the row reclaim so its values survive
+    // the drain. The gate keeps the no-observer path free of the swap window cost.
+    let defer = false
+    const hasRemoveObserver = this.#cfg.hasRemoveObserver
     for (let i = 0; i < arch.signature.length; i++) {
-      this.#cfg.enqueueRemoveLog(index, arch.signature[i] as number as ComponentId)
+      const c = arch.signature[i] as number as ComponentId
+      this.#cfg.enqueueRemoveLog(index, c)
+      if (hasRemoveObserver !== undefined && hasRemoveObserver(c)) defer = true
     }
     const row = this.#cfg.record.rowOf(index)
-    this.archetypes.removeRow(arch, row, (movedIndex, newRow) => {
+    const fixSibling = (movedIndex: number, newRow: number): void => {
       this.#cfg.record.commitRecord(movedIndex, archId, newRow)
-    })
+    }
+    if (defer) {
+      this.archetypes.removeRow(arch, row, fixSibling, (newRow) => {
+        this.#cfg.record.commitRecord(index, archId, newRow)
+      })
+    } else {
+      this.archetypes.removeRow(arch, row, fixSibling)
+    }
     this.#cfg.bitmask.bitmaskClear(index)
     // §6.3: the despawned entity leaves every query that held it, INCLUDING a constraint-less query
     // (which a now-empty shape would otherwise still appear to match). dropEntity unconditionally
