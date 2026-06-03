@@ -1,0 +1,6 @@
+export { createScheduler, buildSchedulePlan } from './scheduler.js'
+export type { SchedulerHandle, CreateSchedulerOptions } from './scheduler.js'
+export { runUpdate } from './update.js'
+export { runWave, buildScopedQueries } from './run-wave.js'
+export type { ExecutorEnv } from './run-wave.js'
+export { makeScopedQuery } from './guards.js'
