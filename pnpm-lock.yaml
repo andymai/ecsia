@@ -68,6 +68,9 @@ importers:
       '@ecsia/core':
         specifier: workspace:*
         version: link:../core
+      '@ecsia/schema':
+        specifier: workspace:*
+        version: link:../schema
 
   packages/schema: {}
 
