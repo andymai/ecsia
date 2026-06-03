@@ -14,12 +14,21 @@ import type { SchedulePlan } from '../graph/index.js'
 import { directApplySink } from '../commands/index.js'
 import { buildScopedQueries } from './run-wave.js'
 import { runUpdate } from './update.js'
+import { runUpdateThreaded } from './update-threaded.js'
+import type { RoundDispatcher } from './update-threaded.js'
 
 export interface SchedulerHandle {
   /** The immutable plan (frozen; rebuilt wholesale on re-plan, never patched — §4.4). */
   readonly plan: SchedulePlan
   /** Run one wave-scheduled tick on the main thread (scheduler.md §6.2). */
   update(dt?: number): void
+  /**
+   * Run one wave-scheduled tick THREADED (scheduler.md §6.2 + §7, PHASE-2): each round's worker batches
+   * are dispatched to `pool` (the WorkerPool), the rest run on the main thread. Reproduces the
+   * single-thread observable result through the SAME frame loop (§2.2/§6.5). The `pool`'s PoolSystem
+   * registration order MUST match the plan's SystemId order (the test rig wires this).
+   */
+  updateThreaded(pool: RoundDispatcher, dt?: number): Promise<void>
 }
 
 export interface CreateSchedulerOptions {
@@ -96,6 +105,9 @@ export function createScheduler(
     plan,
     update(dt: number = 0): void {
       runUpdate(env, plan, dt)
+    },
+    updateThreaded(pool: RoundDispatcher, dt: number = 0): Promise<void> {
+      return runUpdateThreaded(env, plan, pool, dt)
     },
   }
 }

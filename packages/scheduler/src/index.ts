@@ -21,8 +21,8 @@ export { EdgeWeight, resolveOrdering, buildEdges, buildDAG, CycleError, buildPla
 export type { Edge, DAG, SchedulePlan, ScheduleWave, SystemBatch } from './graph/index.js'
 
 // --- executor: the single-threaded wave runner + frame loop + world-driving seam (§6, §12) ---
-export { createScheduler, buildSchedulePlan, runUpdate, runWave, buildScopedQueries, makeScopedQuery } from './executor/index.js'
-export type { SchedulerHandle, CreateSchedulerOptions, ExecutorEnv } from './executor/index.js'
+export { createScheduler, buildSchedulePlan, runUpdate, runUpdateThreaded, runWave, buildScopedQueries, makeScopedQuery } from './executor/index.js'
+export type { SchedulerHandle, CreateSchedulerOptions, ExecutorEnv, RoundDispatcher } from './executor/index.js'
 
 // --- parallel-ready seams (§7) — interfaces only; worker bodies at M7 ---
 export { selectWaitTier } from './executor/seams.js'
@@ -36,6 +36,48 @@ export type {
   WorkerDispatch,
 } from './executor/seams.js'
 
-// --- commands: the command-buffer ENCODING FORMAT contract (op ordinals CANON 0..6) + apply seam ---
-export { Op, recordLen, directApplySink } from './commands/index.js'
-export type { CommandSink, StructuralIntent } from './commands/index.js'
+// --- commands: the command-buffer ENCODING FORMAT contract (op ordinals CANON 0..6) + apply path ---
+export { Op, recordLen, directApplySink, flushAll, makeCommandBuffer, resetBuffer, ensureWords, makeEncoder, buildFieldCodec } from './commands/index.js'
+export type {
+  CommandSink,
+  StructuralIntent,
+  WorldApply,
+  CommandBuffer,
+  BufferReservation,
+  CommandEncoder,
+  ComponentEncodeInfo,
+  EncoderEnv,
+  ComponentFieldCodec,
+} from './commands/index.js'
+
+// --- workers (M7): SAB worker pool, wave dispatch, Atomics wave-sync, deterministic merge ---
+export {
+  WorkerPool,
+  makeWaveCounter,
+  makeWaveSync,
+  completeWave,
+  setWaveError,
+  waveErrored,
+  workerHead,
+  makeReservationSab,
+  fillReservation,
+  takeReserved,
+  consumedCount,
+  buildWorkerWorldView,
+  matchComponentsOf,
+  hasWaitAsync,
+  waitAsync,
+} from './workers/index.js'
+export type {
+  PoolConfig,
+  PoolSystem,
+  WorkerReservationSab,
+  WorkerWorldView,
+  WorkerSystemDef,
+  WorkerSystemKernel,
+  WorkerSystemBox,
+  WorkerBootstrap,
+  ComponentManifestEntry,
+  DispatchMessage,
+  WaitAsyncResult,
+} from './workers/index.js'
