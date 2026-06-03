@@ -114,19 +114,34 @@ export class EntityStore {
     }
   }
 
+  /**
+   * Storage hook installed at M3: places a freshly-minted handle into its initial archetype (via
+   * allocRow) and commits the record; on despawn it performs the §6.3 removeRow + bitmask clear
+   * BEFORE identity invalidation. Until installed, spawn falls back to the empty-archetype row 0.
+   */
+  #lifecycle: { onSpawn(handle: EntityHandle): void; onDespawn(handle: EntityHandle): void } | null = null
+
+  setLifecycle(hooks: { onSpawn(handle: EntityHandle): void; onDespawn(handle: EntityHandle): void }): void {
+    this.#lifecycle = hooks
+  }
+
   spawn(): EntityHandle {
     const handle = this.#index.allocEntity()
-    const index = handleIndex(handle, this.layout)
-    // Storage (M3) owns allocRow; until then land in the empty archetype at row 0.
-    this.#records.commitRecord(index, EMPTY_ARCHETYPE_ID, 0)
+    if (this.#lifecycle !== null) {
+      this.#lifecycle.onSpawn(handle)
+    } else {
+      const index = handleIndex(handle, this.layout)
+      this.#records.commitRecord(index, EMPTY_ARCHETYPE_ID, 0)
+    }
     this.#warnOnWrap()
     return handle
   }
 
   despawn(handle: EntityHandle): void {
     if (!this.#index.isAlive(handle)) return
-    // Reactivity/bitmask/relations hooks (§6.3 steps 1-4) land at later milestones; M1 owns the
-    // identity invalidation, which must run LAST so the above could still resolve the entity.
+    // §6.3: storage runs removeRow + bitmask clear here; identity invalidation (freeEntity) runs
+    // LAST so the above could still resolve the dying entity's location.
+    this.#lifecycle?.onDespawn(handle)
     this.#index.freeEntity(handle)
     this.#warnOnWrap()
   }

@@ -1,0 +1,457 @@
+// The archetype store: signature interning, the lazy edge graph, swap-pop row alloc/removal, and
+// migration (archetype-storage.md §4, §5, §10). All run serial / main-thread (Must-Fix #1). The
+// store owns archetype identity + columns; it CALLS the entity record's commitRecord (the two-word
+// structural commit point, entity-model.md §4.2) and drives the per-entity bitmask delta after each
+// migration commit (§6.3). It never owns the handle codec or the free-list (entity module).
+
+import type { ComponentId, ComponentDef, Schema } from '@ecsia/schema'
+import type { ArchetypeId } from '@ecsia/schema'
+import type { Buffers, Column } from '../memory/index.js'
+import type { AccessorWorld, ColumnSet, ComponentRuntime } from '../component/index.js'
+import type { Bitmask } from '../bitmask/index.js'
+import type { Signature } from './signature.js'
+import {
+  canonicalize,
+  sigEquals,
+  sigHas,
+  sigHash,
+  sigWithAdded,
+  sigWithRemoved,
+} from './signature.js'
+import type { Archetype } from './archetype.js'
+import { attachHotColumns, makeArchetype } from './archetype.js'
+import { makeColdStore, coldAllocRow, coldRowOf, coldReclaim } from './cold-store.js'
+import type { ColdStore } from './cold-store.js'
+
+// EMPTY_ARCHETYPE_ID is dense id 0: a REAL archetype (the empty signature), distinct from the
+// ARCHETYPE_NONE record sentinel (§3.1). This module is the normative definer.
+export const EMPTY_ARCHETYPE_ID = 0 as ArchetypeId
+export const ARCHETYPE_NONE = 0xffffffff as ArchetypeId
+
+const INITIAL_ROWS = 64
+
+/** The two-word record surface the store commits through (entity-model.md §4.2). */
+export interface RecordSurface {
+  commitRecord(index: number, archetypeId: number, row: number): void
+  archetypeIdOf(index: number): number
+  rowOf(index: number): number
+}
+
+export interface StorageDeps {
+  readonly buffers: Buffers
+  readonly accessorWorld: AccessorWorld
+  readonly bitmask: Bitmask
+  readonly record: RecordSurface
+  readonly maxHotArchetypes: number
+  /** Bitmask/sigWords stride = ceil(N/32) (CANON C4). */
+  readonly stride: number
+  /** Mint ceiling; clamps a new column's initial reservation so it never exceeds the world cap. */
+  readonly maxEntities: number
+  /** Removal-reactivity hook for components in fromArch \ toArch (M5 fills the body). */
+  enqueueRemoveLog(index: number, c: ComponentId): void
+  tick(): number
+  defOf(c: ComponentId): ComponentDef<Schema> | undefined
+  handleIndex(handle: number): number
+}
+
+export class ArchetypeStore {
+  readonly #deps: StorageDeps
+  readonly byId: Archetype[] = []
+  readonly #byHash = new Map<number, Archetype[]>()
+  #hotCount = 0
+  readonly cold: ColdStore = makeColdStore()
+  readonly #initialRows: number
+
+  constructor(deps: StorageDeps) {
+    this.#deps = deps
+    // A new column reserves its address space from initialCapacity; never reserve past the world's
+    // mint ceiling or the resizable backing's maxByteLength is invalid for tiny maxEntities.
+    this.#initialRows = Math.max(1, Math.min(INITIAL_ROWS, deps.maxEntities))
+    // EMPTY_ARCHETYPE_ID = 0 is created eagerly so spawn always has a hot archetype to land in.
+    this.getOrCreateArchetype(canonicalize([]))
+  }
+
+  get hotCount(): number {
+    return this.#hotCount
+  }
+
+  get emptyArchetype(): Archetype {
+    return this.byId[EMPTY_ARCHETYPE_ID as number] as Archetype
+  }
+
+  // --- §5.1 lookup-or-create (signature interning) ---------------------------
+
+  getOrCreateArchetype(sig: Signature): Archetype {
+    const h = sigHash(sig)
+    const bucket = this.#byHash.get(h)
+    if (bucket !== undefined) {
+      for (const a of bucket) if (sigEquals(a.signature, sig)) return a
+    }
+    return this.#createArchetype(sig, h)
+  }
+
+  #createArchetype(sig: Signature, hash: number): Archetype {
+    const id = this.byId.length as ArchetypeId
+    const isCold = this.#hotCount >= this.#deps.maxHotArchetypes
+    const arch = makeArchetype(id, sig, hash, this.#deps.stride, this.#deps.tick(), isCold)
+    if (!isCold) {
+      attachHotColumns(arch, {
+        buffers: this.#deps.buffers,
+        accessorWorld: this.#deps.accessorWorld,
+        initialCapacity: this.#initialRows,
+        defOf: (c) => this.#deps.defOf(c),
+      })
+      this.#hotCount += 1
+    }
+    this.byId.push(arch)
+    let bucket = this.#byHash.get(hash)
+    if (bucket === undefined) {
+      bucket = []
+      this.#byHash.set(hash, bucket)
+    }
+    bucket.push(arch)
+    return arch
+  }
+
+  // --- §5.4 lazy edge graph (both directions cached on a miss) ---------------
+
+  edgeAdd(arch: Archetype, c: ComponentId): Archetype {
+    const e = arch.edges.get(c)
+    if (e !== undefined && e.add !== undefined) return e.add
+    const targetSig = sigWithAdded(arch.signature, c)
+    const target = this.getOrCreateArchetype(targetSig)
+    this.#setEdge(arch, c, 'add', target)
+    this.#setEdge(target, c, 'remove', arch)
+    return target
+  }
+
+  edgeRemove(arch: Archetype, c: ComponentId): Archetype {
+    const e = arch.edges.get(c)
+    if (e !== undefined && e.remove !== undefined) return e.remove
+    const targetSig = sigWithRemoved(arch.signature, c)
+    const target = this.getOrCreateArchetype(targetSig)
+    this.#setEdge(arch, c, 'remove', target)
+    this.#setEdge(target, c, 'add', arch)
+    return target
+  }
+
+  #setEdge(arch: Archetype, c: ComponentId, dir: 'add' | 'remove', target: Archetype): void {
+    let e = arch.edges.get(c)
+    if (e === undefined) {
+      e = {}
+      arch.edges.set(c, e)
+    }
+    e[dir] = target
+  }
+
+  // --- §4 row alloc / swap-pop removal ---------------------------------------
+
+  #ensureRowCapacity(arch: Archetype, need: number): void {
+    const rowsColumn = arch.rowsColumn
+    if (rowsColumn === null) return // cold archetype: rows live in the overflow store
+    if (need > rowsColumn.capacity()) {
+      this.#deps.buffers.grow(rowsColumn, need)
+      arch.rows = rowsColumn.view as Uint32Array
+    }
+    for (const cs of arch.columnSets.values()) {
+      for (const col of cs.columns) {
+        if (need > col.capacity()) this.#deps.buffers.grow(col, need)
+      }
+    }
+  }
+
+  /** Reserve a row in `arch` for `handle`; records the occupant. Caller writes column values (§4.2). */
+  allocRow(arch: Archetype, handle: number): number {
+    if (arch.cold) return this.#coldAllocRow(arch, handle)
+    this.#ensureRowCapacity(arch, arch.count + 1)
+    const row = arch.count
+    arch.rows[row] = handle >>> 0
+    arch.count = row + 1
+    arch.lastAccessTick = this.#deps.tick()
+    return row
+  }
+
+  #coldAllocRow(arch: Archetype, handle: number): number {
+    const index = this.#deps.handleIndex(handle)
+    this.cold.archOf.set(index, arch.id)
+    this.cold.handleOf.set(index, handle >>> 0)
+    for (let i = 0; i < arch.signature.length; i++) {
+      const c = arch.signature[i] as number as ComponentId
+      // Cold rows are keyed per (entityIndex, componentId), NOT per archetype. A cold→cold migration
+      // that keeps a component must REUSE the entity's existing row for it — reallocating would orphan
+      // the prior value and the source-side reclaim would then delete the fresh mapping. Only allocate
+      // a row for a component the entity does not already hold.
+      if (coldRowOf(this.cold, index, c) >= 0) continue
+      coldAllocRow(this.cold, index, c, {
+        buffers: this.#deps.buffers,
+        accessorWorld: this.#deps.accessorWorld,
+        initialCapacity: this.#initialRows,
+        defOf: (cc) => this.#deps.defOf(cc),
+      })
+    }
+    // Cold rows are addressed per-component via cold.rowOf; the record stores the entityIndex itself
+    // as the "row" so resolveLocation round-trips through the cold store.
+    arch.count += 1
+    arch.lastAccessTick = this.#deps.tick()
+    return index
+  }
+
+  /**
+   * Swap-pop removal: move the last live row into `row`, then fix the moved sibling's record via
+   * the callback. `fixSibling` fires exactly once iff row !== count-1 (ROW-1 / I6). Serial only.
+   */
+  removeRow(arch: Archetype, row: number, fixSibling: (movedIndex: number, newRow: number) => void): void {
+    if (arch.cold) {
+      // Cold "row" is the entity index (the record row word for cold entities, §10.3). Reclaim its
+      // overflow rows so blocks don't leak and stale (index,componentId) mappings can't survive a
+      // generational index reuse.
+      coldReclaim(this.cold, row, arch.signature as unknown as Iterable<number>)
+      arch.count -= 1
+      return
+    }
+    const last = arch.count - 1
+    if (row !== last) {
+      for (const cs of arch.columnSets.values()) {
+        for (const col of cs.columns) copyRowWithinColumn(col, last, row)
+      }
+      const movedHandle = arch.rows[last] as number
+      arch.rows[row] = movedHandle
+      fixSibling(this.#deps.handleIndex(movedHandle), row)
+    }
+    arch.count = last
+  }
+
+  // --- §5.5 migration --------------------------------------------------------
+
+  /** Move one entity from fromArch to toArch: K-shared copy + init-added + shuffle-pop + commit (§5.5). */
+  migrate(handle: number, fromArch: Archetype, toArch: Archetype): number {
+    const index = this.#deps.handleIndex(handle)
+    const oldRow = this.#deps.record.rowOf(index)
+
+    // Snapshot the source field locations BEFORE allocRow. A cold target reallocates this entity's
+    // per-type cold rows (cold.rowOf), which for a cold→cold migration would clobber the source row
+    // mapping of shared components before we copy them.
+    const srcLocs = new Map<number, { set: ColumnSet; row: number }>()
+    for (let i = 0; i < toArch.signature.length; i++) {
+      const c = toArch.signature[i] as number as ComponentId
+      if (!sigHas(fromArch.signature, c)) continue
+      const src = this.#fieldLocation(fromArch, c, index, oldRow)
+      if (src !== null) srcLocs.set(c as number, src)
+    }
+
+    const newRow = this.allocRow(toArch, handle)
+
+    // Shared-column copy (§5.5 step 2): for every column-bearing component in the DESTINATION, copy
+    // its field values from the source (hot row OR cold block) or initialize if newly added. This
+    // holds in all four hot/cold combinations — the column-copy is NOT skipped for cold targets,
+    // which would silently drop shared field data (MIG-1 / §5.5 no-field-drop contract).
+    for (let i = 0; i < toArch.signature.length; i++) {
+      const c = toArch.signature[i] as number as ComponentId
+      const dst = this.#fieldLocation(toArch, c, index, newRow)
+      if (dst === null) continue // tag / no def: pure membership, no columns
+      const src = srcLocs.get(c as number)
+      if (src !== undefined) {
+        for (let f = 0; f < dst.set.columns.length; f++) {
+          copyRowAcrossColumns(src.set.columns[f] as Column, src.row, dst.set.columns[f] as Column, dst.row)
+        }
+      } else {
+        this.#initColumnRow(dst.set, dst.row, c)
+      }
+    }
+
+    // Removal reactivity for components in fromArch \ toArch, BEFORE the source row is overwritten.
+    for (let i = 0; i < fromArch.signature.length; i++) {
+      const c = fromArch.signature[i] as number as ComponentId
+      if (!sigHas(toArch.signature, c)) this.#deps.enqueueRemoveLog(index, c)
+    }
+
+    if (fromArch.cold) {
+      // Reclaim only the cold rows the entity no longer keeps in the COLD store: components removed
+      // outright, plus shared components that moved into a hot target's columns. Shared components
+      // that stay cold (cold→cold) retain their existing row (reused by #coldAllocRow above).
+      const toReclaim: number[] = []
+      for (let i = 0; i < fromArch.signature.length; i++) {
+        const c = fromArch.signature[i] as number
+        const stillCold = sigHas(toArch.signature, c) && toArch.cold
+        if (!stillCold) toReclaim.push(c)
+      }
+      coldReclaim(this.cold, index, toReclaim, !toArch.cold)
+      fromArch.count -= 1
+    } else {
+      this.removeRow(fromArch, oldRow, (movedIndex, newSrcRow) => {
+        this.#deps.record.commitRecord(movedIndex, fromArch.id as number, newSrcRow)
+      })
+    }
+
+    this.#deps.record.commitRecord(index, toArch.id as number, newRow)
+    this.#deps.bitmask.bitmaskApplyDelta(index, fromArch.signature, toArch.signature)
+    return newRow
+  }
+
+  /**
+   * Resolve the (ColumnSet, row) holding component `c`'s fields for `index` in `arch`, whether hot
+   * (per-archetype columnSet, addressed by `hotRow`) or cold (per-type block, addressed by the
+   * entity's cold row). Returns null for tags / unregistered ids that carry no columns.
+   */
+  #fieldLocation(arch: Archetype, c: ComponentId, index: number, hotRow: number): { set: ColumnSet; row: number } | null {
+    if (arch.cold) {
+      const set = this.cold.blocks.get(c)
+      if (set === undefined) return null
+      const row = coldRowOf(this.cold, index, c)
+      if (row < 0) return null
+      return { set, row }
+    }
+    const set = arch.columnSets.get(c)
+    if (set === undefined) return null
+    return { set, row: hotRow }
+  }
+
+  #initColumnRow(cs: ColumnSet, row: number, c: ComponentId): void {
+    const def = this.#deps.defOf(c)
+    if (def === undefined) return
+    const rt = def as ComponentRuntime<Schema>
+    let layoutIndex = 0
+    let fieldIndex = 0
+    for (const f of rt.fields) {
+      if (f.ctor === null) {
+        fieldIndex += 1
+        continue
+      }
+      const col = cs.columns[layoutIndex] as Column
+      if (f.needsExplicitInit) {
+        const fill = col.layout.fillOnInit
+        const base = row * col.layout.stride
+        for (let a = 0; a < col.layout.stride; a++) col.view[base + a] = fill
+      }
+      // else: the column's zero-init already holds the intrinsic default (DEF-1).
+      layoutIndex += 1
+      fieldIndex += 1
+    }
+  }
+
+  // --- §5.6 / §5.6a structural change entry points ---------------------------
+
+  /** entity.add(C): single-id add via the cached edge (§5.4, §5.6a single-ID form). */
+  migrateAdding(handle: number, c: ComponentId): number {
+    const index = this.#deps.handleIndex(handle)
+    const fromArch = this.byId[this.#deps.record.archetypeIdOf(index)] as Archetype
+    if (sigHas(fromArch.signature, c)) return this.#deps.record.rowOf(index) // idempotent
+    const toArch = this.edgeAdd(fromArch, c)
+    return this.migrate(handle, fromArch, toArch)
+  }
+
+  /** entity.remove(C): single-id remove via the cached edge. */
+  migrateRemoving(handle: number, c: ComponentId): number {
+    const index = this.#deps.handleIndex(handle)
+    const fromArch = this.byId[this.#deps.record.archetypeIdOf(index)] as Archetype
+    if (!sigHas(fromArch.signature, c)) return this.#deps.record.rowOf(index) // idempotent
+    const toArch = this.edgeRemove(fromArch, c)
+    return this.migrate(handle, fromArch, toArch)
+  }
+
+  /** Multi-id atomic add — ONE target signature, one migration (relations P1 atomicity, §5.6a). */
+  migrateAddingMany(handle: number, addIds: readonly ComponentId[]): number {
+    const index = this.#deps.handleIndex(handle)
+    const fromArch = this.byId[this.#deps.record.archetypeIdOf(index)] as Archetype
+    const effective = addIds.filter((c) => !sigHas(fromArch.signature, c))
+    if (effective.length === 0) return this.#deps.record.rowOf(index)
+    const targetSig = canonicalize([...(fromArch.signature as unknown as Iterable<number>), ...(effective as unknown as number[])])
+    const toArch = this.getOrCreateArchetype(targetSig)
+    return this.migrate(handle, fromArch, toArch)
+  }
+
+  /** Multi-id atomic remove — symmetric to migrateAddingMany. */
+  migrateRemovingMany(handle: number, removeIds: readonly ComponentId[]): number {
+    const index = this.#deps.handleIndex(handle)
+    const fromArch = this.byId[this.#deps.record.archetypeIdOf(index)] as Archetype
+    const effective = removeIds.filter((c) => sigHas(fromArch.signature, c))
+    if (effective.length === 0) return this.#deps.record.rowOf(index)
+    const removeSet = new Set<number>(effective as unknown as number[])
+    const kept: number[] = []
+    for (let i = 0; i < fromArch.signature.length; i++) {
+      const c = fromArch.signature[i] as number
+      if (!removeSet.has(c)) kept.push(c)
+    }
+    const toArch = this.getOrCreateArchetype(canonicalize(kept))
+    return this.migrate(handle, fromArch, toArch)
+  }
+
+  /** spawnWith fast path: compute the target signature up front and migrate ONCE (§5.6). */
+  spawnWith(handle: number, defs: readonly ComponentDef<Schema>[]): number {
+    const ids: number[] = []
+    for (const d of defs) ids.push((d as ComponentRuntime<Schema>).id as number)
+    const toArch = this.getOrCreateArchetype(canonicalize(ids))
+    return this.migrate(handle, this.emptyArchetype, toArch)
+  }
+
+  // --- §10.4 explicit promotion ----------------------------------------------
+
+  /** Promote a cold archetype (by signature) to hot: allocate columns, migrate its rows out (§10.4). */
+  warm(sig: Signature): void {
+    const arch = this.getOrCreateArchetype(sig)
+    if (!arch.cold) return
+
+    // Snapshot the resident cold entities BEFORE flipping the flag — their data lives in the shared
+    // overflow blocks keyed (entityIndex, componentId), addressed via cold.rowOf.
+    const residents: number[] = []
+    for (const [entityIndex, archId] of this.cold.archOf) {
+      if ((archId as number) === (arch.id as number)) residents.push(entityIndex)
+    }
+
+    attachHotColumns(arch, {
+      buffers: this.#deps.buffers,
+      accessorWorld: this.#deps.accessorWorld,
+      initialCapacity: this.#initialRows,
+      defOf: (c) => this.#deps.defOf(c),
+    })
+    arch.count = 0
+    arch.cold = false
+    this.#hotCount += 1
+
+    // Migrate each resident out of the overflow store into a contiguous hot row, copying field
+    // values from the cold blocks, fixing its record, then reclaiming its cold rows (§10.4).
+    for (const entityIndex of residents) {
+      const newRow = arch.count
+      this.#ensureRowCapacity(arch, newRow + 1)
+      const handle = this.cold.handleOf.get(entityIndex) ?? entityIndex
+      arch.rows[newRow] = handle >>> 0
+      arch.count = newRow + 1
+      for (let i = 0; i < arch.signature.length; i++) {
+        const c = arch.signature[i] as number as ComponentId
+        const dstSet = arch.columnSets.get(c)
+        if (dstSet === undefined) continue
+        const srcSet = this.cold.blocks.get(c)
+        const srcRow = coldRowOf(this.cold, entityIndex, c)
+        if (srcSet === undefined || srcRow < 0) {
+          this.#initColumnRow(dstSet, newRow, c)
+          continue
+        }
+        for (let f = 0; f < dstSet.columns.length; f++) {
+          copyRowAcrossColumns(srcSet.columns[f] as Column, srcRow, dstSet.columns[f] as Column, newRow)
+        }
+      }
+      coldReclaim(this.cold, entityIndex, arch.signature as unknown as Iterable<number>)
+      this.#deps.record.commitRecord(entityIndex, arch.id as number, newRow)
+    }
+  }
+}
+
+/** Copy one row's stride elements from srcRow to dstRow within the SAME column (§4.4). */
+function copyRowWithinColumn(col: Column, srcRow: number, dstRow: number): void {
+  const s = col.layout.stride
+  const v = col.view
+  ;(v as unknown as { copyWithin(t: number, s: number, e: number): void }).copyWithin(
+    dstRow * s,
+    srcRow * s,
+    srcRow * s + s,
+  )
+}
+
+/** Copy one row from a source column to a same-layout destination column (cross-archetype, §4.4). */
+function copyRowAcrossColumns(src: Column, srcRow: number, dst: Column, dstRow: number): void {
+  const s = src.layout.stride
+  dst.view.set(
+    (src.view as unknown as { subarray(a: number, b: number): ArrayLike<number> }).subarray(srcRow * s, srcRow * s + s),
+    dstRow * s,
+  )
+}
