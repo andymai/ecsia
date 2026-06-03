@@ -50,4 +50,14 @@ export class EntityRecord {
       row: this.#arrays.recordArchetypeRow[index] as number,
     }
   }
+
+  /** The archetype id of an entity by its (already-decoded) index — the storage RecordSurface. */
+  archetypeIdOf(index: number): number {
+    return this.#arrays.recordArchetypeId[index] as number
+  }
+
+  /** The row of an entity within its archetype by its index — the storage RecordSurface. */
+  rowOf(index: number): number {
+    return this.#arrays.recordArchetypeRow[index] as number
+  }
 }

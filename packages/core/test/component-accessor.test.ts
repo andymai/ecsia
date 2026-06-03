@@ -141,7 +141,8 @@ describe('entity.read / entity.write split (Must-Fix #2)', () => {
     const Position = defineComponent({ x: 'f32', y: 'f32' })
     const w = createWorld({ components: [Position] })
 
-    const e = w.spawn()
+    // M3: the entity must hold Position before read/write; spawnWith lands it there in one migration.
+    const e = w.spawnWith(Position)
     const ref = w.entity(e)
     const write = ref.write(Position) as { x: number; y: number }
     write.x = 4

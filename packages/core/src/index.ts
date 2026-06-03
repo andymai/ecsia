@@ -102,6 +102,35 @@ export type {
 
 export { ComponentRegistry } from './registry.js'
 
+export {
+  ArchetypeStore,
+  Storage,
+  EMPTY_ARCHETYPE_ID,
+  canonicalize,
+  sigEquals,
+  sigHash,
+  sigHas,
+  sigWithAdded,
+  sigWithRemoved,
+  buildSigWords,
+  signatureMatches,
+  makeColdStore,
+  coldRowOf,
+} from './storage/index.js'
+export type {
+  Archetype,
+  ColdStore,
+  Signature,
+  MatchTerm,
+  RecordSurface,
+  StorageDeps,
+  StorageConfig,
+  DefRegistry,
+} from './storage/index.js'
+
+export { Bitmask } from './bitmask/index.js'
+export type { PhaseGate } from './bitmask/index.js'
+
 // Re-export the schema surface so users import tokens/inference from @ecsia/core (the umbrella).
 export {
   vec,
