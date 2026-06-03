@@ -306,6 +306,9 @@ export function createRelations(world: World): RelationsApi {
   ): void {
     if (!host.isAlive(subject)) return
     if (!host.isAlive(target)) return
+    // M9 (reactivity.md §7.4): if an observer drain is in flight, stage this op to the world's deferred
+    // command buffer and return — it applies at the next serial flush, never mutating mid-drain.
+    if (host.deferRelationOp('add', subject, relation, target, payload)) return
     const rt = requireRuntime(relation)
     const sIdx = host.handleIndex(subject)
     const tIdx = host.handleIndex(target)
@@ -373,6 +376,7 @@ export function createRelations(world: World): RelationsApi {
 
   function removePair(subject: EntityHandle, relation: RelationDef<Schema | void>, target: EntityHandle): void {
     if (!host.isAlive(subject)) return
+    if (host.deferRelationOp('remove', subject, relation, target)) return
     const rt = requireRuntime(relation)
     const sIdx = host.handleIndex(subject)
     const tIdx = host.handleIndex(target)

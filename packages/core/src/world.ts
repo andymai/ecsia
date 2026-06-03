@@ -20,7 +20,7 @@ import type {
   HandleLayout,
   HandleStats,
 } from './entity/index.js'
-import type { ComponentDef, ComponentId, RelationId, Schema } from '@ecsia/schema'
+import type { ComponentDef, ComponentId, RelationDef, RelationId, Schema } from '@ecsia/schema'
 import { Buffers, probeCapabilities } from './memory/index.js'
 import type { WorkerMode, SharedHandleManifest, RegionKey } from './memory/index.js'
 import { ComponentRegistry } from './registry.js'
@@ -33,8 +33,8 @@ import type { LiveQuery, ResolvedPair } from './query/index.js'
 import { ShapeKind } from './reactivity/index.js'
 import type { ColumnSet } from './component/index.js'
 import type { Buffers as BuffersType } from './memory/index.js'
-import { Reactivity, onAdd, onRemove, onChange } from './reactivity/index.js'
-import type { ObserverHandle, ObserverHandler, ObserverTerm } from './reactivity/index.js'
+import { Reactivity, ObserverCommandBuffer, onAdd, onRemove, onChange } from './reactivity/index.js'
+import type { ObserverCommandApply, ObserverHandle, ObserverHandler, ObserverTerm } from './reactivity/index.js'
 import type { ComponentDef as SchemaComponentDef, QueryTerm, WorldQuery } from '@ecsia/schema'
 
 /** world.md §4: 'serial' during the serial slot (and always, single-threaded); 'wave' only while the scheduler dispatches worker waves. */
@@ -84,6 +84,13 @@ export interface RelationsHost {
   handleOfIndex(index: number): EntityHandle
   /** Re-enter the despawn protocol for a cascaded victim (relations.md §7.1). */
   despawn(handle: EntityHandle): void
+  /**
+   * M9 deferral seam (reactivity.md §7.4): while an observer drain is running, structural relation
+   * ops issued by a handler must STAGE to the world's deferred command buffer rather than mutate the
+   * world mid-drain. The relations runtime calls this at the top of addPair/removePair; if it returns
+   * true the op was staged (the runtime returns immediately) — else the runtime applies it directly.
+   */
+  deferRelationOp(op: 'add' | 'remove', subject: EntityHandle, relation: RelationDef<Schema | void>, target: EntityHandle, payload?: Record<string, unknown>): boolean
   /** Push a write-log entry for a `.changed`-tracked pair-payload write (relations.md §4.4/§5.4). */
   trackWrite(index: number, componentId: ComponentId): void
   /** Push an ADD_PAIR / REMOVE_PAIR shape-log entry (reactivity.md §4.2; world.md §9.4). */
@@ -138,6 +145,14 @@ export interface World {
   __installRelations(): RelationsHost
   /** Export the SAB buffer-set manifest for one-time worker transfer (memory-buffers.md §6.3). */
   __exportShared(): SharedHandleManifest
+  /**
+   * Merge ONE worker's staged value writes into the reactivity write log (reactivity.md §9.1/§9.2,
+   * R-4). `pairs` is the worker's raw `[index, componentId, …]` corral payload and `count` the number
+   * of `(index, componentId)` entries. The scheduler drives this in ASCENDING worker-index order in
+   * the serial flush slot so onChange observers + `.changed` filters fire for worker writes
+   * deterministically. Serial-phase only; called ONLY by the scheduler. Not for user code.
+   */
+  __mergeWorkerWrites(pairs: Int32Array | Uint32Array, count: number): void
   /** Current frame tick. Advanced by reactivity at frame reset (world.md §8). */
   readonly tick: number
   /** Alias for `tick` (world.md §8). */
@@ -410,6 +425,28 @@ export function createWorld(options: WorldOptions = {}): World {
     drainChanged: (q) => (reactivity as Reactivity).drainChanged(q),
   })
 
+  // --- M9 deferred-observer command buffer (reactivity.md §7.4) ---
+  // While observerDrain runs, the world's structural verbs (spawn/spawnWith/add/remove/despawn and
+  // the relations apply-pair seam) STAGE here instead of direct-applying, so an observer handler that
+  // mutates structure cannot corrupt the wave the drain is replaying (R-3). The staged ops apply at
+  // the start of the NEXT drain — i.e. the next serial flush. applyAddPair/applyRemovePair are the
+  // SAME relation seams the scheduler's command-apply path drives (filled by __installRelations, M8).
+  const observerCommands = new ObserverCommandBuffer()
+  const observerApply: ObserverCommandApply = {
+    placeReserved(handle, defs) {
+      // The handle was reserved-alive when the observer called spawn; place it into the EMPTY archetype
+      // (emitting Create), then migrate it to the requested signature in one move (spawnWith semantics).
+      storage.onSpawn(handle)
+      if (defs.length > 0) storage.addMany(handle, defs)
+    },
+    add: (handle, def) => storage.add(handle, def),
+    remove: (handle, def) => storage.remove(handle, def),
+    despawn: (handle) => entities.despawn(handle),
+    isAlive: (handle) => entities.isAlive(handle),
+    addPair: (subject, relationId, target, payload) => applyAddPair?.(subject, relationId, target, payload),
+    removePair: (subject, relationId, target) => applyRemovePair?.(subject, relationId, target),
+  }
+
   const world: World = {
     get options() {
       return resolved
@@ -466,6 +503,13 @@ export function createWorld(options: WorldOptions = {}): World {
         handleIndex: (handle) => handleIndexOf(handle as number),
         handleOfIndex: (index) => entities.handleOfIndex(index),
         despawn: (handle) => entities.despawn(handle),
+        deferRelationOp: (op, subject, relation, target, payload) => {
+          if (!observerCommands.deferring) return false
+          const relationId = relation.id as RelationId
+          if (op === 'add') observerCommands.stageAddPair(subject, relation, relationId, target, payload)
+          else observerCommands.stageRemovePair(subject, relation, relationId, target)
+          return true
+        },
         trackWrite: (index, componentId) => trackWrite(index, componentId),
         trackShapePair: (index, pairId, targetIndex, add) => {
           ;(reactivity as Reactivity).trackShapePair(
@@ -505,6 +549,9 @@ export function createWorld(options: WorldOptions = {}): World {
       }
       return { columns: base.columns, regions: [...base.regions, ...extra] }
     },
+    __mergeWorkerWrites(pairs, count) {
+      ;(reactivity as Reactivity).mergeWorkerWrites(pairs, count)
+    },
     get tick() {
       return state.tick
     },
@@ -512,23 +559,47 @@ export function createWorld(options: WorldOptions = {}): World {
       return state.tick
     },
     spawn() {
+      if (observerCommands.deferring) {
+        // §7.4: a spawn inside an observer reserves a live handle NOW (so the handler can configure it)
+        // but defers archetype placement to the next flush — the command-buffer reserved-spawn model.
+        const handle = reserveEntityBlock(entities.index, -1, 1).handles[0] as EntityHandle
+        observerCommands.stageSpawnWith(handle, [])
+        return handle
+      }
       return entities.spawn()
     },
     spawnWith(...defs) {
+      if (observerCommands.deferring) {
+        const handle = reserveEntityBlock(entities.index, -1, 1).handles[0] as EntityHandle
+        observerCommands.stageSpawnWith(handle, defs)
+        return handle
+      }
       const handle = entities.spawn()
       storage.spawnWith(handle, defs)
       return handle
     },
     add(handle, def) {
+      if (observerCommands.deferring) {
+        observerCommands.stageAdd(handle, def)
+        return
+      }
       storage.add(handle, def)
     },
     remove(handle, def) {
+      if (observerCommands.deferring) {
+        observerCommands.stageRemove(handle, def)
+        return
+      }
       storage.remove(handle, def)
     },
     warm(...defs) {
       storage.warm(defs)
     },
     despawn(handle) {
+      if (observerCommands.deferring) {
+        observerCommands.stageDespawn(handle)
+        return
+      }
       entities.despawn(handle)
     },
     isAlive(handle) {
@@ -583,7 +654,26 @@ export function createWorld(options: WorldOptions = {}): World {
       ;(reactivity as Reactivity).maintainStructural()
     },
     observerDrain() {
-      ;(reactivity as Reactivity).observerDrain()
+      // R-3 re-entrancy guard: a drain must never re-enter itself (the flush below can trigger query
+      // maintenance / structural ops that must not recursively re-drain). If already draining, return.
+      if (!observerCommands.enterDrain()) return
+      try {
+        // §7.4 "applied at the NEXT serial flush": apply the ops staged by the PREVIOUS drain's
+        // observers before reading this drain's frozen log snapshot. For 'frame-end' cadence this is the
+        // next frame; for 'per-system' it is the next wave's slot. Applying here (not synchronously
+        // mid-handler) is what makes a spawned entity observable by onAdd NEXT drain, deterministically.
+        observerCommands.flush(observerApply)
+        // Structural ops the handlers issue during THIS drain stage to the buffer instead of mutating
+        // the world mid-drain (so no observer ever sees a partially-applied wave).
+        observerCommands.beginDeferring()
+        try {
+          ;(reactivity as Reactivity).observerDrain()
+        } finally {
+          observerCommands.endDeferring()
+        }
+      } finally {
+        observerCommands.exitDrain()
+      }
     },
     flushLogs() {
       ;(reactivity as Reactivity).flushLogs()
