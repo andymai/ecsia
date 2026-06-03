@@ -79,6 +79,12 @@ importers:
       '@ecsia/core':
         specifier: workspace:*
         version: link:../core
+      '@ecsia/relations':
+        specifier: workspace:*
+        version: link:../relations
+      '@ecsia/schema':
+        specifier: workspace:*
+        version: link:../schema
 
 packages:
 

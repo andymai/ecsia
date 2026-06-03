@@ -20,7 +20,15 @@ import {
   decodeEid,
   encodeEid,
 } from '@ecsia/core'
-import type { Column, ColumnSet, RelationsHost, ResolvedPair, World } from '@ecsia/core'
+import type {
+  Column,
+  ColumnSet,
+  RelationsHost,
+  ResolvedPair,
+  SerializePair,
+  SerializeRelationProvider,
+  World,
+} from '@ecsia/core'
 import { pairKey64, overflowKey64 } from './pair-key.js'
 
 const WILDCARD = Symbol.for('ecsia.query.wildcard')
@@ -698,9 +706,90 @@ export function createRelations(world: World): RelationsApi {
     return { relation, target, id: -1 }
   }
 
+  // --- serialization provider (serialization.md §4.6 / §8.3) -----------------
+  // Enumerate every live pair as a logical (subject, relationId, target, payload) triple — NEVER the
+  // synthetic pair id (producer-local, §8.3). Payload is read by field name so the receiver re-mints
+  // its own pair id and re-writes the named fields. addPair re-establishes a pair on deserialize.
+
+  function payloadFieldNames(rt: RelationRuntime): string[] {
+    // The presence def's exclusive column is [eid target, ...payload]; the overflow def is [...payload].
+    if (rt.storageKind === 'exclusive-column') {
+      const names: string[] = []
+      for (const f of rt.presenceDef.fields) if (f.name !== '$t') names.push(f.name)
+      return names
+    }
+    if (rt.overflow !== null) return rt.overflow.def.fields.map((f) => f.name)
+    return []
+  }
+
+  function readPairPayload(rt: RelationRuntime, subject: EntityHandle, target: EntityHandle): Record<string, unknown> | undefined {
+    if (rt.storageKind === 'tag') return undefined
+    const names = payloadFieldNames(rt)
+    if (names.length === 0) return undefined
+    const acc = getPair(subject, rt.def, target).read()
+    const out: Record<string, unknown> = {}
+    for (const n of names) out[n] = acc[n]
+    return out
+  }
+
+  const serializationProvider: SerializeRelationProvider = {
+    relations() {
+      return relations.map((rt) => ({
+        name: rt.def.name,
+        id: rt.relationId,
+        exclusive: rt.exclusive,
+        hasPayload: rt.storageKind !== 'tag',
+        presenceId: rt.presenceId,
+      }))
+    },
+    livePairs() {
+      const out: SerializePair[] = []
+      // Deterministic order: relationId asc, then subject index asc, then target index asc (§4.4).
+      for (const rt of [...relations].sort((a, b) => (a.relationId as number) - (b.relationId as number))) {
+        const triples: { subject: EntityHandle; target: EntityHandle | null; sIdx: number; tIdx: number }[] = []
+        if (rt.exclusive) {
+          // The back-ref index maps targetIndex → subjects; the subject's single target is the eid column.
+          for (const [tIdx, subjects] of rt.backref) {
+            for (const s of subjects) {
+              if (!host.isAlive(s)) continue
+              const t = readExclusiveTarget(rt, s)
+              if (t === null) continue
+              triples.push({ subject: s, target: t, sIdx: host.handleIndex(s), tIdx })
+            }
+          }
+        } else {
+          for (const [tIdx, subjects] of rt.backref) {
+            const tHandle = host.handleOfIndex(tIdx)
+            for (const s of subjects) {
+              if (!host.isAlive(s)) continue
+              triples.push({ subject: s, target: tHandle, sIdx: host.handleIndex(s), tIdx })
+            }
+          }
+        }
+        triples.sort((a, b) => (a.sIdx - b.sIdx) || (a.tIdx - b.tIdx))
+        for (const tr of triples) {
+          out.push({
+            subject: tr.subject,
+            relationId: rt.relationId,
+            target: tr.target,
+            payload: tr.target === null ? undefined : readPairPayload(rt, tr.subject, tr.target),
+          })
+        }
+      }
+      return out
+    },
+    addPair(subject, relationId, target, payload) {
+      const rt = byRelationId.get(relationId as number)
+      if (rt === undefined) return
+      if (target === null) return // a cleared exclusive target: nothing to re-establish
+      addPair(subject, rt.def, target, payload ?? undefined)
+    },
+  }
+
   // --- install seams ---------------------------------------------------------
 
   host.setPreDespawn(onPreDespawn)
+  host.setSerializationProvider(serializationProvider)
   host.setPairResolver(resolvePair)
   host.setApplyPair(
     (subject, relationId, target, payload) => {
