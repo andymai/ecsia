@@ -6,6 +6,21 @@
 import type { ComponentId, EntityHandle, FieldDescriptor, RelationId, StorageStrategy } from '@ecsia/schema'
 import type { Column, RuntimeCapabilities } from './memory/index.js'
 
+/**
+ * One persisted structural op (Create/Destroy/ComponentAdd/ComponentRemove/AddPair/RemovePair/
+ * SetPayload) the delta serializer reads from the since-T structural journal (serialization.md §6.4).
+ * `kind` is the SHARED structural-op ordinal (world.md §9.4 = reactivity ShapeKind = serialization
+ * DeltaOp). Handles are FULL portable handles; `componentId` is a user id (Add/Remove) or a synthetic
+ * pair id (AddPair/RemovePair); `target` is the full pair-target handle (0 when not a pair op).
+ */
+export interface SerializeStructuralRecord {
+  readonly tick: number
+  readonly kind: number
+  readonly handle: number
+  readonly componentId: number
+  readonly target: number
+}
+
 /** One column-bearing component's columns on a hot archetype, with its field descriptors. */
 export interface SerializeComponentColumns {
   readonly componentId: ComponentId
@@ -59,6 +74,16 @@ export interface SerializeRelationProvider {
   livePairs(): readonly SerializePair[]
   /** Re-establish a pair on deserialize (re-mints the receiver-local pair id, serialization.md §8.3). */
   addPair(subject: EntityHandle, relationId: RelationId, target: EntityHandle | null, payload: Record<string, unknown> | undefined): void
+  /** Map a synthetic pair ComponentId back to its logical RelationId (delta structural pair records, §6.5). */
+  relationIdOfPair(pairId: ComponentId): RelationId | undefined
+  /**
+   * Read a live pair's CURRENT payload by logical (subject, relationId, target), or undefined for a tag
+   * relation / absent pair. The delta structural section reads this at emit time so PairAdd/PairPayload
+   * records carry values-on-add (serialization.md §6.5 / §7.2).
+   */
+  pairPayloadOf(subject: EntityHandle, relationId: RelationId, target: EntityHandle): Record<string, unknown> | undefined
+  /** Tear down a pair on a delta-apply receiver (PairRemove, §6.4 / §6.5). */
+  removePair(subject: EntityHandle, relationId: RelationId, target: EntityHandle): void
 }
 
 /** The full surface @ecsia/serialization drives. All members are serial / main-thread. */
@@ -80,11 +105,30 @@ export interface SerializationSurface {
   /** Relation provider, or undefined in a relation-free world. */
   relations(): SerializeRelationProvider | undefined
 
+  /**
+   * Turn on the persistent structural journal (serialization.md §6.4): the since-T STRUCTURAL source a
+   * delta serializer needs. Idempotent; the structural twin of enabling changeVersion stamping. Call
+   * once at delta-serializer construction so subsequent structural ops are journaled (§6.1 opt-in).
+   */
+  enableStructuralJournal(): void
+  /**
+   * §6.4 / §7.3: the structural ops committed with tick > since, in commit order, as portable
+   * full-handle records. `gap` is true when `since` predates the bounded journal's live window (the
+   * caller must resync from a snapshot — the no-partial-apply delta-gap rule).
+   */
+  drainStructuralSince(since: number): { records: readonly SerializeStructuralRecord[]; gap: boolean }
+  /** Map a synthetic pair ComponentId to its logical RelationId (for delta structural pair records). */
+  relationIdOfPair(pairId: ComponentId): RelationId | undefined
+
   // --- deserialize-side world construction (serialization.md §5) ---
   /** Spawn a fresh entity (PASS 1 remap-table build, §5.3). */
   spawn(): EntityHandle
   /** Place a live handle into the target signature in ONE migration (§5.3 PASS 1b). */
   spawnInto(handle: EntityHandle, componentIds: readonly ComponentId[]): void
+  /** Remove the given components from `handle` in ONE migration (delta apply: ComponentRemove, §6.4). */
+  removeComponents(handle: EntityHandle, componentIds: readonly ComponentId[]): void
+  /** Destroy a live entity (delta apply: EntityDestroy, §6.4). Idempotent on a dead handle. */
+  despawn(handle: EntityHandle): void
   /** The (hot) ColumnSet columns + row for `componentId` on `handle`, or null if absent/cold/tag. */
   columnsOf(handle: EntityHandle, componentId: ComponentId): { columns: readonly Column[]; fields: readonly FieldDescriptor[]; row: number } | null
   /** Despawn every alive entity (mode:'replace' precondition, §5.6 / world.clear). */

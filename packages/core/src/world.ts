@@ -104,6 +104,12 @@ export interface RelationsHost {
   trackWrite(index: number, componentId: ComponentId): void
   /** Push an ADD_PAIR / REMOVE_PAIR shape-log entry (reactivity.md §4.2; world.md §9.4). */
   trackShapePair(index: number, pairId: ComponentId, targetIndex: number, add: boolean): void
+  /**
+   * Journal a SET_PAYLOAD structural op for a non-exclusive overflow pair whose payload changed on an
+   * already-live pair (serialization.md §6.5: overflow payload changes are explicit OP_PAIR_PAYLOAD
+   * records, since they do not live in an archetype column the changed-row scan covers).
+   */
+  trackShapeSetPayload(index: number, pairId: ComponentId, targetIndex: number): void
   /** The SAB-capable buffers registry, for the non-exclusive overflow payload ColumnSet. */
   readonly buffers: BuffersType
   readonly accessorWorld: AccessorWorld
@@ -437,6 +443,7 @@ export function createWorld(options: WorldOptions = {}): World {
       return true
     },
     refOf: (index) => entities.entity(entities.handleOfIndex(index), { lenient: true }),
+    resolveHandle: (index) => entities.handleOfIndex(index) as number,
   })
   // The shape-log drain re-runs the same idempotent single-entity maintenance the M4 synchronous
   // hook performs; the conservative overflow path needs a "current matches" source for change
@@ -560,6 +567,15 @@ export function createWorld(options: WorldOptions = {}): World {
     relations() {
       return serializationProvider ?? undefined
     },
+    enableStructuralJournal() {
+      ;(reactivity as Reactivity).enableStructuralJournal()
+    },
+    drainStructuralSince(since) {
+      return (reactivity as Reactivity).drainStructuralSince(since)
+    },
+    relationIdOfPair(pairId) {
+      return serializationProvider?.relationIdOfPair(pairId)
+    },
     spawn() {
       return entities.spawn()
     },
@@ -571,6 +587,18 @@ export function createWorld(options: WorldOptions = {}): World {
         if (def !== undefined) defs.push(def)
       }
       storage.addMany(handle, defs)
+    },
+    removeComponents(handle, componentIds) {
+      if (componentIds.length === 0 || !entities.isAlive(handle)) return
+      const defs: ComponentDef<Schema>[] = []
+      for (const c of componentIds) {
+        const def = registry.defOf(c as ComponentId)
+        if (def !== undefined) defs.push(def)
+      }
+      if (defs.length > 0) storage.removeMany(handle, defs)
+    },
+    despawn(handle) {
+      if (entities.isAlive(handle)) entities.despawn(handle)
     },
     columnsOf(handle, componentId) {
       if (!entities.isAlive(handle)) return null
@@ -671,9 +699,12 @@ export function createWorld(options: WorldOptions = {}): World {
           ;(reactivity as Reactivity).trackShapePair(
             index,
             pairId,
-            add ? ShapeKind.AddPair : ShapeKind.RemovePair,
             targetIndex,
+            add ? ShapeKind.AddPair : ShapeKind.RemovePair,
           )
+        },
+        trackShapeSetPayload: (index, pairId, targetIndex) => {
+          ;(reactivity as Reactivity).trackShapeSetPayload(index, pairId, targetIndex)
         },
         buffers,
         accessorWorld,
@@ -800,9 +831,12 @@ export function createWorld(options: WorldOptions = {}): World {
       return (reactivity as Reactivity).changedSince(handle, since)
     },
     changedRows(archetypeId, since) {
-      const arch = storage.archetypes.byId[archetypeId]
+      const arch = storage.archetypes.byId[archetypeId] as Archetype | undefined
       const count = arch === undefined ? 0 : arch.count
-      return (reactivity as Reactivity).changedRows(archetypeId, since, count)
+      const rows = arch?.rows
+      return (reactivity as Reactivity).changedRows(archetypeId, since, count, (row) =>
+        rows === undefined ? 0 : handleIndexOf(rows[row] as number),
+      )
     },
     advanceTick() {
       state.tick = (state.tick + 1) >>> 0
