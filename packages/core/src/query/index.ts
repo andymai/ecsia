@@ -18,6 +18,8 @@ export type {
   CompiledValueTerm,
   CompileContext,
   ResidualTerm,
+  ResolvedPair,
+  RowFilterTerm,
   ValueRole,
   Word,
 } from './compile.js'

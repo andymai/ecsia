@@ -11,7 +11,8 @@
 import type { ArchetypeId, ComponentId, EntityHandle, Schema } from '@ecsia/schema'
 import type { ColumnSet } from '../component/index.js'
 import type { Archetype } from '../storage/index.js'
-import type { CompiledQuery, CompiledValueTerm } from './compile.js'
+import { decodeEid } from '../memory/index.js'
+import type { CompiledQuery, CompiledValueTerm, RowFilterTerm } from './compile.js'
 import type { SparseSetU32 } from './sparse-set.js'
 
 const NO_HANDLE = 0xffffffff as EntityHandle
@@ -241,6 +242,27 @@ export class LiveQuery {
 
   // --- iteration (queries.md §9) ---------------------------------------------
 
+  /**
+   * queries.md §10.2(a): an exclusive specific-target pair matches the archetype by `presenceId(R)`
+   * (a signature bit) but the target is a COLUMN value — so each row is filtered by
+   * `targetColumn[row] === target`. Returns true when the query has no row filters (the common case).
+   */
+  #passesRowFilters(arch: Archetype, row: number): boolean {
+    const filters = this.compiled.rowFilters
+    if (filters.length === 0) return true
+    for (const rf of filters as readonly RowFilterTerm[]) {
+      const cs = arch.columnSets.get(rf.presenceId)
+      if (cs === undefined) return false
+      const col = cs.columns[rf.targetFieldIndex]
+      if (col === undefined) return false
+      const stored = col.view[row * col.layout.stride] as number
+      const decoded = decodeEid(stored)
+      if (decoded === null) return false
+      if ((decoded as number) !== (rf.targetEid >>> 0)) return false
+    }
+    return true
+  }
+
   /** The hot loop: walk matchingArchetypes contiguous rows, poke the accessor singletons, call fn. */
   each(fn: (e: PooledElement) => void): void {
     const sig = LiveQuery.valueSignature(this.compiled)
@@ -255,6 +277,7 @@ export class LiveQuery {
       const el = this.#elementFor(arch, binding)
       const accessors = this.#accessorsFor(arch, binding)
       for (let row = 0; row < count; row++) {
+        if (!this.#passesRowFilters(arch, row)) continue
         for (const a of accessors) {
           a.__idx = row
         }
@@ -283,6 +306,7 @@ export class LiveQuery {
       const el = this.#elementFor(arch, binding)
       const accessors = this.#accessorsFor(arch, binding)
       for (let row = 0; row < arch.count; row++) {
+        if (!this.#passesRowFilters(arch, row)) continue
         for (const a of accessors) a.__idx = row
         const handle = (arch.rows[row] as number) as unknown as EntityHandle
         el.handle = handle

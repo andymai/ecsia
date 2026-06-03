@@ -23,6 +23,33 @@ export interface ResidualTerm {
 
 export type ValueRole = 'read' | 'write' | 'optional' | 'pairRead' | 'pairWrite'
 
+/**
+ * An exclusive-relation specific-target term (queries.md §10.2 / relations §8.2): the target is a
+ * COLUMN value, not a signature bit, so the archetype is matched by `presenceId(R)` and iteration
+ * filters rows by `targetColumn[row] === target`. Carried on the CompiledQuery; the engine applies it.
+ */
+export interface RowFilterTerm {
+  readonly presenceId: ComponentId
+  /** The full target EntityHandle (encoded eid value stored in the column) to compare each row against. */
+  readonly targetEid: number
+  /** Field index of the exclusive `eid` target column within the presence component's ColumnSet. */
+  readonly targetFieldIndex: number
+}
+
+/**
+ * The relations-owned resolution of a Pair(...) term to a concrete ComponentId (queries.md §10).
+ * Injected by relations into the world's CompileContext (core never imports relations). Q-R2: a
+ * query must NOT mint — `mintedOnly` resolution returns `unsatisfiable` when the pair never existed.
+ */
+export interface ResolvedPair {
+  /** The signature bit to AND-match (presence id for wildcard/exclusive; pair id for tag/overflow). */
+  readonly componentId: ComponentId
+  /** True iff the pair id was never minted → the query matches nothing without mutating the id space. */
+  readonly unsatisfiable: boolean
+  /** Present for exclusive specific-target pairs: the post-presence row filter (§10.2 strategy a). */
+  readonly rowFilter?: RowFilterTerm
+}
+
 /** Value terms in declaration order (drives the pooled element + cursor binding, §3.1). */
 export interface CompiledValueTerm {
   readonly componentId: ComponentId
@@ -37,6 +64,8 @@ export interface CompiledQuery {
   readonly residualWith: readonly ResidualTerm[]
   readonly valueTerms: readonly CompiledValueTerm[]
   readonly referencedIds: readonly ComponentId[]
+  /** Exclusive specific-target pair filters: match by presence bit, then filter rows by target (§10.2). */
+  readonly rowFilters: readonly RowFilterTerm[]
   readonly hash: string
   /** True iff a specific-pair term resolved to a never-minted pair id → matches nothing (§10.2). */
   readonly unsatisfiable: boolean
@@ -48,6 +77,12 @@ export interface CompileContext {
   idOf(def: ComponentDef<Schema>): ComponentId
   /** Fixed bitmask bit count: ids below this go in the packed words, larger pair ids are residual. */
   readonly fixedBitCount: number
+  /**
+   * Resolve a Pair(R, target | Wildcard) term to a ComponentId (queries.md §10). Injected by the
+   * relations module via the world; absent in a relation-free world (every pair term is then
+   * unsatisfiable, the M4 behavior). Q-R2: this NEVER mints — it only looks up already-minted ids.
+   */
+  resolvePair?(relationId: number, target: number | symbol): ResolvedPair
 }
 
 type TermKind = 'component' | 'without' | 'optional' | 'pairWildcard' | 'pairSpecific'
@@ -150,6 +185,7 @@ export function compileQuery(terms: readonly QueryTerm[], ctx: CompileContext): 
   const optionalIds: ComponentId[] = []
   const residualWith: ResidualTerm[] = []
   const valueTerms: CompiledValueTerm[] = []
+  const rowFilters: RowFilterTerm[] = []
   const referenced = new Set<number>()
   let unsatisfiable = false
 
@@ -186,11 +222,18 @@ export function compileQuery(terms: readonly QueryTerm[], ctx: CompileContext): 
       }
       case 'pairWildcard':
       case 'pairSpecific': {
-        // Pair-term presence/pair-id resolution is the relations module's contract (M8). With no
-        // relations registered (M4), a specific pair was never minted → matches nothing (§10.2),
-        // and a wildcard references a presence id that no archetype carries → matches nothing too.
-        // Recorded as unsatisfiable so §5.4 short-circuits to false without mutating the id space.
-        unsatisfiable = true
+        // queries.md §10 / relations §8: relations injects `resolvePair`; without it (relation-free
+        // world, the M4 case) every pair term matches nothing. Q-R2: resolvePair NEVER mints.
+        const pair = cl.pair as PairLike
+        const resolved = ctx.resolvePair?.(pair.relation.id, pair.target)
+        if (resolved === undefined || resolved.unsatisfiable) {
+          unsatisfiable = true
+          break
+        }
+        const cid = resolved.componentId as number
+        referenced.add(cid)
+        addWithBit(withWords, residualWith, cid, ctx.fixedBitCount)
+        if (resolved.rowFilter !== undefined) rowFilters.push(resolved.rowFilter)
         break
       }
     }
@@ -203,6 +246,7 @@ export function compileQuery(terms: readonly QueryTerm[], ctx: CompileContext): 
     residualWith,
     valueTerms,
     referencedIds: [...referenced] as ComponentId[],
+    rowFilters,
     hash: canonicalHash(terms, ctx),
     unsatisfiable,
   })

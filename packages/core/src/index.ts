@@ -13,7 +13,7 @@ export type {
   WorkerOption,
 } from './config.js'
 export { createWorld } from './world.js'
-export type { World, WorldPhase, WorldApplySurface } from './world.js'
+export type { World, WorldPhase, WorldApplySurface, RelationsHost } from './world.js'
 
 export {
   makeHandle,
@@ -164,6 +164,8 @@ export type {
   CompiledValueTerm,
   CompileContext,
   ResidualTerm,
+  ResolvedPair,
+  RowFilterTerm,
   ValueRole,
   Word,
 } from './query/index.js'

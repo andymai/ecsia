@@ -20,7 +20,7 @@ import type {
   HandleLayout,
   HandleStats,
 } from './entity/index.js'
-import type { ComponentDef, ComponentId, Schema } from '@ecsia/schema'
+import type { ComponentDef, ComponentId, RelationId, Schema } from '@ecsia/schema'
 import { Buffers, probeCapabilities } from './memory/index.js'
 import type { WorkerMode, SharedHandleManifest, RegionKey } from './memory/index.js'
 import { ComponentRegistry } from './registry.js'
@@ -29,7 +29,10 @@ import { Bitmask } from './bitmask/index.js'
 import { Storage } from './storage/index.js'
 import type { Archetype, Signature } from './storage/index.js'
 import { QueryEngine } from './query/index.js'
-import type { LiveQuery } from './query/index.js'
+import type { LiveQuery, ResolvedPair } from './query/index.js'
+import { ShapeKind } from './reactivity/index.js'
+import type { ColumnSet } from './component/index.js'
+import type { Buffers as BuffersType } from './memory/index.js'
 import { Reactivity, onAdd, onRemove, onChange } from './reactivity/index.js'
 import type { ObserverHandle, ObserverHandler, ObserverTerm } from './reactivity/index.js'
 import type { ComponentDef as SchemaComponentDef, QueryTerm, WorldQuery } from '@ecsia/schema'
@@ -47,6 +50,58 @@ export interface WorldApplySurface {
   removeMany(handle: EntityHandle, defs: readonly ComponentDef<Schema>[]): void
   /** Overwrite `def`'s fields on `handle`'s current row + emit the `.changed` write-log entry. */
   writePayload(handle: EntityHandle, def: ComponentDef<Schema>, values: Record<string, unknown>): void
+  /**
+   * Relation apply (relations.md §5.6). Filled by `__installRelations` (M8); undefined in a
+   * relation-free world. The scheduler's command-apply path calls these for OP_ADD_PAIR /
+   * OP_REMOVE_PAIR — it does NOT import relations (the acyclic boundary holds).
+   */
+  addPair?(subject: EntityHandle, relationId: RelationId, target: EntityHandle, payload: Record<string, unknown> | undefined): void
+  removePair?(subject: EntityHandle, relationId: RelationId, target: EntityHandle): void
+}
+
+/**
+ * The minimal core surface the relations runtime drives (relations.md). The world exposes it through
+ * `__installRelations` so `@ecsia/relations` attaches WITHOUT @ecsia/core ever importing it (the
+ * acyclic dependency direction, M8 seam). Everything here is serial / main-thread (Must-Fix #1).
+ */
+export interface RelationsHost {
+  /** Mint the next dense ComponentId (relations.md §2.2 allocSyntheticComponentId). */
+  allocSyntheticId(): ComponentId
+  /** Intern a synthetic ComponentDef (presence/overflow) at a minted id so storage can build its columns. */
+  registerSynthetic(def: ComponentDef<Schema>, id: ComponentId): void
+  /** id → registered def (real or synthetic). */
+  defOf(id: ComponentId): ComponentDef<Schema> | undefined
+  /** ONE migration adding several ids (relations P1 atomicity; archetype-storage §5.6a). */
+  migrateAddingMany(handle: EntityHandle, defs: readonly ComponentDef<Schema>[]): void
+  migrateRemovingMany(handle: EntityHandle, defs: readonly ComponentDef<Schema>[]): void
+  /** O(1) membership of a (possibly synthetic) component id via the per-entity bitmask. */
+  bitmaskHas(index: number, id: ComponentId): boolean
+  /** Resolve the live ColumnSet + current row for `def` on `handle`, or null if absent / not hot. */
+  columnSetFor(handle: EntityHandle, def: ComponentDef<Schema>): { set: ColumnSet; row: number } | null
+  /** Entity-layer helpers. */
+  isAlive(handle: EntityHandle): boolean
+  handleIndex(handle: EntityHandle): number
+  handleOfIndex(index: number): EntityHandle
+  /** Re-enter the despawn protocol for a cascaded victim (relations.md §7.1). */
+  despawn(handle: EntityHandle): void
+  /** Push a write-log entry for a `.changed`-tracked pair-payload write (relations.md §4.4/§5.4). */
+  trackWrite(index: number, componentId: ComponentId): void
+  /** Push an ADD_PAIR / REMOVE_PAIR shape-log entry (reactivity.md §4.2; world.md §9.4). */
+  trackShapePair(index: number, pairId: ComponentId, targetIndex: number, add: boolean): void
+  /** The SAB-capable buffers registry, for the non-exclusive overflow payload ColumnSet. */
+  readonly buffers: BuffersType
+  readonly accessorWorld: AccessorWorld
+  /** Register a preDespawn hook fired BEFORE the row is torn down (relations.md §7.1 / §7.4 ordering). */
+  setPreDespawn(hook: (dying: EntityHandle) => void): void
+  /** Inject the Pair(...) term resolver into the query compiler (queries.md §10; Q-R2). */
+  setPairResolver(resolve: (relationId: number, target: number | symbol) => ResolvedPair): void
+  /** Fill the OP_ADD_PAIR / OP_REMOVE_PAIR apply seam so the scheduler can drive relations. */
+  setApplyPair(
+    addPair: (subject: EntityHandle, relationId: RelationId, target: EntityHandle, payload: Record<string, unknown> | undefined) => void,
+    removePair: (subject: EntityHandle, relationId: RelationId, target: EntityHandle) => void,
+  ): void
+  readonly maxEntities: number
+  readonly indexBits: number
 }
 
 export interface World {
@@ -74,6 +129,13 @@ export interface World {
    * Serial-phase only; called ONLY by the scheduler. Not for user code.
    */
   readonly __apply: WorldApplySurface
+  /**
+   * Relations attach seam (relations.md M8). `@ecsia/relations` calls this ONCE to obtain the core
+   * surface it drives (synthetic id minting, migrate-many, preDespawn hook, pair-resolver injection,
+   * OP_ADD_PAIR apply). @ecsia/core never imports @ecsia/relations — the host is handed OUT, keeping
+   * the dependency direction acyclic. Not for user code; call createRelations(world) instead.
+   */
+  __installRelations(): RelationsHost
   /** Export the SAB buffer-set manifest for one-time worker transfer (memory-buffers.md §6.3). */
   __exportShared(): SharedHandleManifest
   /** Current frame tick. Advanced by reactivity at frame reset (world.md §8). */
@@ -232,6 +294,16 @@ export function createWorld(options: WorldOptions = {}): World {
   const records = entities.records
   const handleIndexOf = (handle: number): number => handleIndex(handle as EntityHandle, handleLayout) as number
 
+  // Relations attach late (M8): the pair-resolver feeds the query compiler, the preDespawn hook runs
+  // before storage tears the row down, and the apply-pair fns back __apply for the scheduler. All are
+  // mutable so the relations runtime injects them post-construction without a core→relations import.
+  let pairResolver: ((relationId: number, target: number | symbol) => ResolvedPair) | null = null
+  let preDespawnHook: ((dying: EntityHandle) => void) | null = null
+  let applyAddPair:
+    | ((s: EntityHandle, r: RelationId, t: EntityHandle, p: Record<string, unknown> | undefined) => void)
+    | null = null
+  let applyRemovePair: ((s: EntityHandle, r: RelationId, t: EntityHandle) => void) | null = null
+
   // The query engine is created AFTER storage (it subscribes to storage.onArchetypeCreated), but
   // storage's single-entity maintenance hooks must call into the engine. Late-bind through a mutable
   // reference so the wiring stays acyclic (storage → engine, set once below).
@@ -272,6 +344,10 @@ export function createWorld(options: WorldOptions = {}): World {
         return id
       },
       fixedBitCount: stride * 32,
+      resolvePair: (relationId, target) => {
+        if (pairResolver === null) return { componentId: 0 as ComponentId, unsatisfiable: true }
+        return pairResolver(relationId, target)
+      },
     },
     resolveLocation: (index) => entities.locationOfIndex(index),
     handleOf: (index) => entities.handleOfIndex(index),
@@ -288,7 +364,12 @@ export function createWorld(options: WorldOptions = {}): World {
   entities.setAccessorResolver(storage)
   entities.setLifecycle({
     onSpawn: (handle) => storage.onSpawn(handle),
-    onDespawn: (handle) => storage.onDespawn(handle),
+    onDespawn: (handle) => {
+      // relations.md §7.4 ordering: preDespawn (cascade + pair teardown) runs WHILE `dying` is still
+      // alive/resolvable, BEFORE storage.onDespawn shuffle-pops the row and the entity layer frees it.
+      preDespawnHook?.(handle)
+      storage.onDespawn(handle)
+    },
   })
 
   // --- reactivity (world.md §7 step 4): the write/shape rings, changeVersion stamps, deferred
@@ -356,6 +437,59 @@ export function createWorld(options: WorldOptions = {}): World {
         const view = entities.entity(handle).write(def) as Record<string, unknown>
         for (const k of Object.keys(values)) view[k] = values[k]
       },
+      addPair(subject, relationId, target, payload) {
+        applyAddPair?.(subject, relationId, target, payload)
+      },
+      removePair(subject, relationId, target) {
+        applyRemovePair?.(subject, relationId, target)
+      },
+    },
+    __installRelations() {
+      return {
+        allocSyntheticId: () => registry.allocSyntheticId(),
+        registerSynthetic: (def, id) => registry.registerSynthetic(def, id),
+        defOf: (id) => registry.defOf(id),
+        migrateAddingMany: (handle, defs) => storage.addMany(handle, defs),
+        migrateRemovingMany: (handle, defs) => storage.removeMany(handle, defs),
+        bitmaskHas: (index, id) => bitmask.bitmaskHas(index, id),
+        columnSetFor: (handle, def) => {
+          if (!entities.isAlive(handle)) return null
+          const index = handleIndexOf(handle as number)
+          const archId = records.archetypeIdOf(index)
+          const arch = storage.archetypes.byId[archId] as Archetype | undefined
+          if (arch === undefined || arch.cold) return null
+          const set = arch.columnSets.get(registry.idOf(def) as ComponentId)
+          if (set === undefined) return null
+          return { set, row: records.rowOf(index) }
+        },
+        isAlive: (handle) => entities.isAlive(handle),
+        handleIndex: (handle) => handleIndexOf(handle as number),
+        handleOfIndex: (index) => entities.handleOfIndex(index),
+        despawn: (handle) => entities.despawn(handle),
+        trackWrite: (index, componentId) => trackWrite(index, componentId),
+        trackShapePair: (index, pairId, targetIndex, add) => {
+          ;(reactivity as Reactivity).trackShapePair(
+            index,
+            pairId,
+            add ? ShapeKind.AddPair : ShapeKind.RemovePair,
+            targetIndex,
+          )
+        },
+        buffers,
+        accessorWorld,
+        setPreDespawn: (hook) => {
+          preDespawnHook = hook
+        },
+        setPairResolver: (resolve) => {
+          pairResolver = resolve
+        },
+        setApplyPair: (addPair, removePair) => {
+          applyAddPair = addPair
+          applyRemovePair = removePair
+        },
+        maxEntities: resolved.maxEntities,
+        indexBits: handleLayout.indexBits,
+      }
     },
     __exportShared() {
       const base = buffers.exportSharedHandles()

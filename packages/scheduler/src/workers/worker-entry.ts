@@ -89,6 +89,9 @@ async function main(): Promise<void> {
       return { id, codec: codecOf(def) }
     },
     relationCodec() {
+      // relations.md §5.6 M8 deferral: relation payload schemas are not yet replicated into the worker
+      // boot manifest, so no payload codec is available here → setRelation emits payloadWordCount=0. The
+      // pair add itself still flows (subject, relationId, target); only the payload leg is deferred.
       return undefined
     },
     warn(message) {
