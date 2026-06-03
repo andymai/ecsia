@@ -30,6 +30,29 @@ export class ComponentRegistry {
     }
   }
 
+  /**
+   * Mint the next dense ComponentId WITHOUT binding a def (relations.md §2.2
+   * allocSyntheticComponentId). Pair/presence/overflow ids draw from the SAME dense space as ordinary
+   * components so storage, queries, and the bitmask treat them identically. Serial / main-thread.
+   */
+  allocSyntheticId(): ComponentId {
+    const id = this.#nextId as ComponentId
+    this.#nextId += 1
+    return id
+  }
+
+  /**
+   * Intern a synthetic ComponentDef (a relation presence/overflow def, or a per-pair def) at an id
+   * already minted by `allocSyntheticId`, so `defOf`/`idOf` resolve it and storage can build its
+   * ColumnSet. Serial / main-thread; relations is the only caller (the acyclic boundary holds —
+   * the world exposes this through a seam, core never imports relations).
+   */
+  registerSynthetic(def: ComponentDef<Schema>, id: ComponentId): void {
+    registerComponentId(def, id)
+    this.#byDef.set(def, id)
+    this.#byId[id as number] = def
+  }
+
   idOf(def: ComponentDef<Schema>): ComponentId | undefined {
     return this.#byDef.get(def)
   }
