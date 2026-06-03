@@ -13,6 +13,8 @@ import type { LiveQuery } from '../query/index.js'
 import { LogRing, OVERFLOW_SENTINEL, ShapeKind, WriteCorral } from './log.js'
 import type { LogPointer } from './log.js'
 import { ChangeVersionStore } from './change-version.js'
+import { StructuralJournal } from './structural-journal.js'
+import type { StructuralRecord } from './structural-journal.js'
 import { ObserverRegistry } from './observers.js'
 import type { ObserverDeps, ObserverHandle, ObserverHandler, ObserverTerm } from './observers.js'
 
@@ -37,6 +39,8 @@ export interface ReactivityDeps {
   holdsAll(index: number, componentIds: readonly ComponentId[]): boolean
   /** The pooled EntityRef bound to the current (index, generation) for `index` (observer dispatch). */
   refOf(index: number): EntityRef
+  /** index → its current FULL (generational) handle — for the structural journal's portable handles (§7.3). */
+  resolveHandle(index: number): number
 }
 
 /** Per-query write-log flavor state (reactivity.md §5.1): a LogPointer + a per-frame dedup bitset. */
@@ -54,6 +58,7 @@ export class Reactivity {
   readonly #writeLog: LogRing
   readonly #shapeLog: LogRing
   readonly #changeVersion: ChangeVersionStore
+  readonly #structuralJournal: StructuralJournal
   readonly #observers: ObserverRegistry
   readonly #corral: WriteCorral
   /** One per LiveQuery that declares the `changed` flavor (lazily allocated, §5.1). */
@@ -100,6 +105,7 @@ export class Reactivity {
       shrinkRings: deps.shrinkRings,
     })
     this.#changeVersion = new ChangeVersionStore(deps.buffers, Math.min(64, deps.maxEntities))
+    this.#structuralJournal = new StructuralJournal(Math.max(1024, deps.maxShapeChangesPerFrame))
     this.#corral = new WriteCorral()
 
     const obsDeps: ObserverDeps = {
@@ -178,17 +184,29 @@ export class Reactivity {
     // Main thread: append directly to the ring. (Worker corrals merge at mergeCorrals — M7.)
     for (const w of this.#packWriteEntry(index, componentId as number)) this.#writeLog.pushWord(w)
     if (this.#changeVersion.enabled) {
-      const { archetypeId, row } = this.#deps.resolveLocation(index)
       // fieldIndex affects only field-granular stamping (Q-CD1, deferred); component-granular default
-      // stamps the whole-entity slot regardless of which component/field changed.
+      // stamps the whole-entity slot regardless of which component/field changed. Keyed by entity INDEX
+      // so the stamp follows the entity across any later relocation (§6.3/§6.4).
       void fieldIndex
-      this.#changeVersion.stamp(archetypeId, row, this.#deps.tick())
+      this.#changeVersion.stamp(index, this.#deps.tick())
     }
   }
 
   /** §4.2 structural commit hook: append one shape entry. Main thread only, O(1). */
   trackShape(index: number, componentId: ComponentId, kind: ShapeKind): void {
     this.#shapeLog.push(this.#packShapeEntry(index, componentId as number, kind))
+    // Persistent since-T mirror for the delta serializer (serialization.md §6.4 / §7.3). Resolve the
+    // FULL handle NOW — for Destroy this hook runs BEFORE identity invalidation (reactivity.md §4.2),
+    // so the dying handle is still recoverable. No-op until a delta serializer enables journaling.
+    if (this.#structuralJournal.enabled) {
+      this.#structuralJournal.record(
+        this.#deps.tick(),
+        kind,
+        this.#deps.resolveHandle(index),
+        componentId as number,
+        0,
+      )
+    }
   }
 
   /** §4.2 pair variant: carries the target index in word B/C. */
@@ -199,6 +217,33 @@ export class Reactivity {
     kind: ShapeKind.AddPair | ShapeKind.RemovePair,
   ): void {
     this.#shapeLog.push(this.#packShapeEntry(index, pairId as number, kind, targetIndex))
+    if (this.#structuralJournal.enabled) {
+      this.#structuralJournal.record(
+        this.#deps.tick(),
+        kind,
+        this.#deps.resolveHandle(index),
+        pairId as number,
+        this.#deps.resolveHandle(targetIndex),
+      )
+    }
+  }
+
+  /**
+   * §6.5 SET_PAYLOAD: a non-exclusive overflow pair's payload changed on an already-live pair. This is
+   * NOT a membership change (no shape-log entry, no add/remove observer), but it IS a structural delta
+   * the since-T stream must carry, so we record it in the persistent journal only (serialization.md §6.5
+   * — overflow payload changes are explicit OP_PAIR_PAYLOAD records).
+   */
+  trackShapeSetPayload(index: number, pairId: ComponentId, targetIndex: number): void {
+    if (this.#structuralJournal.enabled) {
+      this.#structuralJournal.record(
+        this.#deps.tick(),
+        ShapeKind.SetPayload,
+        this.#deps.resolveHandle(index),
+        pairId as number,
+        this.#deps.resolveHandle(targetIndex),
+      )
+    }
   }
 
   /**
@@ -218,17 +263,38 @@ export class Reactivity {
     this.#changeVersion.enabled = true
   }
 
+  /**
+   * Enable the persistent structural journal (the since-T STRUCTURAL source, §6.4). A delta serializer
+   * that includes the structural section calls this once at construction — it is the structural twin of
+   * `enableChangeVersion`. Until then, zero record cost (§6.1 opt-in).
+   */
+  enableStructuralJournal(): void {
+    this.#structuralJournal.enabled = true
+  }
+
+  /**
+   * §6.4 / §7.3: the structural ops committed with tick > since, in commit order, as portable full-handle
+   * records. `gap` is true when `since` predates the bounded journal's live window (the caller must
+   * resync from a fresh snapshot — the no-partial-apply delta-gap rule, §6.4).
+   */
+  drainStructuralSince(since: number): { records: StructuralRecord[]; gap: boolean } {
+    return this.#structuralJournal.drainSince(since)
+  }
+
   /** §6.3: "did any component on `handle` change since tick `since`?" (strict >). */
   changedSince(handle: EntityHandle, since: number): boolean {
     const index = handle & this.#indexMask
-    const { archetypeId, row } = this.#deps.resolveLocation(index)
-    return this.#changeVersion.changedSince(archetypeId, row, since)
+    return this.#changeVersion.changedSince(index, since)
   }
 
-  /** §6.3 / Q-CD3: rows of `archetypeId` whose stamp is > since (the delta-serializer scan). */
-  *changedRows(archetypeId: number, since: number, count: number): Iterable<number> {
+  /**
+   * §6.3 / Q-CD3: rows of `archetypeId` whose ENTITY's stamp is > since (the delta-serializer scan).
+   * `indexOfRow` maps a live row of the archetype to its entity index — the stamp is keyed by entity
+   * index (it follows the entity across relocations, §6.4), so we resolve each row's current occupant.
+   */
+  *changedRows(_archetypeId: number, since: number, count: number, indexOfRow: (row: number) => number): Iterable<number> {
     for (let row = 0; row < count; row++) {
-      if (this.#changeVersion.changedSince(archetypeId, row, since)) yield row
+      if (this.#changeVersion.changedSince(indexOfRow(row), since)) yield row
     }
   }
 
@@ -321,7 +387,10 @@ export class Reactivity {
   /** §3.7: start of frame — advance the world tick, snapshot peak, recycle the rings. */
   frameReset(): void {
     this.#deps.advanceTick()
-    if (this.#deps.tick() === 0xffffffff) this.#changeVersion.resetAll() // §13.4 wrap recovery
+    if (this.#deps.tick() === 0xffffffff) {
+      this.#changeVersion.resetAll() // §13.4 wrap recovery
+      this.#structuralJournal.resetAll()
+    }
     this.#spilledThisFrame = false
     this.#writeLog.frameReset(this.#minWriteCursor())
     this.#shapeLog.frameReset(this.#minShapeCursor())
@@ -365,8 +434,7 @@ export class Reactivity {
       const componentId = (pairs[i * 2 + 1] as number) >>> 0
       for (const w of this.#packWriteEntry(index, componentId)) this.#writeLog.pushWord(w)
       if (this.#changeVersion.enabled) {
-        const { archetypeId, row } = this.#deps.resolveLocation(index)
-        this.#changeVersion.stamp(archetypeId, row, this.#deps.tick())
+        this.#changeVersion.stamp(index, this.#deps.tick())
       }
     }
   }

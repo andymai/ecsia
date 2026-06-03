@@ -328,10 +328,13 @@ export function createRelations(world: World): RelationsApi {
 
     const cid = mintPair(rt, tIdx)
     if (host.bitmaskHas(sIdx, cid)) {
-      // idempotent re-add: only refresh the overflow payload.
+      // idempotent re-add: only refresh the overflow payload. §6.5: an overflow payload change on an
+      // already-live pair is journaled as an explicit SET_PAYLOAD structural op (it lives in no archetype
+      // column the delta's changed-row scan covers), so a since-T delta carries the new payload.
       if (rt.overflow !== null && payload !== undefined) {
         const row = overflowRowFor(rt.overflow, sIdx, tIdx, true)
         writeOverflowPayload(rt.overflow, row, subject, payload)
+        host.trackShapeSetPayload(sIdx, cid, tIdx)
       }
       return
     }
@@ -783,6 +786,20 @@ export function createRelations(world: World): RelationsApi {
       if (rt === undefined) return
       if (target === null) return // a cleared exclusive target: nothing to re-establish
       addPair(subject, rt.def, target, payload ?? undefined)
+    },
+    relationIdOfPair(pairId) {
+      return pairKeyById.get(pairId)?.relationId
+    },
+    pairPayloadOf(subject, relationId, target) {
+      const rt = byRelationId.get(relationId as number)
+      if (rt === undefined || !host.isAlive(subject) || !host.isAlive(target)) return undefined
+      if (!hasPair(subject, rt.def, target)) return undefined
+      return readPairPayload(rt, subject, target)
+    },
+    removePair(subject, relationId, target) {
+      const rt = byRelationId.get(relationId as number)
+      if (rt === undefined) return
+      removePair(subject, rt.def, target)
     },
   }
 

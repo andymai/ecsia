@@ -8,8 +8,8 @@
 // command-buffer Op, reactivity ShapeKind, and this DeltaOp — one apply-path numbering.
 
 import type { ComponentId, EntityHandle, FieldDescriptor, RelationId } from '@ecsia/schema'
-import { encodeEid } from '@ecsia/core'
-import type { World } from '@ecsia/core'
+import { encodeEid, ShapeKind } from '@ecsia/core'
+import type { SerializeStructuralRecord, World } from '@ecsia/core'
 import { WriteCursor, ReadCursor } from './cursor.js'
 import { DeltaOp, NO_ENTITY_U32, readString, writeString } from './format.js'
 import { readPairPayload, writePairPayload } from './payload.js'
@@ -27,7 +27,12 @@ export interface DeltaRecord {
 // --- encode: a FULL-STATE structural stream (baseline reconstruction, §7 late-joiner source) -------
 // For every live entity: EntityCreate, then one ComponentAdd-with-values per column-bearing component,
 // then PairAdd for every live pair. A receiver with NO prior state reconstructs the whole world.
-export function encodeStructuralOps(world: World, _sinceTick = 0, _targetTick = 0): Uint8Array {
+//
+// This is the FULL-state late-joiner baseline (§7), NOT a windowed since-T stream — it intentionally
+// takes no (sinceTick, targetTick]. The windowed since-T structural section of a delta is produced by
+// writeDeltaStructuralSection below (driven by the structural journal's drainSince, §6.4); this function
+// is the from-nothing reconstruction source and emits every live entity unconditionally.
+export function encodeStructuralOps(world: World): Uint8Array {
   if (world.phase !== 'serial') {
     throw new Error('encodeStructuralOps must run at a serial flush point (§7.3)')
   }
@@ -71,6 +76,72 @@ export function encodeStructuralOps(world: World, _sinceTick = 0, _targetTick = 
   return cur.bytesCopy()
 }
 
+// --- delta structural section: encode the since-T journal records into an OPEN cursor (§6.2 SECTION S)
+// The interleaved structural section of a delta (serialization.md §6.2/§6.4). The records come from the
+// core structural journal (drainStructuralSince) — the persistent since-T source that survives the
+// per-frame shape-log recycle (the journal is the structural twin of changeVersion; §6.4). Each record
+// is written as a §7.2 op. For ComponentAdd we read the entity's CURRENT field words (values-on-add,
+// §7.2 / S-7) so a stale receiver reconstructs the post-add state. PairAdd/PairRemove map the synthetic
+// pair id back to the logical relationId (§6.5 / §8.3); both eids stay full handles, remapped on apply.
+export function writeDeltaStructuralSection(cur: WriteCursor, world: World, records: readonly SerializeStructuralRecord[]): void {
+  const s = world.__serialize
+  const rel = s.relations()
+  for (const rec of records) {
+    switch (rec.kind as number) {
+      case ShapeKind.Create:
+        cur.u8(DeltaOp.EntityCreate)
+        cur.u32(rec.handle >>> 0)
+        break
+      case ShapeKind.Destroy:
+        cur.u8(DeltaOp.EntityDestroy)
+        cur.u32(rec.handle >>> 0)
+        break
+      case ShapeKind.Add: {
+        const dst = s.columnsOf(rec.handle as EntityHandle, rec.componentId as ComponentId)
+        cur.u8(DeltaOp.ComponentAdd)
+        cur.u32(rec.handle >>> 0)
+        cur.u32(rec.componentId >>> 0)
+        if (dst === null) {
+          cur.u16(0) // entity no longer holds it (removed again after this Add since T) — no values
+        } else {
+          writeComponentFieldValues(cur, dst.columns as readonly { view: { [i: number]: number }; layout: { stride: number } }[], dst.fields, dst.row)
+        }
+        break
+      }
+      case ShapeKind.Remove:
+        cur.u8(DeltaOp.ComponentRemove)
+        cur.u32(rec.handle >>> 0)
+        cur.u32(rec.componentId >>> 0)
+        break
+      case ShapeKind.AddPair:
+      case ShapeKind.SetPayload: {
+        const relationId = rel?.relationIdOfPair(rec.componentId as ComponentId)
+        if (relationId === undefined) break // relation-free world or unmapped pair id — skip
+        cur.u8(rec.kind === ShapeKind.AddPair ? DeltaOp.PairAdd : DeltaOp.PairPayload)
+        cur.u32(rec.handle >>> 0)
+        cur.u16(relationId as number)
+        cur.u32(rec.target >>> 0)
+        // Values-on-add (§6.5 / §7.2): read the pair's CURRENT payload at emit time so a stale receiver
+        // reconstructs the post-add (or post-set) state. undefined for a tag relation.
+        const payload = rel?.pairPayloadOf(rec.handle as EntityHandle, relationId, rec.target as EntityHandle)
+        writePairPayload(cur, payload)
+        break
+      }
+      case ShapeKind.RemovePair: {
+        const relationId = rel?.relationIdOfPair(rec.componentId as ComponentId)
+        if (relationId === undefined) break // relation-free world or unmapped pair id — skip
+        cur.u8(DeltaOp.PairRemove)
+        cur.u32(rec.handle >>> 0)
+        cur.u16(relationId as number)
+        cur.u32(rec.target >>> 0)
+        break
+      }
+      default:
+        break
+    }
+  }
+}
+
 function writeComponentFieldValues(
   cur: WriteCursor,
   columns: readonly { view: { [i: number]: number }; layout: { stride: number } }[],
@@ -95,11 +166,12 @@ function writeComponentFieldValues(
   for (const w of words) {
     writeString(cur, w.name)
     cur.u16(w.lane)
-    const tmp = new Float64Array(1)
-    tmp[0] = w.value
-    cur.copyBytes(tmp)
+    SCRATCH_F64[0] = w.value
+    cur.copyBytes(SCRATCH_F64)
   }
 }
+
+const SCRATCH_F64 = new Float64Array(1)
 
 // --- apply: replay records into the receiver world through validate-then-apply (§7.3) --------------
 export function applyStructuralOps(world: World, bytes: Uint8Array, remap: Map<EntityHandle, EntityHandle>): void {
@@ -119,7 +191,10 @@ export function applyStructuralOps(world: World, bytes: Uint8Array, remap: Map<E
         break
       }
       case DeltaOp.EntityDestroy: {
-        cur.u32() // handle — destroy is applied by the caller's world surface if needed; dropped here.
+        const old = cur.u32()
+        // Apply the destroy on the receiver via the remap (the producer handle → local handle, §6.4).
+        const local = remap.get(old as EntityHandle)
+        if (local !== undefined) s.despawn(local)
         break
       }
       case DeltaOp.ComponentAdd: {
@@ -135,8 +210,10 @@ export function applyStructuralOps(world: World, bytes: Uint8Array, remap: Map<E
         break
       }
       case DeltaOp.ComponentRemove: {
-        cur.u32()
-        cur.u32()
+        const old = cur.u32()
+        const producerCid = cur.u32()
+        const local = remap.get(old as EntityHandle)
+        if (local !== undefined) s.removeComponents(local, [producerCid as ComponentId])
         break
       }
       case DeltaOp.PairAdd:
@@ -153,9 +230,14 @@ export function applyStructuralOps(world: World, bytes: Uint8Array, remap: Map<E
         break
       }
       case DeltaOp.PairRemove: {
-        cur.u32()
-        cur.u16()
-        cur.u32()
+        const subjectOld = cur.u32()
+        const relationId = cur.u16()
+        const targetOld = cur.u32()
+        const subject = remap.get(subjectOld as EntityHandle)
+        const target = targetOld === NO_ENTITY_U32 ? null : remap.get(targetOld as EntityHandle) ?? null
+        if (subject !== undefined && target !== null && relProvider !== undefined) {
+          relProvider.removePair(subject, relationId as RelationId, target)
+        }
         break
       }
     }

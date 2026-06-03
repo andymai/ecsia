@@ -19,9 +19,16 @@ import type {
 import { elementCtor } from '@ecsia/core'
 
 export interface SerializedRegistry {
-  /** Stable schema hash; the worker recomputes from ITS defineComponent set and MUST match (§3.3). */
+  /** Stable schema hash; the worker recomputes from the handed registry and MUST match (§3.3). */
   readonly schemaHash: number
-  readonly components: ReadonlyArray<{ readonly name: string; readonly id: number; readonly fieldCount: number; readonly storage: StorageStrategy }>
+  readonly components: ReadonlyArray<{
+    readonly name: string
+    readonly id: number
+    readonly fieldCount: number
+    readonly storage: StorageStrategy
+    /** Field (name, token) in declaration order — lets attachWorld recompute schemaHash from the manifest (§3.3). */
+    readonly fields: ReadonlyArray<{ readonly name: string; readonly token: string }>
+  }>
   readonly relations: ReadonlyArray<{ readonly name: string; readonly id: number; readonly exclusive: boolean; readonly hasPayload: boolean; readonly presenceId: number }>
   readonly numComponentTypes: number
 }
@@ -62,7 +69,13 @@ export function bootstrapForWorker(world: World): WorldBootstrap {
   const relProvider = s.relations()
   const registry: SerializedRegistry = {
     schemaHash: s.schemaHash(),
-    components: s.components().map((c) => ({ name: c.name, id: c.id as number, fieldCount: c.fieldCount, storage: c.storage })),
+    components: s.components().map((c) => {
+      const fields = (s.fieldsOf(c.id) ?? []).map((f) => ({
+        name: f.name,
+        token: typeof f.token === 'string' ? f.token : JSON.stringify(f.token),
+      }))
+      return { name: c.name, id: c.id as number, fieldCount: c.fieldCount, storage: c.storage, fields }
+    }),
     relations:
       relProvider === undefined
         ? []
@@ -88,10 +101,14 @@ export function bootstrapForWorker(world: World): WorldBootstrap {
   }
 }
 
-export function attachWorld(bootstrap: WorldBootstrap, localSchemaHash: number): WorkerWorldView {
+export function attachWorld(bootstrap: WorldBootstrap): WorkerWorldView {
   if (!bootstrap.shared) {
     throw new Error('attachWorld requires a shared (SAB) bootstrap; use the postMessage-fallback path (§3.5)')
   }
+  // §3.3 / §10: single-arg. Recompute the local schema hash from the registry the worker was handed
+  // (the dense component/relation id assignment is the producer-specific datum, §3.2) and assert it
+  // matches the producer's — a fail-fast guard against a worker re-wrapping a mismatched buffer set.
+  const localSchemaHash = computeRegistryHash(bootstrap.registry)
   if (localSchemaHash !== bootstrap.registry.schemaHash) {
     throw new Error('attachWorld: schemaHash mismatch — worker built from stale code (§3.3 / S-10)')
   }
@@ -113,6 +130,30 @@ export function attachWorld(bootstrap: WorldBootstrap, localSchemaHash: number):
     schemaHash: bootstrap.registry.schemaHash,
     tick: bootstrap.tick,
   }
+}
+
+/**
+ * Recompute the schema hash from the handed registry (§3.3). Mirrors the world's FNV-1a over
+ * (componentName, fieldName, fieldToken)* + relation names exactly, so it reproduces the producer's
+ * canonical `schemaHash` — the single-arg `attachWorld` gate against a stale-code worker.
+ */
+function computeRegistryHash(registry: SerializedRegistry): number {
+  let h = 0x811c9dc5
+  const fnv = (str: string): void => {
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i)
+      h = Math.imul(h, 0x01000193)
+    }
+  }
+  for (const c of registry.components) {
+    fnv(c.name)
+    for (const f of c.fields) {
+      fnv(f.name)
+      fnv(f.token)
+    }
+  }
+  for (const r of registry.relations) fnv(r.name)
+  return h >>> 0
 }
 
 /** Re-wrap newly-broadcast column SABs before the next wave (§3.4 / G-7). */
