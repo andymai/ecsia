@@ -10,9 +10,11 @@ export const SNAPSHOT_MAGIC = 0x45435349 // 'ECSI'
 /** The full-u32 NO_ENTITY sentinel as written in handle slots (§8.1). */
 export const NO_ENTITY_U32 = 0xffffffff
 
-/** Header flag bits (§4.1). */
+/** Header flag bits (§4.1 / §6.2). */
 export const FLAG_IS_DELTA = 1
 export const FLAG_HAS_RELATIONS = 2
+/** Delta header: a non-empty interleaved structural section is present (§6.2 SECTION S). */
+export const FLAG_HAS_STRUCTURAL = 4
 
 export const enum DeltaOp {
   EntityCreate = 0,

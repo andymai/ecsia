@@ -367,16 +367,14 @@ describe('S-3 — delta over a random tick range equals replaying the writes; no
 })
 
 // Decode a delta image's value section and return the set of entity handles whose rows it carries.
-// (Independent of the serializer internals — re-parses the wire per §6.2.)
+// (Independent of the serializer internals — re-parses the wire per §6.2: a 24-byte header carrying the
+// structural + value section offsets, then a value section in NATIVE element-width per field.)
+const ELEMENT_BYTES: Record<number, number> = { 0: 1, 1: 1, 2: 1, 3: 2, 4: 2, 5: 4, 6: 4, 7: 4, 8: 8 }
 function decodeDeltaHandles(bytes: Uint8Array): Set<number> {
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  let off = 0
-  off += 4 // magic
-  off += 2 // version
-  off += 1 // endian
-  off += 1 // flags
-  off += 4 // baselineTick
-  off += 4 // targetTick
+  // Header: magic(4) version(2) endian(1) flags(1) baselineTick(4) targetTick(4) structOff(4) valueOff(4).
+  const valueOff = dv.getUint32(20, true)
+  let off = valueOff
   const changedArchetypeCount = dv.getUint32(off, true)
   off += 4
   const handles = new Set<number>()
@@ -395,9 +393,11 @@ function decodeDeltaHandles(bytes: Uint8Array): Set<number> {
       const fieldCount = dv.getUint16(off, true)
       off += 2
       for (let fi = 0; fi < fieldCount; fi++) {
+        const element = dv.getUint8(off)
+        off += 1
         const stride = dv.getUint8(off)
         off += 1
-        off += rowCount * stride * 8 // f64 value words per changed row (§6.2 wire: 8 bytes/lane)
+        off += rowCount * stride * (ELEMENT_BYTES[element] as number) // native element width per changed row (§6.2)
       }
     }
   }

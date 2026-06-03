@@ -12,6 +12,9 @@ export type { LogPointer } from './log.js'
 
 export { ChangeVersionStore } from './change-version.js'
 
+export { StructuralJournal } from './structural-journal.js'
+export type { StructuralRecord } from './structural-journal.js'
+
 export { ObserverCommandBuffer } from './observer-commands.js'
 export type { ObserverCommandApply } from './observer-commands.js'
 

@@ -21,6 +21,7 @@ export type {
   SerializeComponentMeta,
   SerializePair,
   SerializeRelationProvider,
+  SerializeStructuralRecord,
 } from './serialize-surface.js'
 
 export {
