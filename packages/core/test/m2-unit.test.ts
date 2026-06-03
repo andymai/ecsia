@@ -47,7 +47,9 @@ describe('defineComponent infers a usable component', () => {
   test('a defined component reads and writes through the world entity surface', () => {
     const Position = defineComponent({ x: 'f32', y: 'f32' })
     const w = createWorld({ components: [Position] })
-    const ref = w.entity(w.spawn())
+    // M3: an entity reads/writes a component only once it HOLDS it. spawnWith lands it in the
+    // {Position} archetype in a single migration (archetype-storage.md §5.6).
+    const ref = w.entity(w.spawnWith(Position))
 
     // write() returns the mutable singleton; read() the same instance typed Readonly.
     const write = ref.write(Position) as { x: number; y: number }

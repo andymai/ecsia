@@ -25,6 +25,8 @@ import { Buffers, probeCapabilities } from './memory/index.js'
 import type { WorkerMode } from './memory/index.js'
 import { ComponentRegistry } from './registry.js'
 import type { AccessorWorld } from './component/index.js'
+import { Bitmask } from './bitmask/index.js'
+import { Storage } from './storage/index.js'
 
 /** world.md §4: 'serial' during the serial slot (and always, single-threaded); 'wave' only while the scheduler dispatches worker waves. */
 export type WorldPhase = 'serial' | 'wave'
@@ -41,10 +43,27 @@ export interface World {
 
   /** Create a new entity with the empty signature. Main-thread/serial. O(1) (entity-model.md §6.2). */
   spawn(): EntityHandle
+  /**
+   * Create a new entity and add the given components in ONE migration (EMPTY → target signature),
+   * never N (archetype-storage.md §5.6; entity-model.md §6.1). Main-thread/serial.
+   */
+  spawnWith(...defs: readonly ComponentDef<Schema>[]): EntityHandle
+  /** Add a component to a live entity (single migration via the cached edge, §5.4). Main-thread/serial. */
+  add(handle: EntityHandle, def: ComponentDef<Schema>): void
+  /** Remove a component from a live entity (single migration via the cached edge). Main-thread/serial. */
+  remove(handle: EntityHandle, def: ComponentDef<Schema>): void
+  /** Explicit cold→hot archetype promotion at a serial flush point (archetype-storage.md §10.4). */
+  warm(...defs: readonly ComponentDef<Schema>[]): void
   /** Destroy an entity. Main-thread/serial. Idempotent on dead handles (entity-model.md §6.3). */
   despawn(handle: EntityHandle): void
   /** O(1) liveness/staleness check. Never consults the bitmask (Must-Fix #1). */
   isAlive(handle: EntityHandle): boolean
+  /**
+   * O(1) component membership point-test via the per-entity bitmask (archetype-storage.md §6.4).
+   * Main-thread/serial only (BM-1). Returns false for a dead handle (liveness checked first,
+   * without reading the bitmask).
+   */
+  has(handle: EntityHandle, def: ComponentDef<Schema>): boolean
   /**
    * Resolve the pooled EntityRef for `handle`; throws on a dead handle unless `{ lenient: true }`
    * (entity-model.md §6.4). `spawnWith(...defs)` is the other §6.1 public-surface member; it is
@@ -119,9 +138,37 @@ export function createWorld(options: WorldOptions = {}): World {
   }
 
   // --- registry (world.md §7 step 1): mint dense user ids, wire accessor factories ---
-  const registry = new ComponentRegistry(buffers, accessorWorld)
+  const registry = new ComponentRegistry()
   registry.register(resolved.components as readonly ComponentDef<Schema>[])
-  entities.setAccessorResolver(registry)
+
+  // --- bitmask + storage (world.md §7 steps 2-3): the per-entity membership index and the
+  // archetype tables. The bitmask stride = ceil(nextComponentId/32) (CANON C4); both derive from
+  // the SAME registered-component count so sigWords and bitmask layouts align (archetype-storage.md
+  // §3.3 / §6.1). Structural mutation is serial; the bitmask asserts world.phase === 'serial'.
+  const bitmask = new Bitmask(buffers, registry.nextComponentId, resolved.maxEntities, () => state.phase)
+  const stride = bitmask.stride
+  const records = entities.records
+  const storage = new Storage({
+    buffers,
+    accessorWorld,
+    bitmask,
+    record: records,
+    registry,
+    maxHotArchetypes: resolved.maxHotArchetypes,
+    stride,
+    maxEntities: resolved.maxEntities,
+    enqueueRemoveLog: () => {
+      // M5 stub: removal reactivity (writeLog / shapeLog). The call SITE + ordering are canonical
+      // now (archetype-storage.md §5.5 step 3 / §6.3 step 2); M5 fills the body.
+    },
+    tick: () => state.tick,
+    handleIndex: (handle) => handleIndex(handle, handleLayout) as number,
+  })
+  entities.setAccessorResolver(storage)
+  entities.setLifecycle({
+    onSpawn: (handle) => storage.onSpawn(handle),
+    onDespawn: (handle) => storage.onDespawn(handle),
+  })
 
   const world: World = {
     get options() {
@@ -139,11 +186,30 @@ export function createWorld(options: WorldOptions = {}): World {
     spawn() {
       return entities.spawn()
     },
+    spawnWith(...defs) {
+      const handle = entities.spawn()
+      storage.spawnWith(handle, defs)
+      return handle
+    },
+    add(handle, def) {
+      storage.add(handle, def)
+    },
+    remove(handle, def) {
+      storage.remove(handle, def)
+    },
+    warm(...defs) {
+      storage.warm(defs)
+    },
     despawn(handle) {
       entities.despawn(handle)
     },
     isAlive(handle) {
       return entities.isAlive(handle)
+    },
+    has(handle, def) {
+      // Liveness first, WITHOUT the bitmask (Must-Fix #1); a dead handle is never a member.
+      if (!entities.isAlive(handle)) return false
+      return storage.has(handle, def)
     },
     entity(handle, opts) {
       return entities.entity(handle, opts)
