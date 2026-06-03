@@ -131,10 +131,34 @@ export type {
 export { Bitmask } from './bitmask/index.js'
 export type { PhaseGate } from './bitmask/index.js'
 
+export {
+  Reactivity,
+  LogRing,
+  WriteCorral,
+  ChangeVersionStore,
+  ObserverRegistry,
+  ShapeKind,
+  OVERFLOW_SENTINEL,
+  onAdd,
+  onRemove,
+  onChange,
+} from './reactivity/index.js'
+export type {
+  ReactivityDeps,
+  LogPointer,
+  ObserverKind,
+  ObserverHandle,
+  ObserverTerm,
+  ObserverContext,
+  ObserverHandler,
+  ObserverDeps,
+} from './reactivity/index.js'
+
 export { QueryEngine, LiveQuery, SparseSetU32, compileQuery } from './query/index.js'
 export type {
   QueryEngineDeps,
   LiveQueryDeps,
+  ReactivityQueryHooks,
   PooledElement,
   CompiledQuery,
   CompiledValueTerm,

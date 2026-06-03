@@ -30,6 +30,9 @@ export const ARCHETYPE_NONE = 0xffffffff as ArchetypeId
 
 const INITIAL_ROWS = 64
 
+// ShapeKind ordinals (reactivity.md §4.1 / world.md §9.4) used at the structural commit points.
+const SHAPE_ADD = 2
+
 /** The two-word record surface the store commits through (entity-model.md §4.2). */
 export interface RecordSurface {
   commitRecord(index: number, archetypeId: number, row: number): void
@@ -49,6 +52,11 @@ export interface StorageDeps {
   readonly maxEntities: number
   /** Removal-reactivity hook for components in fromArch \ toArch (M5 fills the body). */
   enqueueRemoveLog(index: number, c: ComponentId): void
+  /**
+   * Shape-log hook (reactivity.md §4.2): emit a structural entry at the commit point. Optional so a
+   * query-less harness (M3 unit tests) constructs the store directly. M5 wires it to reactivity.
+   */
+  trackShape?(index: number, c: ComponentId, kind: number): void
   /**
    * Single-entity incremental query maintenance (queries.md §6.1): called once per component in the
    * symmetric difference of a migration AFTER the bitmask delta is applied, so matchesEntityNow reads
@@ -216,24 +224,51 @@ export class ArchetypeStore {
   /**
    * Swap-pop removal: move the last live row into `row`, then fix the moved sibling's record via
    * the callback. `fixSibling` fires exactly once iff row !== count-1 (ROW-1 / I6). Serial only.
+   *
+   * §7.4 deferred row reclaim: when `relocateDying` is supplied (a remove-observer subscribes to a
+   * held component), the dying entity's column data must survive intact until after observerDrain so
+   * an onRemove handler can read its last value. Instead of a one-way overwrite of the dying row, we
+   * SWAP it with the last live row: the sibling's data lands in `row` (record fixed), and the dying
+   * entity's data lands at the now-excluded `last` slot (record relocated via `relocateDying`). The
+   * dying row is naturally reclaimed — it sits at/above `count`, outside every `[0,count)` iteration,
+   * and is overwritten by the next allocRow (which only happens next frame, since observer mutations
+   * stage to command buffers). For hot rows this needs no per-frame stale-row list.
    */
-  removeRow(arch: Archetype, row: number, fixSibling: (movedIndex: number, newRow: number) => void): void {
+  removeRow(
+    arch: Archetype,
+    row: number,
+    fixSibling: (movedIndex: number, newRow: number) => void,
+    relocateDying?: (newRow: number) => void,
+  ): void {
     if (arch.cold) {
       // Cold "row" is the entity index (the record row word for cold entities, §10.3). Reclaim its
       // overflow rows so blocks don't leak and stale (index,componentId) mappings can't survive a
-      // generational index reuse.
+      // generational index reuse. Cold blocks are keyed per (entityIndex, componentId), so the dying
+      // entity's values are addressed by its own index and survive the count decrement regardless —
+      // the deferral concern (sibling overwrite) does not arise. Reclaim runs as usual.
       coldReclaim(this.cold, row, arch.signature as unknown as Iterable<number>)
       arch.count -= 1
       return
     }
     const last = arch.count - 1
     if (row !== last) {
+      const defer = relocateDying !== undefined
       for (const cs of arch.columnSets.values()) {
-        for (const col of cs.columns) copyRowWithinColumn(col, last, row)
+        for (const col of cs.columns) {
+          if (defer) swapRowWithinColumn(col, last, row)
+          else copyRowWithinColumn(col, last, row)
+        }
       }
       const movedHandle = arch.rows[last] as number
+      const dyingHandle = arch.rows[row] as number
       arch.rows[row] = movedHandle
       fixSibling(this.#deps.handleIndex(movedHandle), row)
+      if (defer) {
+        // The dying entity's data now lives at `last`; keep its record pointing there so a leniently
+        // bound EntityRef reads its own pre-removal values during the drain.
+        arch.rows[last] = dyingHandle
+        relocateDying(last)
+      }
     }
     arch.count = last
   }
@@ -302,6 +337,16 @@ export class ArchetypeStore {
 
     this.#deps.record.commitRecord(index, toArch.id as number, newRow)
     this.#deps.bitmask.bitmaskApplyDelta(index, fromArch.signature, toArch.signature)
+
+    // reactivity.md §4.2/§4.3: one shape-log Add per component in toArch \ fromArch (NOT per copied
+    // column). Removes were emitted via enqueueRemoveLog above, before the source row was overwritten.
+    const trackShape = this.#deps.trackShape
+    if (trackShape !== undefined) {
+      for (let i = 0; i < toArch.signature.length; i++) {
+        const c = toArch.signature[i] as number as ComponentId
+        if (!sigHas(fromArch.signature, c)) trackShape(index, c, SHAPE_ADD)
+      }
+    }
 
     // §6.1 single-entity incremental query maintenance: re-test this one entity against the queries
     // referencing each component in the symmetric difference (added OR removed). Runs AFTER the
@@ -477,6 +522,19 @@ function copyRowWithinColumn(col: Column, srcRow: number, dstRow: number): void 
     srcRow * s,
     srcRow * s + s,
   )
+}
+
+/** Swap two rows' stride elements within the same column (§7.4 deferred reclaim). */
+function swapRowWithinColumn(col: Column, a: number, b: number): void {
+  const s = col.layout.stride
+  const v = col.view as unknown as { [i: number]: number }
+  const ab = a * s
+  const bb = b * s
+  for (let i = 0; i < s; i++) {
+    const t = v[ab + i] as number
+    v[ab + i] = v[bb + i] as number
+    v[bb + i] = t
+  }
 }
 
 /** Copy one row from a source column to a same-layout destination column (cross-archetype, §4.4). */
