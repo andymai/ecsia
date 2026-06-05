@@ -1,23 +1,24 @@
-// Smoke + regression test for the DoT/death/cascade example — the program the newcomer-sim failed to
-// write from the docs. It locks the documented path: in-system structural mutation via ctx.world, an
-// onRemove(Health) death observer, and a ChildOf exclusive relation whose deleteSubject cascade
-// despawns children when a parent dies. Results are keyed by spec index (mob id), not raw handle.
+// Smoke + regression test for the damage-over-time example. It locks in the documented path:
+// structural changes from inside a system via ctx.world, an onRemove(Health) death observer (a
+// callback that fires when the component is removed), and a ChildOf exclusive relation whose
+// deleteSubject cascade despawns children when their parent dies. Results are keyed by spec
+// index (mob id), not raw entity handle.
 
 import { describe, expect, test } from 'vitest'
-import { main as dotCascade } from '../dot-cascade.js'
+import { main as damageOverTime } from '../damage-over-time.js'
 
-describe('example: dot-cascade (DoT + death + cascade)', () => {
+describe('example: damage-over-time (damage + death + cascade)', () => {
   test('default sim burns mobs down, cascades children, and logs every death once', () => {
-    const r = dotCascade()
+    const r = damageOverTime()
 
-    // Tracing DEFAULT_MOBS (see dot-cascade.ts): mob1 (hp6, burn3, child of 0) burns to 0 hp on tick 3
-    // and despawns; its deleteSubject cascade despawns child mob2 (child of 1). mob3 (hp4, burn2) and
-    // mob4 (burn1) extinguish their Burning before dying. mob0/3/4 survive.
+    // Tracing DEFAULT_MOBS (see damage-over-time.ts): mob1 (hp 6, 3 stacks, child of 0) burns to
+    // 0 hp on tick 3 and despawns; the deleteSubject cascade despawns its child, mob2. mob3
+    // (hp 4, 2 stacks) and mob4 (1 stack) burn out their stacks before dying. Mobs 0/3/4 survive.
     expect(r.ticksRun).toBe(3)
 
     // Exactly mobs 1 and 2 died — the burned-out parent and its cascaded child.
     expect(new Set(r.deaths)).toEqual(new Set([1, 2]))
-    // The onRemove(Health) observer fired once per death, proving the death observer actually ran.
+    // The onRemove(Health) observer fired once per death, proving it actually ran.
     expect(r.observedDeathCount).toBe(2)
 
     // Survivors are exactly mobs 0, 3, 4 (cascade left no dangling child of the dead mob1).
@@ -27,16 +28,16 @@ describe('example: dot-cascade (DoT + death + cascade)', () => {
     // survivor is still burning.
     expect(r.stillBurning).toEqual([])
 
-    // Final hp after the DoT arithmetic: mob0 untouched (10), mob3 burned 4→2→1, mob4 burned 50→49.
+    // Final hp after the damage arithmetic: mob0 untouched (10), mob3 burned 4→2→1, mob4 50→49.
     expect(r.hpById[0]).toBe(10)
     expect(r.hpById[3]).toBe(1)
     expect(r.hpById[4]).toBe(49)
   })
 
   test('despawning a parent cascades the whole subtree (deleteSubject)', () => {
-    // A 1-root chain root→1→2→3; only the root burns. When the root burns out, the entire ChildOf
+    // A single chain root→1→2→3; only the root burns. When the root dies, the entire ChildOf
     // subtree cascades in one despawn.
-    const r = dotCascade({
+    const r = damageOverTime({
       mobs: [
         { hp: 1, burning: 1, parent: null }, // 0 root, dies tick 1
         { hp: 99, burning: 0, parent: 0 }, //   1
@@ -53,7 +54,7 @@ describe('example: dot-cascade (DoT + death + cascade)', () => {
   })
 
   test('an extinguished mob keeps living without its Burning component', () => {
-    const r = dotCascade({
+    const r = damageOverTime({
       mobs: [{ hp: 100, burning: 2, parent: null }], // burns 2 then 1 stack, never dies
       ticks: 8,
     })

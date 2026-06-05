@@ -206,21 +206,21 @@ function genTables(report) {
 
 ### Single-thread iteration
 
-Position += Velocity·dt over ${fmtInt(report.config.iterEntities)} entities, one frame per op. \`ns/entity\` is mean op time divided by entity count; \`ratio vs bitECS\` is bitECS ops/s ÷ this row's ops/s (lower is faster).
+Each loop adds every entity's velocity to its position, over ${fmtInt(report.config.iterEntities)} entities per op. \`ns per entity\` is mean op time divided by entity count (nanoseconds per entity — lower is faster); \`ratio vs bitECS\` is bitECS ops/s ÷ this row's ops/s.
 
-| loop | ops/s | ms/op | ns/entity | ratio vs bitECS |
+| loop | ops/s | ms/op | ns per entity | ratio vs bitECS |
 | --- | ---: | ---: | ---: | ---: |
 ${iterRows.join('\n')}
 
-**Tracked-write cost** — the same \`.each\` integrator with a \`.changed()\` filter attached and drained each frame (the write-log overhead you opt into for reactivity):
+**Tracked-write cost** — the same \`.each\` loop with a \`.changed()\` filter attached and drained each frame (the change-tracking overhead you opt into for reacting to changes):
 
-| loop | ops/s | ms/op | ns/entity | ratio vs bitECS |
+| loop | ops/s | ms/op | ns per entity | ratio vs bitECS |
 | --- | ---: | ---: | ---: | ---: |
 ${twRow}
 
 ### Worker-pool speedup
 
-Real \`node:worker_threads\` + Atomics. ${report.pool.groupCount} disjoint Body groups × ${fmtInt(report.pool.perGroup)} entities (${fmtInt(report.pool.totalEntities)} total), ${fmtInt(report.pool.heavyIters)} transcendental sub-steps per entity per frame, ${fmtInt(report.pool.frames)} frames. Speedup is single-thread wall ÷ this row's wall. \`byte-identical\` confirms the threaded run's sum-of-fields checksum equals the single-thread run's.
+Real \`node:worker_threads\` + Atomics. ${report.pool.groupCount} independent Body groups × ${fmtInt(report.pool.perGroup)} entities (${fmtInt(report.pool.totalEntities)} total), ${fmtInt(report.pool.heavyIters)} sub-steps of expensive math (sin/cos/exp) per entity per frame, ${fmtInt(report.pool.frames)} frames. Speedup is single-thread wall-clock time ÷ this row's. \`byte-identical\` confirms the threaded run's sum-of-fields checksum equals the single-thread run's.
 
 Single-thread baseline: **${single.toFixed(1)} ms**.
 

@@ -1,8 +1,12 @@
-# Parallelism
+# Multithreading
 
-ecsia's defining feature: **`threaded: true` changes no system, query, or accessor code.** The same
-program runs single-threaded everywhere and across a worker pool where the host allows it — and the
-parallel result is **bit-identical** to the serial one.
+ecsia is an entity component system (ECS): each thing in your world is an entity (just an
+id), its data lives in components (typed pieces of data attached to entities), and behavior
+lives in systems (functions that run over every entity with a given set of components). This
+page is about ecsia's defining feature: **`threaded: true` changes no system, query, or
+accessor code.** The same program runs single-threaded everywhere and across a pool of worker
+threads where the host allows it — and the parallel result is **bit-identical** to the serial
+one.
 
 ```ts
 import { createWorld, defineComponent } from 'ecsia'
@@ -15,20 +19,26 @@ const world = createWorld({ components: [Position], threaded: true })
 
 ## How the scheduler derives waves
 
-Every system declares its `{ read, write }` component access. From those sets the scheduler builds an
-**access-graph DAG**: two systems conflict when one writes a component the other reads or writes
-(read-after-write, write-after-read, write-write). Non-conflicting systems are independent.
+Every system declares which components it reads and which it writes (`{ read, write }`).
+From those declarations the scheduler can tell when two systems **conflict**: one writes a
+component the other reads, or both write the same component. In other words, two systems
+conflict when one writes data the other touches — and then they can't safely run at the
+same time. Systems with no such overlap are independent.
 
-The scheduler then lays systems out in **waves**. Within a wave, systems have **disjoint write-sets**,
-so they can run concurrently; each wave's work is split into **worker batches** over the
-`SharedArrayBuffer`-backed columns. A read-after-write conflict pushes the reader into a later wave.
+The scheduler builds a **conflict graph** out of those relationships and layers it into
+**waves** — a wave is a batch of systems that can safely run at the same time because none
+of them writes data another one touches. Within a wave, no two systems write the same data,
+so they run concurrently; each wave's work is split into **worker batches** over component
+columns backed by `SharedArrayBuffer` (memory several threads can read and write at once).
+When one system needs to read what another writes, the reader lands in a later wave.
 
-You never order systems by hand for correctness — the conflict DAG does it. (Ordering *hints* like
-`inAnyOrderWith`, `beforeWritersOf`, `afterReadersOf` exist to break ties, not to enforce safety.)
+You never order systems by hand for correctness — the conflict graph does it. (Ordering
+*hints* like `inAnyOrderWith`, `beforeWritersOf`, `afterReadersOf` exist to break ties, not
+to enforce safety.)
 
 You can inspect the derived waves with the [devtools](/guide/devtools) `explainPlan` —
-it prints exactly which systems share a wave, which conflicts separated them, and which systems are
-pinned to the main thread.
+it prints exactly which systems share a wave, which conflicts separated them, and which
+systems are pinned to the main thread (they always run there, never on a worker).
 
 ### A real plan, rendered
 
@@ -62,17 +72,19 @@ Tagger  rich-fields
 
 Read it top to bottom:
 
-- **`Burn` sits alone in wave 0** because it writes `health` and `burning`, and both later systems
-  touch one of those. The `== Conflicts ==` table names exactly why: `Burn`↔`Move` collide on
-  `burning` (read-write), `Burn`↔`Tagger` on `health` (write-write). Each conflict pushes the second
-  system into a later wave.
-- **`Move` and `Tagger` share wave 1** as two separate batches — their write-sets (`position` vs
-  `health`) are disjoint, so they could run concurrently within the wave.
-- **`Tagger` is starred (`*`) and pinned `rich-fields`.** It reads the `label` component, which carries
-  an `object<T>()` field, so it is **worker-ineligible** and runs on the main thread. That is the kind
-  of fact you'd otherwise discover only by profiling — `explainPlan` surfaces it up front.
+- **`Burn` sits alone in wave 0** because it writes `health` and `burning`, and both later
+  systems touch one of those. The `== Conflicts ==` table names exactly why: `Burn`↔`Move`
+  collide on `burning` (read-write), `Burn`↔`Tagger` on `health` (write-write). Each conflict
+  pushes the second system into a later wave.
+- **`Move` and `Tagger` share wave 1** as two separate batches — they write different
+  components (`position` vs `health`), so they could run concurrently within the wave.
+- **`Tagger` is starred (`*`) and pinned `rich-fields`.** It reads the `label` component,
+  which carries an `object<T>()` field — an arbitrary JS object rather than a number — so it
+  is **worker-ineligible** (it can't run on a worker thread) and runs on the main thread.
+  That is the kind of fact you'd otherwise discover only by profiling — `explainPlan`
+  surfaces it up front.
 
-## Two disjoint-write systems share a wave
+## Two systems that write different components share a wave
 
 ```ts
 import { defineComponent, defineSystem, write } from 'ecsia'
@@ -80,7 +92,8 @@ import { defineComponent, defineSystem, write } from 'ecsia'
 const PositionA = defineComponent({ x: 'f32', y: 'f32' }, { name: 'positionA' })
 const PositionB = defineComponent({ x: 'f32', y: 'f32' }, { name: 'positionB' })
 
-// Disjoint write-sets ⇒ same wave ⇒ split into two worker batches.
+// These two systems never write the same component,
+// so they share a wave and split into two worker batches.
 const UpdateA = defineSystem({
   name: 'UpdateA',
   read: [PositionA],
@@ -101,43 +114,53 @@ const UpdateB = defineSystem({
 
 ## What serial-equivalence means
 
-The parallel result is **bit-identical** to the single-threaded result — the same entity set, the same
-component values, and the same reactivity deltas. Determinism comes from a **fixed worker-index
-command-buffer merge**: structural mutations and observer events stage per worker and merge back in a
-fixed order, so the outcome never depends on which worker happened to finish first.
+The parallel result is **bit-identical** to the single-threaded result — the same entity
+set, the same component values, and the same change events.
+
+Here is where the determinism comes from. While a wave runs, structural changes (anything
+that alters what components an entity has: spawning or despawning an entity — creating or
+removing it from the world — adding or removing a component) and observer events (an
+observer is a callback that fires when a component is added, removed, or changed) are not
+applied immediately. Each worker stages them in its own **command buffer** — a queue of
+changes applied later, at a safe point. When the wave ends, those buffers merge back in a
+fixed order — worker 0's changes first, then worker 1's, and so on. So the outcome never
+depends on which thread happened to finish first.
 
 ::: tip This is property-tested, not promised
-A serial-equivalence **property test** runs the same systems through a real `worker_threads` + `Atomics`
-pool and through the single-thread executor, then asserts the two worlds are byte-identical. The
-parallel path is a dispatcher choice, not a code-shape change — so the equivalence is checkable, and it
-is checked.
+"Property-tested" means the suite doesn't just check a few hand-picked cases — it generates
+many random simulations and checks this on every one. Each one runs twice: through a real
+`worker_threads` + `Atomics` pool (Atomics being the JS primitives threads use to coordinate),
+and through the single-thread executor; the test then asserts the two resulting worlds are
+byte-identical. Because going parallel is a dispatcher choice, not a change to your code's
+shape, the equivalence is checkable — and it is checked.
 :::
 
 ## Deployment requirements
 
 ### Browser: COOP/COEP for `SharedArrayBuffer`
 
-The worker pool shares component columns over `SharedArrayBuffer`, which the browser only exposes in a
-**cross-origin-isolated** context. That means serving your app with both headers:
+The worker pool shares component columns over `SharedArrayBuffer`, which the browser only
+exposes in a **cross-origin-isolated** context. Cross-origin isolation is two HTTP headers
+your server opts into:
 
 ```http
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
 
-When the context **isn't** cross-origin-isolated, `SharedArrayBuffer` doesn't exist, and the worker
-pool cannot share columns by reference. ecsia logs a warning and runs the same systems
+When the context **isn't** cross-origin-isolated, `SharedArrayBuffer` doesn't exist, and the
+worker pool cannot share columns by reference. ecsia logs a warning and runs the same systems
 single-threaded — the fallback is loud, and no work is dropped.
 
 ### Node is the pool path today
 
 ::: warning Worker pool is Node-only right now
-The OS-thread pool uses `worker_threads` + `Atomics` and runs under **Node `>=22.13`**. The *same user
-code* runs single-threaded in every runtime; the multi-threaded executor is the Node path. Browser SAB
-parallelism is gated on the COOP/COEP headers above.
+The OS-thread pool uses `worker_threads` + `Atomics` and runs under **Node `>=22.13`**. The
+*same user code* runs single-threaded in every runtime; the multi-threaded executor is the
+Node path. Browser `SharedArrayBuffer` parallelism is gated on the COOP/COEP headers above.
 :::
 
 ## See also
 
 - [Devtools → `explainPlan`](/guide/devtools) — visualise the waves, conflicts, and pins.
-- [Serialization](/guide/serialization) — the zero-copy worker bootstrap that hands columns to workers.
+- [Saving and syncing](/guide/serialization) — the zero-copy worker bootstrap that hands columns to workers.

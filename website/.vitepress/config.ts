@@ -9,7 +9,7 @@ export default defineConfig({
   lang: 'en-US',
   title: 'ecsia',
   description:
-    'A batteries-included, TypeScript-native Entity Component System — archetype/SoA storage, first-class relations, and auto-parallel worker execution that is bit-identical to the serial path.',
+    'A batteries-included entity component system (ECS) for TypeScript — typed data, fast iteration, entity-to-entity links, and automatic multithreading with results identical to a single-threaded run.',
   cleanUrls: true,
   lastUpdated: true,
   appearance: 'dark',
@@ -37,12 +37,12 @@ export default defineConfig({
           ],
         },
         {
-          text: 'Subsystems',
+          text: 'Going further',
           items: [
-            { text: 'Parallelism', link: '/guide/parallelism' },
-            { text: 'Relations', link: '/guide/relations' },
-            { text: 'Reactivity', link: '/guide/reactivity' },
-            { text: 'Serialization', link: '/guide/serialization' },
+            { text: 'Multithreading', link: '/guide/parallelism' },
+            { text: 'Linking entities', link: '/guide/relations' },
+            { text: 'Reacting to changes', link: '/guide/reactivity' },
+            { text: 'Saving and syncing', link: '/guide/serialization' },
           ],
         },
         {

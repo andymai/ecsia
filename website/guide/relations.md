@@ -1,15 +1,33 @@
-# Relations
+# Linking entities
 
-Relations are **first-class** in ecsia: integer-encoded pairs stored as real archetype members, not a
-side-table of object references. That is what lets them cross a worker boundary (a JS-object pair
-identity can't) and query in `O(archetypes)` via a presence bit.
+A **relation** links one entity to another — "this node's parent is that node". If you're
+new to the pattern: ecsia is an entity component system (ECS), where each thing in your
+world is an entity (just an id), its data lives in components (typed pieces of data attached
+to entities), and behavior lives in systems (functions that run over every entity with a
+given set of components). Relations are how entities point at each other — parent/child
+hierarchies, "likes", "targets", anything directional.
+
+Every relation has two ends: the **subject** (the entity doing the pointing) and the
+**target** (the entity pointed at). In a parent/child link, the child is the subject and the
+parent is the target.
+
+Relations are **first-class** in ecsia: a link is stored as a plain number inside the same
+tables that hold component data, not in a side-table of object references. That has two
+practical consequences. First, links can cross a worker-thread boundary, and can be saved to
+disk — a JS object identity can do neither. Second, wildcard lookups stay fast no matter how
+many entities exist: the cost is `O(archetypes)`, where an archetype is the group of
+entities that share the exact same set of components — ecsia stores each group as one table.
 
 The relations runtime is world-scoped — you reach it through `createRelations(world)`.
 
 ## Defining a relation: payload first
 
-`defineRelation` takes **payload first, options second** — `defineRelation(payload | null, options?)`.
-Pass `null` for a payload-free relation.
+A relation can carry data of its own — its **payload** (the `Likes` relation further down
+carries an `amount`). `defineRelation` takes **payload first, options second** —
+`defineRelation(payload | null, options?)`. Pass `null` for a payload-free relation.
+
+This example also opts into **cascade** — automatic cleanup of linked entities: despawn a
+parent (remove it from the world) and its children go too. More on the directions below.
 
 ```ts
 import { createWorld, defineComponent, createRelations } from 'ecsia'
@@ -25,8 +43,10 @@ const ChildOf = rel.defineRelation(null, { exclusive: true, cascade: 'deleteSubj
 
 ## Pairs
 
-`addPair(subject, relation, target)` wires a directed pair. For an **exclusive** relation, re-pairing a
-subject is an in-place write with **zero migrations**.
+A **pair** is one concrete link: `addPair(subject, relation, target)` wires subject →
+target. For an **exclusive** relation — one where a subject can have at most one target,
+the way a child has one parent — re-pairing a subject is an in-place write, without moving
+the entity between tables.
 
 ```ts
 import { createWorld, defineComponent, createRelations } from 'ecsia'
@@ -36,15 +56,15 @@ const world = createWorld({ components: [Node], maxEntities: 1 << 16 })
 const rel = createRelations(world)
 const ChildOf = rel.defineRelation(null, { exclusive: true })
 
-const parent = world.spawnWith(Node)
+const parent = world.spawnWith(Node)   // spawn = create an entity
 const child = world.spawnWith(Node)
 
 rel.addPair(child, ChildOf, parent)   // exclusive re-parent = in-place write
 rel.targetOf(child, ChildOf)          // → parent handle (exclusive only), or null
 ```
 
-For a non-exclusive relation, a subject can hold many targets; iterate them with `targetsOf` and read
-the parent chain depth with `depthOf`:
+For a non-exclusive relation, a subject can hold many targets; iterate them with `targetsOf`
+and read the parent chain depth with `depthOf`:
 
 ```ts
 import { createWorld, defineComponent, createRelations } from 'ecsia'
@@ -83,8 +103,11 @@ rel.addPair(alice, Likes, bob, { amount: 0.8 })
 
 ## Wildcard queries
 
-The pair-term constructor lives on the **relations API** (`rel.Pair`), not the umbrella. `Wildcard`
-matches any target via the per-relation presence bit (`O(archetypes)`).
+A query selects every entity that has a given set of components and hands you typed access
+to their fields — and a relation pair can be a query term too. The pair-term constructor
+lives on the **relations API** (`rel.Pair`), not the umbrella package. `Wildcard` matches
+any target — "every entity that has *some* parent" — and the lookup stays fast no matter how
+many entities exist (`O(archetypes)`).
 
 ```ts
 import { createWorld, defineComponent, createRelations, Wildcard } from 'ecsia'
@@ -101,7 +124,8 @@ for (const e of world.query(rel.Pair(ChildOf, Wildcard))) {
 
 ## Cascade directions
 
-Cascade is declared on the relation and fires when a participant is despawned:
+Cascade is declared on the relation and fires when a participant is despawned (removed from
+the world):
 
 | `cascade` | Despawning a **target** does… |
 |---|---|
@@ -109,7 +133,8 @@ Cascade is declared on the relation and fires when a participant is despawned:
 | `'removeRelation'` | drops only the dangling pairs, leaving subjects alive |
 | `'none'` (default) | drops pairs to the despawned target; nothing cascades |
 
-Despawning a **subject** always just removes its own outgoing pairs — it never deletes its target.
+Despawning a **subject** always just removes its own outgoing pairs — it never deletes its
+target.
 
 ```ts
 import { createWorld, defineComponent, createRelations } from 'ecsia'
@@ -129,6 +154,6 @@ world.isAlive(child)    // false
 
 ## See also
 
-- The `scene-graph` and `dot-cascade` examples in `examples/` exercise exclusive re-parenting, `depthOf`
-  ordering, and the `deleteSubject` cascade end to end.
-- [Reactivity](/guide/reactivity) — observe the removals a cascade produces.
+- The `scene-graph` and `damage-over-time` examples in `examples/` exercise exclusive
+  re-parenting, `depthOf` ordering, and the `deleteSubject` cascade end to end.
+- [Reacting to changes](/guide/reactivity) — observe the removals a cascade produces.

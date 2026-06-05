@@ -5,24 +5,24 @@
 
 ### Single-thread iteration
 
-Position += Velocity·dt over 50,000 entities, one frame per op. `ns/entity` is mean op time divided by entity count; `ratio vs bitECS` is bitECS ops/s ÷ this row's ops/s (lower is faster).
+Each loop adds every entity's velocity to its position, over 50,000 entities per op. `ns per entity` is mean op time divided by entity count (nanoseconds per entity — lower is faster); `ratio vs bitECS` is bitECS ops/s ÷ this row's ops/s.
 
-| loop | ops/s | ms/op | ns/entity | ratio vs bitECS |
+| loop | ops/s | ms/op | ns per entity | ratio vs bitECS |
 | --- | ---: | ---: | ---: | ---: |
 | ecsia .each | 1,979 | 0.5059 | 10.12 | 9.59x |
 | ecsia eachChunk | 13,690 | 0.0731 | 1.46 | 1.39x |
 | miniplex | 1,523 | 0.6650 | 13.30 | 12.46x |
 | bitECS | 18,984 | 0.0527 | 1.05 | 1.00x (baseline) |
 
-**Tracked-write cost** — the same `.each` integrator with a `.changed()` filter attached and drained each frame (the write-log overhead you opt into for reactivity):
+**Tracked-write cost** — the same `.each` loop with a `.changed()` filter attached and drained each frame (the change-tracking overhead you opt into for reacting to changes):
 
-| loop | ops/s | ms/op | ns/entity | ratio vs bitECS |
+| loop | ops/s | ms/op | ns per entity | ratio vs bitECS |
 | --- | ---: | ---: | ---: | ---: |
 | ecsia .each + .changed() | 158 | 6.4150 | 128.30 | 119.92x |
 
 ### Worker-pool speedup
 
-Real `node:worker_threads` + Atomics. 8 disjoint Body groups × 1,024 entities (8,192 total), 512 transcendental sub-steps per entity per frame, 60 frames. Speedup is single-thread wall ÷ this row's wall. `byte-identical` confirms the threaded run's sum-of-fields checksum equals the single-thread run's.
+Real `node:worker_threads` + Atomics. 8 independent Body groups × 1,024 entities (8,192 total), 512 sub-steps of expensive math (sin/cos/exp) per entity per frame, 60 frames. Speedup is single-thread wall-clock time ÷ this row's. `byte-identical` confirms the threaded run's sum-of-fields checksum equals the single-thread run's.
 
 Single-thread baseline: **11972.6 ms**.
 

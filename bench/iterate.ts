@@ -1,7 +1,8 @@
-// Cross-library iteration micro-bench: integrate Position from Velocity over N entities, the canonical
-// ECS hot loop. ecsia (via ecsia) vs miniplex vs bitECS. Each builder returns a `step()` that
-// advances every entity one frame; tinybench times step() in the runner. Kept allocation-free in the
-// loop so the measurement is the storage/iteration cost, not GC.
+// Cross-library iteration micro-benchmark (timing one tiny loop, rather than a realistic workload):
+// integrate Position from Velocity over N entities, the classic ECS hot loop. ecsia vs miniplex vs
+// bitECS. Each builder returns a `step()` that advances every entity one frame; tinybench times
+// step() in the runner. Kept allocation-free in the loop so the measurement is the storage/iteration
+// cost, not GC.
 
 import { createWorld, defineComponent, write } from 'ecsia'
 import type { QueryChunk } from 'ecsia'
@@ -52,9 +53,11 @@ export function makeEcsiaIter(n: number): IterCase {
   }
 }
 
-// The opt-in column-cursor (SoA) variant of the ecsia loop: eachChunk hands per-archetype raw typed
-// column views + a row span, so the inner loop indexes Float32Array directly — bypassing the per-row
-// accessor objects AND the reactivity write-log push (close to the bitECS raw-SoA loop, still typed).
+// The opt-in column-cursor variant of the ecsia loop. ecsia stores each field in its own contiguous
+// array (a column), a layout called Structure-of-Arrays (SoA); eachChunk hands per-archetype raw
+// typed column views + a row span, so the inner loop indexes Float32Array directly — bypassing the
+// per-row accessor objects AND the reactivity write-log push (close to the bitECS raw-SoA loop,
+// still typed).
 export function makeEcsiaCursorIter(n: number): IterCase {
   const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
   const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })

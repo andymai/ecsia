@@ -1,8 +1,19 @@
-# Reactivity
+# Reacting to changes
 
-ecsia gives you two complementary ways to react to change: **observers** (push: a handler fires when a
-component is added/removed/changed) and **changed filters** (pull: a query that yields only the entities
-written this frame). Both are deterministic — they agree across the serial and worker paths.
+ecsia is an entity component system (ECS): each thing in your world is an entity (just an
+id), its data lives in components (typed pieces of data attached to entities), and behavior
+lives in systems (functions that run over every entity with a given set of components). When
+that data changes, you often want to react — sync a render object, log a death, send a
+network update. ecsia gives you two complementary tools for that, one push and one pull:
+
+- **Observers** are push: an observer is a callback that fires when a component is added,
+  removed, or changed. ecsia calls you when it happens.
+- **Changed filters** are pull: a query (which selects every entity that has a given set of
+  components and hands you typed access to their fields) narrowed to only the entities
+  written this frame. You ask, when you're ready.
+
+Both are deterministic — they report the same events whether the world runs on one thread or
+across workers.
 
 ## Observers: build a term, then register it
 
@@ -20,7 +31,8 @@ const sub = world.observe(onRemove(Health), (e, ctx) => {
   console.log(`entity ${e.handle} lost Health at tick ${ctx.tick}`)
 })
 
-// onRemove(C) fires when C is removed AND when the entity is despawned. Later:
+// onRemove(C) fires when C is removed AND when the entity is despawned
+// (removed from the world entirely). Later:
 sub.dispose() // unsubscribe
 ```
 
@@ -28,10 +40,12 @@ sub.dispose() // unsubscribe
 
 ### Handlers fire at a deferred serial slot
 
-Observer handlers never run mid-system — not even under workers. They fire at a **deferred serial
-slot**, and mutations you make inside a handler stage to a command buffer and apply at the next
-serial flush (the start of the next drain).
-That is what keeps reactivity bit-identical between the serial and parallel executors.
+Observer handlers never run in the middle of a system — not even when systems run on worker
+threads. They fire at a **deferred serial slot**: after the systems finish, at a safe point
+on the main thread. Mutations you make inside a handler don't apply immediately either —
+they stage to a **command buffer** (a queue of changes applied later, at a safe point) and
+apply at the next serial flush, the start of the next drain. That deferral is what keeps
+reactivity bit-identical between the single-threaded and parallel executors.
 
 ```ts
 import { createWorld, defineComponent, onAdd, onChange } from 'ecsia'
@@ -49,8 +63,9 @@ const changed = world.observe(onChange(Health), (e, ctx) => {
 
 ## Changed filters: a query of this-frame writes
 
-Chain `.changed()` onto a query to narrow it to the entities **written this frame**, then drain it with
-`.eachChanged(...)`. This is the write-log-driven pull side.
+Chain `.changed()` onto a query to narrow it to the entities **written this frame**, then
+drain it with `.eachChanged(...)`. This is the pull side: ecsia keeps a log of writes, and
+the filter reads it.
 
 ```ts
 import { createWorld, defineComponent, read, write } from 'ecsia'
@@ -69,9 +84,11 @@ changedPositions.eachChanged((el) => {
 
 ## `changedSince`: a version-stamp predicate
 
-For a per-entity check against an arbitrary past tick, `world.changedSince(handle, tick)` returns
-whether the entity's stamp moved since `tick`. It is the same change-version mechanism the delta
-serializer rides.
+ecsia keeps a **version stamp** per entity — a counter recording when a value last changed.
+For a per-entity check against an arbitrary past tick (one step of the simulation),
+`world.changedSince(handle, tick)` returns whether the entity's stamp moved since `tick`. It
+is the same change-version mechanism the delta serializer rides — the one that emits just
+the changes since a known point.
 
 ```ts
 import { createWorld, defineComponent } from 'ecsia'
@@ -86,15 +103,17 @@ const moved = world.changedSince(e, since)   // true
 ```
 
 ::: tip Two mechanisms, one set
-The `.changed()` **filter** (write-log driven) and the `changedSince` **predicate** (change-version
-driven) report the **same** set of entities written in a frame, via two disjoint mechanisms — and a
-property test asserts they agree. Use whichever fits: the filter for batch iteration, the predicate for
-a point check.
+The `.changed()` **filter** (driven by the write log) and the `changedSince` **predicate**
+(driven by version stamps) report the **same** set of entities written in a frame, via two
+disjoint mechanisms — and a property test asserts they agree (the suite generates many
+random simulations and checks this on every one). Use whichever fits: the filter for batch
+iteration, the predicate for a point check.
 :::
 
 ## See also
 
-- [Serialization](/guide/serialization) — the version stamps `changedSince` reads also drive the
-  version-stamp delta.
-- [Relations](/guide/relations) — a `deleteSubject` cascade raises an `onRemove` for every component of
-  every cascaded entity, so a death observer counts cascaded children too.
+- [Saving and syncing](/guide/serialization) — the version stamps `changedSince` reads also
+  drive the version-stamp delta.
+- [Linking entities](/guide/relations) — a `deleteSubject` cascade (automatic cleanup of
+  linked entities: despawn a parent and its children go too) raises an `onRemove` for every
+  component of every cascaded entity, so a death observer counts cascaded children too.

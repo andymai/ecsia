@@ -1,16 +1,20 @@
 // REAL worker-pool speedup bench (the becsy gap): genuine OS-thread parallelism over node:worker_threads
 // + Atomics, NOT an in-process dispatcher. It stands up the actual @ecsia/scheduler WorkerPool (the same
-// path as examples/test/worker-pool.smoke.test.ts) and drives a CPU-HEAVY, disjoint-write workload.
+// path as examples/test/worker-pool.smoke.test.ts) and drives a CPU-HEAVY workload of systems that
+// write different components.
 //
 // Workload: GROUP_COUNT disjoint Body components (body0..body7); each group's Integrate{g} system writes
-// ONLY its own group's Body. Disjoint write-sets ⇒ the scheduler packs up to `workers` of them into one
-// concurrent round. Per entity per frame we run an iterated damped-oscillator integrator (HEAVY_ITERS
-// transcendental sub-steps) — heavy enough that the parallel compute amortizes the wave-sync/dispatch
-// overhead (a trivial hp+1 would never show speedup).
+// ONLY its own group's Body. Because no two systems write the same component, the scheduler packs up to
+// `workers` of them into one concurrent round. Per entity per frame we run an iterated damped-oscillator
+// integrator (a small spring-physics simulation): HEAVY_ITERS sub-steps (multiple physics updates per
+// rendered frame) of expensive math calls (sin/cos/exp) — heavy enough that the parallel compute
+// amortizes the wave-sync/dispatch overhead, i.e. the per-frame work is large enough that coordination
+// overhead stops mattering (trivial arithmetic would never show speedup).
 //
 // We time the single-thread executor (scheduler.update) against the real pool (scheduler.updateThreaded)
-// at workers ∈ {1,2,4,8} (clamped to os.cpus().length) and report wall-clock + SPEEDUP. Results are
-// asserted IDENTICAL to single-thread by the smoke test; the magnitude here is informational.
+// at workers ∈ {1,2,4,8} (clamped to os.cpus().length) and report wall-clock (real elapsed) time +
+// SPEEDUP. Results are asserted IDENTICAL to single-thread by the smoke test; the magnitude here is
+// informational.
 
 import { cpus } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -26,23 +30,25 @@ import type { EntityHandle, PoolSystem, SystemDef, World } from 'ecsia'
 import type { SystemId } from '@ecsia/schema'
 
 // Mirror the kernel module's constants + inner loop EXACTLY (serial-equivalence by construction). The
-// mjs lives next to the m7 fixture so a raw worker can resolve @ecsia/core; we re-declare the math here
-// for the single-thread twin (importing the .mjs from TS is fine but re-stating keeps this file the
-// single source the typechecker sees).
+// mjs lives next to the m7-kernels.mjs fixture so a raw worker can resolve @ecsia/core; we re-declare
+// the math here for the single-thread twin (importing the .mjs from TS is fine but re-stating keeps
+// this file the single source the typechecker sees).
 const GROUP_COUNT = 8
 const HEAVY_ITERS = 512
 const DT = 1 / 60
 const OMEGA = 6.0
 const DAMP = 0.015
 
-// Each group is ONE archetype column. A SAB-backed (threaded) column reserves
+// Each group is ONE archetype column. A threaded column is backed by a SharedArrayBuffer (SAB —
+// memory several threads can read and write at once) and reserves
 // INITIAL_ROWS(64) × GROWTH_RESERVE_FACTOR(16) = 1024 rows of resizable-SAB address space. Crossing
-// 1024 rows forces a reallocation+rebind onto a NEW SAB; the worker pool now drains that re-backing
-// notice at the wave fence and re-wraps every worker's column view before the next dispatch (the
-// memory-buffers / serialization ), so growing past the reservation stays
-// byte-for-byte serial-equivalent. The boundary is covered directly by
+// 1024 rows forces re-backing — moving the column onto a NEW, larger SAB; the worker pool drains that
+// re-backing notice at the wave fence (the synchronization point between waves) and re-wraps every
+// worker's column view before the next dispatch (see docs/spec/memory-buffers.md and
+// docs/spec/serialization.md), so growing past the reservation stays byte-for-byte
+// serial-equivalent. The boundary is covered directly by
 // packages/scheduler/test/worker-growth-boundary.test.ts (1024 in-place grow + 1025/1040 re-backing).
-// No per-column cap: perGroup is free to cross 1024; the smoke still asserts threaded === serial.
+// No per-column cap: perGroup is free to cross 1024; the smoke test still asserts threaded === serial.
 const DEFAULT_PER_GROUP = 1024
 
 // Default relative to THIS file's source location (bench/worker-pool/ → repo root is ../../). The
@@ -221,7 +227,7 @@ export interface HeavyPoolReport {
 export interface HeavyPoolOptions {
   /**
    * Entities per group (GROUP_COUNT groups total). May exceed 1024: crossing the per-column reservation
-   * is now handled by the re-backing fence (see worker-growth-boundary.test.ts); no cap is applied.
+   * is handled by re-backing at the wave fence (see worker-growth-boundary.test.ts); no cap is applied.
    */
   readonly perGroup?: number
   /** Frames to run per configuration. Default 200. */
@@ -245,9 +251,10 @@ async function timeThreaded(perGroup: number, frames: number, workers: number, s
   })
   await pool.ready()
   try {
-    // One warmup frame (JIT + first-dispatch costs) BEFORE timing — but it mutates state, so we re-seed
-    // is unnecessary: the smoke test compares THREADED-vs-SERIAL over the SAME frame count without warmup
-    // (see heavy-pool.smoke.test.ts). Here we measure steady-state throughput, warmup excluded.
+    // One untimed warmup frame first, so JIT compilation and first-dispatch costs don't pollute the
+    // numbers. It mutates state, but re-seeding is unnecessary: the smoke test compares
+    // THREADED-vs-SERIAL over the SAME frame count without warmup (see heavy-pool.smoke.test.ts).
+    // Here we measure steady-state throughput, warmup excluded.
     await sched.updateThreaded(pool, 1)
     const t0 = performance.now()
     for (let f = 0; f < frames; f++) await sched.updateThreaded(pool, 1)

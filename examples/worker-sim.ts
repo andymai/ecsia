@@ -1,20 +1,9 @@
-// Example: worker-parallel particle simulation. Two DISJOINT-WRITE update systems (each integrates a
-// distinct particle group's Position from its Velocity) land in the SAME schedule wave because their
-// write-sets are disjoint — so the wave scheduler packs them into separate worker batches. The
-// threaded frame loop (scheduler.updateThreaded) walks that wave and dispatches the worker batches via
-// a RoundDispatcher.
-//
-// Design latitude (the "demonstrates the parallel path" gate): a real @ecsia/scheduler WorkerPool
-// needs a built worker-entry module + SAB-shared columns + a cross-origin-isolated host, which is
-// brittle to spin up inside a smoke test. The parallel-readiness contract
-// is that the SAME user code runs under an in-process dispatcher and an OS-thread pool — the mode is a
-// dispatcher choice, not a code-shape change. This example therefore drives updateThreaded with an
-// IN-PROCESS RoundDispatcher that runs each disjoint worker batch's kernel directly. It exercises the
-// real threaded frame loop (phase flips, wave walk, per-round dispatch, serial flush) and is the same
-// disjoint-write structure a WorkerPool would parallelize, while staying deterministic + non-flaky.
-//
-// Pass `parallel: false` to run the identical systems through the single-thread executor; the result
-// is byte-identical (the parallel-equivalence the wave scheduler guarantees).
+// A particle simulation built to run across worker threads. Two systems each pull a different
+// particle group toward the origin; because the two systems write different components, the
+// scheduler puts them in the same wave (a batch of systems that can safely run at the same time)
+// and splits them into separate worker batches. The thing to notice: pass `parallel: false` and
+// the identical systems run on one thread with a byte-identical result — the guarantee that
+// threaded results are byte-for-byte identical to single-threaded.
 
 import {
   createWorld,
@@ -32,7 +21,7 @@ export interface WorkerSimOptions {
   readonly ticks?: number
   /** Fixed timestep. Default 1/60. */
   readonly dt?: number
-  /** Run threaded (in-process dispatcher) vs single-thread. Default true. */
+  /** Run the threaded frame loop (with an in-process dispatcher) vs single-thread. Default true. */
   readonly parallel?: boolean
   /** Central gravity strength pulling particles toward the origin. Default 4. */
   readonly gravity?: number
@@ -43,14 +32,14 @@ export interface WorkerSimResult {
   readonly perGroup: number
   readonly ticks: number
   readonly parallel: boolean
-  /** Sum of kinetic energy across all particles (a single observable scalar for the smoke test). */
+  /** Sum of kinetic energy across all particles (one observable number for the smoke test). */
   readonly totalEnergy: number
-  /** End-state mean radius of group A and B (they should track each other — identical dynamics). */
+  /** Mean end radius of group A and B (they should track each other — identical dynamics). */
   readonly meanRadiusA: number
   readonly meanRadiusB: number
 }
 
-function lcg(seed: number): () => number {
+function seededRandom(seed: number): () => number {
   let s = seed >>> 0 || 1
   return () => {
     s = (Math.imul(s, 1664525) + 1013904223) >>> 0
@@ -64,12 +53,13 @@ export async function main(opts: WorkerSimOptions = {}): Promise<WorkerSimResult
   const dt = opts.dt ?? 1 / 60
   const parallel = opts.parallel ?? true
   const gravity = opts.gravity ?? 4
-  const rand = lcg(opts.seed ?? 7)
+  const rand = seededRandom(opts.seed ?? 7)
 
-  // Per-call defs (component ids are world-scoped). Two groups with DISJOINT component sets so their
-  // update systems have disjoint write-sets ⇒ they share one schedule wave and split into two worker
-  // batches. VelocityX is BOTH read+write because the gravity term writes velocity (honest to the
-  // scheduler).
+  // Component definitions get their id at world registration, so they're created per call. The
+  // two groups use separate component sets so UpdateA and UpdateB write different components —
+  // that's what lets them share one wave and split onto separate workers. Velocity appears in
+  // both read and write because the gravity term writes it: the declarations must stay honest,
+  // since the scheduler trusts them.
   const PositionA = defineComponent({ x: 'f32', y: 'f32' }, { name: 'positionA' })
   const VelocityA = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocityA' })
   const PositionB = defineComponent({ x: 'f32', y: 'f32' }, { name: 'positionB' })
@@ -134,9 +124,14 @@ export async function main(opts: WorkerSimOptions = {}): Promise<WorkerSimResult
   const scheduler = createScheduler(world, defs, parallel ? { workers: 2 } : undefined)
 
   if (parallel) {
-    // In-process RoundDispatcher: run each disjoint worker batch's kernel by systemId. Because the
-    // batches in a round are conflict-free by construction (disjoint write-sets), running them in
-    // index order is observably identical to true parallel execution (the wave-scheduler guarantee).
+    // A RoundDispatcher is the object the scheduler hands each round's batches to for execution —
+    // normally a pool of OS threads. Real threads need a built worker-entry module, storage backed
+    // by SharedArrayBuffer (memory several threads can read and write at once), and host opt-ins
+    // that are brittle inside a smoke test, so this example runs each batch's kernel (the function
+    // the worker thread runs) in-process instead. The user code is identical either way — the
+    // dispatcher is the only thing that changes. And because batches in a round never conflict
+    // (the two systems write different components), running them one after another produces the
+    // exact result true parallel execution would.
     const dispatcher = makeInProcessDispatcher(world, scheduler.plan.systems, defs)
     for (let t = 0; t < ticks; t++) await scheduler.updateThreaded(dispatcher, dt)
   } else {
@@ -146,7 +141,8 @@ export async function main(opts: WorkerSimOptions = {}): Promise<WorkerSimResult
   let energy = 0
   let radA = 0
   for (const h of groupA) {
-    // Read each component's fields out before resolving the next — the pooled ref rebinds per call.
+    // Copy a component's fields out before asking for the next — world.entity() reuses one
+    // pooled reference.
     const p = world.entity(h).read(PositionA)
     const radius = Math.hypot(p.x, p.y)
     const v = world.entity(h).read(VelocityA)
@@ -176,7 +172,7 @@ interface PlanSystemLike {
   readonly name: string
 }
 
-/** Build a RoundDispatcher that runs each worker batch's kernel in-process via the world's query. */
+/** A RoundDispatcher that runs each batch's system directly on this thread via the world's query. */
 function makeInProcessDispatcher(
   world: World,
   planSystems: readonly PlanSystemLike[],

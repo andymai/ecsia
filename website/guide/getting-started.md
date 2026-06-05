@@ -1,5 +1,11 @@
 # Getting started
 
+ecsia is an entity component system (ECS) for TypeScript. If the pattern is new to
+you, three words carry the whole thing: an **entity** is just an id — a thing in your
+world; a **component** is typed data attached to an entity; a **system** is a function
+that runs over every entity that has the components it asks for. This page takes you
+from install to your first running simulation.
+
 ::: warning Not published yet
 ecsia is **0.x and unpublished**. There is no `ecsia` on npm to `pnpm add` today — the install
 command below is the shape it will take **once published**. Until then, consume it from the local
@@ -10,7 +16,7 @@ workspace (see [Use it today](#use-it-today)).
 
 - **Node `>=22.13`** — the engine floor.
 - **ESM-only** — `"type": "module"`. ecsia ships no CommonJS build.
-- **TypeScript (strict)** — the typed accessors are the point; plain JS works but loses the surface.
+- **TypeScript (strict)** — the typed API is the point; plain JS works but loses the surface.
 
 ## Install (when published)
 
@@ -24,36 +30,42 @@ Until the package is on npm, work inside the monorepo. Clone it and build the wo
 
 ```sh
 pnpm install
-pnpm build              # tsc -b across all packages (strict, ESM, project refs)
-pnpm test               # vitest: unit + property (fast-check) + worker + type-level
+pnpm build              # compile all packages
+pnpm test               # run the full test suite
 ```
 
-Then write your program against `ecsia` exactly as the snippets here do — every example in
-`examples/` (boids, scene-graph, worker-parallel sim, damage-over-time cascade) imports from the
-umbrella and runs through the same build.
+Then write your program against `ecsia` exactly as the snippets here do. Every example in
+`examples/` imports from the same package and runs through the same build: a flock of
+birds, a parent/child scene hierarchy, a worker-parallel simulation, and a
+damage-over-time effect with automatic cleanup.
 
 ## Your first world
 
-A world owns entity storage. You register the components it can hold up front; spawning lands an entity
-in the archetype for its component set.
+A world holds your entities and their data. You tell it up front which components it
+can store, then spawn (create) entities with whatever combination of those components
+each one needs.
 
 ```ts
 import { createWorld, defineComponent } from 'ecsia'
 
-// Components are schema'd numeric SoA — each field is a typed column in a (optionally shared) TypedArray.
+// A component is a small schema of typed fields ('f32' = 32-bit float).
+// Each field becomes its own contiguous array in memory — that's what makes loops fast.
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
 
 const world = createWorld({ components: [Position, Velocity], maxEntities: 1 << 16 })
 
-// Spawn into an archetype, then write fields through a typed accessor — no casts.
+// Spawn an entity, then read and write its fields through typed accessors — no casts.
 const e = world.spawnWith(Position, Velocity)
 world.entity(e).write(Velocity).dx = 5
-world.entity(e).read(Velocity).dx // typed number; read views are deeply readonly
+world.entity(e).read(Velocity).dx // a typed number; read views are deeply readonly
 ```
 
-You can also initialise components inline with a **value-carrying spawn**, which writes through the
-tracked path in one call:
+Behind the scenes, entities with the same set of components are stored together in one
+table (ecsia calls that group an **archetype**) — that's a storage detail you mostly
+won't notice, but it's why queries are fast.
+
+You can also set component values right at spawn time, in one call:
 
 ```ts
 import { createWorld, defineComponent } from 'ecsia'
@@ -70,8 +82,10 @@ const e = world.spawnWith(
 
 ## Your first system
 
-A system declares its `{ read, write }` access. The scheduler reads those sets to derive a conflict
-DAG; your `run` body iterates a query and mutates columns through accessors.
+A system declares which components it reads and which it writes. That declaration does
+real work: it's how the scheduler later figures out which systems can safely run at the
+same time. Inside `run`, you iterate a **query** — every entity that has the components
+you ask for — and update fields through the same typed accessors.
 
 ```ts
 import {
@@ -86,10 +100,10 @@ world.spawnWith([Position, { x: 0, y: 0 }], [Velocity, { dx: 5, dy: -3 }])
 const dt = 1 / 60
 const Movement = defineSystem({
   name: 'Movement',
-  read: [Velocity],
-  write: [Position],
+  read: [Velocity],   // this system only reads velocities…
+  write: [Position],  // …and only writes positions
   run({ query }) {
-    // `e.position.x` is fully typed; iteration uses monomorphic column accessors (no Proxy).
+    // `e.position.x` is fully typed — a number, not a cast.
     for (const e of query(read(Velocity), write(Position))) {
       e.position.x += e.velocity.dx * dt
       e.position.y += e.velocity.dy * dt
@@ -103,8 +117,10 @@ scheduler.update(dt) // run one frame
 
 ## What's next
 
-- [Core concepts](/guide/core-concepts) — worlds, components (including rich string/object fields),
-  queries, systems, phases, and the pooled-ref rule.
-- [Parallelism](/guide/parallelism) — `threaded: true`, how waves are derived, and what
-  serial-equivalence means.
-- [Relations](/guide/relations) · [Reactivity](/guide/reactivity) · [Serialization](/guide/serialization).
+- [Core concepts](/guide/core-concepts) — worlds, components (including string/object
+  fields), queries, systems, and one rule about entity references you'll want to know
+  before writing real code.
+- [Multithreading](/guide/parallelism) — turn on `threaded: true`, see what runs where,
+  and why the results stay byte-for-byte identical.
+- [Linking entities](/guide/relations) · [Reacting to changes](/guide/reactivity) ·
+  [Saving and syncing](/guide/serialization).

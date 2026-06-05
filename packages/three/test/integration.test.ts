@@ -1,5 +1,5 @@
 // Integration: the full bridge driven frame-by-frame against a tiny moving sim. Unlike the
-// examples/three-boids smoke test (which checks only the END state via the example's main()), this
+// examples/threejs-birds smoke test (which checks only the END state via the example's main()), this
 // drives the scheduler one tick at a time and asserts that BOTH the bound Object3Ds AND the
 // InstancedMesh slots track the ECS columns at EVERY intermediate frame — the "tracks the sim over
 // frames" requirement. Everything is headless (Object3D / InstancedMesh / Matrix4 math core only).

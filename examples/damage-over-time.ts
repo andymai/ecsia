@@ -1,14 +1,9 @@
-// Example: damage-over-time + death + cascade. This is the exact program the newcomer-simulation
-// could NOT write from the old docs — it exercises every gap that forced source-reading:
-//
-//   • in-system structural mutation via `ctx.world` (remove a component, despawn an entity)
-//   • a `world.observe(onRemove(Health), ...)` death observer (registration, handler shape, fires on despawn)
-//   • a `ChildOf` EXCLUSIVE relation with `cascade: 'deleteSubject'` — despawning a PARENT (target)
-//     cascades to its CHILDREN (subjects)
-//
-// Burning entities take `stacks` damage per tick; each tick burns one stack down. At 0 stacks the
-// Burning component is removed; at hp <= 0 the entity despawns (and any ChildOf children despawn with
-// it). The onRemove(Health) observer records every death. Everything imports from ecsia.
+// A damage-over-time effect, with deaths and cascading cleanup. Burning entities lose hp each
+// tick (one simulation step) equal to their stacks (how many instances of the effect are active);
+// one stack burns off per tick, at 0 stacks the Burning component comes off, and at 0 hp the
+// entity despawns (is removed from the world) — taking its children with it, via a ChildOf
+// relation with cascade: 'deleteSubject'. Demonstrates structural changes from inside a system,
+// relations with automatic cleanup, and an observer (a callback fired on component removal).
 
 import {
   createWorld,
@@ -25,27 +20,27 @@ import type { EntityHandle } from 'ecsia'
 export interface MobSpec {
   /** Starting hit points. */
   readonly hp: number
-  /** Initial Burning stacks (damage/tick, decremented each tick). 0 = not burning. */
+  /** Initial Burning stacks (damage per tick; one stack burns off each tick). 0 = not burning. */
   readonly burning: number
   /** Index (into this spec array) of this mob's parent, or null for a root. Must be < own index. */
   readonly parent: number | null
 }
 
-export interface DotCascadeOptions {
+export interface DamageOverTimeOptions {
   readonly mobs?: readonly MobSpec[]
   /** Max ticks to run (the sim also stops early once nothing is burning). Default 16. */
   readonly ticks?: number
 }
 
-export interface DotCascadeResult {
+export interface DamageOverTimeResult {
   /** Spec indices of mobs still alive at the end. */
   readonly survivors: readonly number[]
   /** Spec indices of mobs that died (the complement of `survivors`). */
   readonly deaths: readonly number[]
   /**
-   * Number of onRemove(Health) handler fires — every death (direct burn-out AND cascaded child)
-   * raises Health-removal exactly once, so this equals `deaths.length`. It is the observer's own
-   * count, independent of the survivor scan, proving the death observer actually fired.
+   * How many times the onRemove(Health) observer fired. Every death — direct burn-out or
+   * cascaded child — removes Health exactly once, so this equals `deaths.length`. It is the
+   * observer's own count, independent of the survivor scan, proving the observer really ran.
    */
   readonly observedDeathCount: number
   /** Spec indices of survivors that still carry the Burning component. */
@@ -56,32 +51,34 @@ export interface DotCascadeResult {
 }
 
 const DEFAULT_MOBS: readonly MobSpec[] = [
-  { hp: 10, burning: 0, parent: null }, // 0 root parent (never burns; dies only via... it doesn't)
-  { hp: 6, burning: 3, parent: 0 }, //     1 child of 0 — burns out fast, despawns
-  { hp: 100, burning: 0, parent: 1 }, //   2 child of 1 — healthy, but cascades when 1 dies
-  { hp: 4, burning: 2, parent: null }, //  3 lone root — burns to death
-  { hp: 50, burning: 1, parent: 3 }, //    4 child of 3 — cascades when 3 dies
+  { hp: 10, burning: 0, parent: null }, // 0 root — never burns, survives untouched
+  { hp: 6, burning: 3, parent: 0 }, //     1 child of 0 — burns to death on tick 3
+  { hp: 100, burning: 0, parent: 1 }, //   2 child of 1 — healthy, but dies in 1's cascade
+  { hp: 4, burning: 2, parent: null }, //  3 lone root — singed down to 1 hp, survives
+  { hp: 50, burning: 1, parent: 3 }, //    4 child of 3 — barely singed, survives
 ]
 
-export function main(opts: DotCascadeOptions = {}): DotCascadeResult {
+export function main(opts: DamageOverTimeOptions = {}): DamageOverTimeResult {
   const specs = opts.mobs ?? DEFAULT_MOBS
   const ticks = opts.ticks ?? 16
 
-  // Per-call defs: component ids are world-scoped, so a fresh main() gets fresh registrations.
+  // Component definitions get their id when registered with a world, so a fresh main() makes
+  // fresh ones — that lets the example run repeatedly.
   const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
   const Burning = defineComponent({ stacks: 'i32' }, { name: 'burning' })
 
   const world = createWorld({ components: [Health, Burning], maxEntities: 1 << 16 })
   const rel = createRelations(world)
-  // Exclusive parent link; deleteSubject ⇒ despawning a PARENT (the target) despawns its CHILDREN
-  // (the subjects that point at it). The cascade is iterative, so deep chains unwind without recursion.
+  // ChildOf is an exclusive relation (each entity can have at most one — i.e. one parent).
+  // cascade: 'deleteSubject' means despawning the parent also despawns everything pointing at it;
+  // the cascade is iterative, so deep chains unwind without recursion.
   const ChildOf = rel.defineRelation(null, { exclusive: true, cascade: 'deleteSubject' })
 
-  // Death observer. Registration is `world.observe(term, handler)` — the onRemove(Health) term alone
-  // only describes WHAT to watch. onRemove(Health) fires both when the component is removed and when
-  // the entity is despawned (despawn enqueues a remove for every held component), including the
-  // children swept up by the deleteSubject cascade — so this counts every death exactly once.
-  // Handlers run at a deferred serial slot, never mid-system.
+  // The death observer — a callback that fires when a component is removed. Register with
+  // `world.observe(term, handler)`; the onRemove(Health) term describes WHAT to watch. It fires
+  // both when Health is removed directly and when its entity despawns (despawning removes every
+  // held component), including children swept up by the deleteSubject cascade — so this counts
+  // every death exactly once. Handlers run at a deferred serial slot, never mid-system.
   let observedDeathCount = 0
   const sub = world.observe(onRemove(Health), () => {
     observedDeathCount++
@@ -99,9 +96,10 @@ export function main(opts: DotCascadeOptions = {}): DotCascadeResult {
     if (parent !== null) rel.addPair(handles[i]!, ChildOf, handles[parent]!)
   }
 
-  // The DoT system mutates structure inside a serial system body via `ctx.world`. We collect the
-  // targets DURING iteration and apply remove/despawn AFTER it, so we never restructure the archetype
-  // we're walking. Despawning a parent here cascades its children (deleteSubject) at the same slot.
+  // The damage system changes structure from inside a system body via `ctx.world`. We collect
+  // targets DURING iteration and remove/despawn AFTER it, so we never restructure the archetype
+  // (the group of entities sharing the same component set) we're walking. Despawning a parent
+  // here cascades to its children (deleteSubject) at the same point.
   const Burn = defineSystem({
     name: 'Burn',
     read: [],
@@ -115,7 +113,7 @@ export function main(opts: DotCascadeOptions = {}): DotCascadeResult {
         if (e.health.hp <= 0) toDespawn.push(e.handle)
         else if (e.burning.stacks <= 0) toExtinguish.push(e.handle)
       }
-      for (const h of toExtinguish) w.remove(h, Burning) // stop the DoT, keep the entity
+      for (const h of toExtinguish) w.remove(h, Burning) // stop the effect, keep the entity
       for (const h of toDespawn) {
         if (w.isAlive(h)) w.despawn(h) // a parent despawn may have already cascaded this one
       }
@@ -128,7 +126,7 @@ export function main(opts: DotCascadeOptions = {}): DotCascadeResult {
   for (let t = 0; t < ticks; t++) {
     scheduler.update(1)
     ticksRun++
-    // Stop early once nothing is burning (the observable end state is reached).
+    // Stop early once nothing is burning — the end state is settled.
     let anyBurning = false
     for (const _ of world.query(read(Burning))) {
       anyBurning = true
@@ -146,8 +144,8 @@ export function main(opts: DotCascadeOptions = {}): DotCascadeResult {
   for (let i = 0; i < handles.length; i++) {
     const h = handles[i]!
     if (!world.isAlive(h)) {
-      // Spawn handles stay valid keys for isAlive/entity() (lenient by index); a dead one is a death,
-      // whether it burned out directly or was cascaded by its parent's despawn.
+      // Spawn handles stay valid keys for isAlive/entity() even after death. A dead one counts as
+      // a death whether it burned out directly or was cascaded by its parent's despawn.
       deaths.push(i)
       continue
     }

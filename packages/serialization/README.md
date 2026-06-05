@@ -1,13 +1,19 @@
 # @ecsia/serialization
 
-Serialization for [**ecsia**](https://github.com/andymai/ecsia) — a fast, type-safe Entity
-Component System for TypeScript.
+Saving and syncing for [**ecsia**](https://github.com/andymai/ecsia), an entity
+component system (ECS) for TypeScript — entities are ids, components are typed data
+attached to them, and systems are functions that run over entities with matching
+components.
 
-`@ecsia/serialization` round-trips a world bit-exactly (snapshot), produces version-stamped
-deltas that carry value **and** structural changes since a tick (no shadow map), remaps
-entity ids and relation targets on load, and provides a zero-copy worker bootstrap.
+`@ecsia/serialization` turns world state into payloads you can save or send. A
+**snapshot** — a complete copy of the world at one moment — round-trips bit-exactly. A
+**delta** carries just the changes, both values and structure, since a known tick (one
+simulation step), and is produced without keeping a second copy of your data to
+compare against. Deltas are version-stamped, and entity ids and relation targets are
+remapped on load. It can also hand a world to a worker thread without copying the
+data.
 
-> **Status:** 0.1.0, unpublished. Most users want the umbrella package
+> **Status:** 0.1.0, unpublished. New to ecsia? Start with the umbrella package
 > [`ecsia`](https://www.npmjs.com/package/ecsia), which re-exports
 > `createSnapshotSerializer`, `createDeltaSerializer`, `applyDelta`, and friends.
 
