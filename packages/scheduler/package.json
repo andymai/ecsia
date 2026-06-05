@@ -1,6 +1,6 @@
 {
   "name": "@ecsia/scheduler",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "System scheduler for ecsia: declare what each system reads and writes, and non-conflicting systems run in parallel across worker threads.",
   "keywords": [
     "ecs",
@@ -30,22 +30,13 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "scripts": {
-    "build": "tsc -b"
-  },
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "scripts": { "build": "tsc -b" },
   "dependencies": {
     "@ecsia/core": "workspace:*",
     "@ecsia/schema": "workspace:*"

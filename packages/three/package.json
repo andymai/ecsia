@@ -1,6 +1,6 @@
 {
   "name": "@ecsia/three",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "three.js bindings for ecsia: drive Object3D transforms and instanced meshes from components.",
   "keywords": [
     "ecs",
@@ -30,22 +30,13 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "scripts": {
-    "build": "tsc -b"
-  },
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "scripts": { "build": "tsc -b" },
   "dependencies": {
     "@ecsia/core": "workspace:*",
     "@ecsia/schema": "workspace:*"

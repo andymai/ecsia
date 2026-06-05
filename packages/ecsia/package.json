@@ -1,6 +1,6 @@
 {
   "name": "ecsia",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "Fast, type-safe entity component system for TypeScript with automatic multithreading.",
   "keywords": [
     "ecs",
@@ -33,19 +33,12 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "build": "tsc -b"
-  },
+  "files": ["dist"],
+  "scripts": { "build": "tsc -b" },
   "dependencies": {
     "@ecsia/core": "workspace:*",
     "@ecsia/schema": "workspace:*",
