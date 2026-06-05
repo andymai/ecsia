@@ -6,9 +6,9 @@ minor bumps and are documented until 1.0.
 
 ## 0.1.0 — unreleased
 
-First public, feature-complete release. The kernel is API-frozen at the M12 freeze.
+First public, feature-complete release. The kernel surface is API-frozen.
 
-Published as the umbrella package [`ecsia`](https://www.npmjs.com/package/ecsia) plus the
+Ships as the umbrella package `ecsia` plus the
 power-user scoped packages `@ecsia/core`, `@ecsia/schema`, `@ecsia/relations`,
 `@ecsia/scheduler`, `@ecsia/serialization`, `@ecsia/three`, and `@ecsia/devtools` — all at
 `0.1.0`.
@@ -36,8 +36,9 @@ power-user scoped packages `@ecsia/core`, `@ecsia/schema`, `@ecsia/relations`,
   splits each wave's disjoint-write work across threads over `SharedArrayBuffer` columns. The
   parallel result is **bit-identical** to the single-threaded result (entity set, component
   values, reactivity deltas), guaranteed by a fixed worker-index command-buffer merge and
-  verified by a serial-equivalence property test. A non-silent `postMessage` fallback covers
-  non-cross-origin-isolated hosts. **Columns that grow past their initial address-space
+  verified by a serial-equivalence property test. Without `SharedArrayBuffer` (in browsers:
+  without cross-origin isolation), ecsia logs a warning and runs single-threaded — never
+  silently. **Columns that grow past their initial address-space
   reservation re-back onto a new `SharedArrayBuffer`; the pool drains a re-backing notice at the
   wave fence and re-wraps every worker's view before the next dispatch (one generation check per
   wave when nothing grew), so threaded worlds stay serial-equivalent at any column size.**
