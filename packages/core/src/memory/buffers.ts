@@ -32,7 +32,19 @@ export interface RuntimeCapabilities {
 // Resizable {Shared}ArrayBuffer is ES2024; lib is ES2023. The maxByteLength option and `.grow()`
 // are typed through these localized ctor shims (mirroring allocU32.ts) rather than widening lib.
 type ResizableCtor<B> = new (byteLength: number, options: { maxByteLength: number }) => B
-const ResizableSab = SharedArrayBuffer as unknown as ResizableCtor<SharedArrayBuffer>
+// SharedArrayBuffer is ABSENT as a global in non-isolated browsers — never reference it at
+// module scope or in bare instanceof checks; resolve lazily behind typeof guards.
+const resizableSabCtor = (): ResizableCtor<SharedArrayBuffer> | undefined =>
+  typeof SharedArrayBuffer === 'undefined'
+    ? undefined
+    : (SharedArrayBuffer as unknown as ResizableCtor<SharedArrayBuffer>)
+const plainSab = (): (new (n: number) => SharedArrayBuffer) | undefined =>
+  typeof SharedArrayBuffer === 'undefined' ? undefined : SharedArrayBuffer
+export const isSharedBacking = (b: ArrayBufferLike): b is SharedArrayBuffer =>
+  typeof SharedArrayBuffer !== 'undefined' && b instanceof SharedArrayBuffer
+const missingSharedBacking = (): never => {
+  throw new Error('shared backing requested but SharedArrayBuffer is unavailable (page not cross-origin isolated)')
+}
 const ResizableAb = ArrayBuffer as unknown as ResizableCtor<ArrayBuffer>
 interface Growable {
   readonly maxByteLength?: number
@@ -83,7 +95,7 @@ export function probeCapabilities(
       ? (globalThis as { crossOriginIsolated?: boolean }).crossOriginIsolated
       : undefined
   const sabAvailable = sabCtor && coi !== false
-  const resizableSab = sabAvailable && tryCtor(() => new ResizableSab(8, { maxByteLength: 16 }))
+  const resizableSab = sabAvailable && tryCtor(() => new (resizableSabCtor() ?? missingSharedBacking())(8, { maxByteLength: 16 }))
   const resizableAb = tryCtor(() => new ResizableAb(8, { maxByteLength: 16 }))
   // Atomics.waitAsync is ES2024; lib is ES2023, so it is probed through a localized cast.
   const waitAsync =
@@ -212,11 +224,11 @@ export class Buffers {
   #allocBacking(byteLen: number, maxBytes: number): Backing {
     switch (this.capabilities.backing) {
       case 'resizable-sab':
-        return new ResizableSab(byteLen, { maxByteLength: maxBytes })
+        return new (resizableSabCtor() ?? missingSharedBacking())(byteLen, { maxByteLength: maxBytes })
       case 'resizable-ab':
         return new ResizableAb(byteLen, { maxByteLength: maxBytes })
       case 'grow-patch-sab':
-        return new SharedArrayBuffer(byteLen)
+        return new (plainSab() ?? missingSharedBacking())(byteLen)
       case 'grow-patch-ab':
         return new ArrayBuffer(byteLen)
     }
@@ -314,7 +326,7 @@ export class Buffers {
     const oldCapacity = col.backing.byteLength / rowBytes
     const newByteLen = newCapacity * rowBytes
     const newBacking: Backing = isSab(this.capabilities.backing)
-      ? new SharedArrayBuffer(newByteLen)
+      ? new (plainSab() ?? missingSharedBacking())(newByteLen)
       : new ArrayBuffer(newByteLen)
     const newView = makeView(col.layout.element, newBacking)
     newView.set(oldView as unknown as ArrayLike<number>)
@@ -360,7 +372,7 @@ export class Buffers {
     const columns: ExportedColumnHandle[] = []
     const regions: ExportedRegionHandle[] = []
     for (const entry of this.#registry.values()) {
-      if (!(entry.backing instanceof SharedArrayBuffer)) continue
+      if (!(isSharedBacking(entry.backing))) continue
       if ('layout' in entry) {
         columns.push({ key: entry.key, backing: entry.backing, layout: entry.layout })
       } else {
@@ -374,7 +386,7 @@ export class Buffers {
 
 // §6.4 serialization boundary: zero-copy SAB vs copy snapshot.
 export function sharedBacking(col: Column): SharedArrayBuffer | null {
-  return col.backing instanceof SharedArrayBuffer ? col.backing : null
+  return isSharedBacking(col.backing) ? col.backing : null
 }
 
 export function snapshotInto(col: Column, count: number, out: TypedArray, outOffset: number): number {
