@@ -27,6 +27,8 @@ export function explainPlan(input: PlanLike, names?: ReadonlyMap<number, string>
     name: sb.name,
     reads: (sb.readIds as readonly number[]).map((c) => nameOf(c)),
     writes: (sb.writeIds as readonly number[]).map((c) => nameOf(c)),
+    publishes: sb.publishTopics.map((t) => t.name),
+    consumes: sb.consumeTopics.map((t) => t.name),
     workerEligible: sb.workerEligible,
   })
 
@@ -38,9 +40,19 @@ export function explainPlan(input: PlanLike, names?: ReadonlyMap<number, string>
     return { index, batches }
   })
 
-  // --- pinned: every system landing in a main-thread slot (workerIndex -1). Reason discriminates a
-  // structural rich-field pin (workerEligible === false) from an eligible-but-main-thread placement
-  // (e.g. a single-threaded plan, workers === 0). ---
+  // --- pinned: every system landing in a main-thread slot (workerIndex -1). Reason discriminates
+  // the two structural ineligibility causes (rich fields vs topic consume) from an
+  // eligible-but-main-thread placement (e.g. a single-threaded plan, workers === 0). A system with
+  // BOTH causes reports 'rich-fields': the data constraint is permanent, the consume pin lifts when
+  // worker-side consume ships. ---
+  const pinReason = (sb: SystemBox): PinExplain['reason'] => {
+    if (sb.workerEligible) return 'main-thread'
+    const hasRichFields = [...(sb.def.read ?? []), ...(sb.def.write ?? [])].some((c) =>
+      c.fields.some((f) => !f.shareable),
+    )
+    if (hasRichFields) return 'rich-fields'
+    return sb.consumeTopics.length > 0 ? 'topic-consumer' : 'rich-fields'
+  }
   const pinnedSeen = new Set<number>()
   const pinned: PinExplain[] = []
   for (const wave of plan.waves) {
@@ -51,7 +63,7 @@ export function explainPlan(input: PlanLike, names?: ReadonlyMap<number, string>
         if (pinnedSeen.has(id)) continue
         pinnedSeen.add(id)
         const sb = systems[id]!
-        pinned.push({ system: sb.name, reason: sb.workerEligible ? 'main-thread' : 'rich-fields' })
+        pinned.push({ system: sb.name, reason: pinReason(sb) })
       }
     }
   }

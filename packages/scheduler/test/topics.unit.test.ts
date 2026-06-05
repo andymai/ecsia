@@ -211,6 +211,26 @@ describe('retention + cursor snap through the frame loop', () => {
 })
 
 describe('world.publish timing', () => {
+  test('events published BEFORE the first createScheduler are delivered to first-plan consumers', () => {
+    const T = defineTopic('PrePlan', { n: 'i32' })
+    const world = createWorld({})
+    world.publish(T, { n: 42 }) // input-event path, before any plan exists
+    const delivered: number[] = []
+    const Cons = defineSystem({
+      name: 'Cons',
+      consume: [T],
+      run({ consume }) {
+        for (const ev of consume(T)) delivered.push(ev.n)
+      },
+    })
+    const sched = createScheduler(world, [Cons])
+    sched.update(1)
+    // "every system sees it next update" — the first plan's consumers must include pre-plan events.
+    expect(delivered).toEqual([42])
+    sched.update(1)
+    expect(delivered).toEqual([42]) // exactly-once, no replay on the next frame
+  })
+
   test('events published between frames are visible to EVERY system next update, ahead of wave 0', () => {
     const T = defineTopic('Input', { n: 'i32' })
     const world = createWorld({})
@@ -327,6 +347,8 @@ describe('plan shape: DAG edges yes, WAVE-CONFLICT no', () => {
     const S2 = defineSystem({ name: 'S2', publish: [B], consume: [A], run() {} })
     expect(() => createScheduler(world, [S1, S2])).toThrow(CycleError)
     expect(() => createScheduler(world, [S1, S2])).toThrow(/publishes topic/)
+    // The report names the topic-specific break: explicit after for same-frame, deny for next-frame.
+    expect(() => createScheduler(world, [S1, S2])).toThrow(/consumer\.after = \[publisher\].*inAnyOrderWith\(publisher, consumer\).*next-frame/s)
   })
 
   test('two same-wave publishers of one topic share a ROUND under workers > 0 (no WAVE-CONFLICT)', () => {

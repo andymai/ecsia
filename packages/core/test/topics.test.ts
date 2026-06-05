@@ -186,13 +186,22 @@ describe('retention (double-buffered by frame) + cursor snap', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/topic 'Retain'.*'Sleepy'.*missed 2 event/))
   })
 
-  test('a late reader initializes at the current head — no replay of retained events', () => {
+  test('initCursor: first-plan readers start at the oldest retained event; post-update joins start at the head', () => {
     const T = defineTopic('Late', { n: 'i32' })
     const world = createWorld({})
     world.publish(T, { n: 1 })
-    world.__topics.initCursor(erased(T), 'newcomer')
+    // Before any update has run, an initCursor reader is a FIRST-plan consumer: pre-plan
+    // world.publish events are delivered, not silently invisible.
+    world.__topics.initCursor(erased(T), 'first-plan')
     world.publish(T, { n: 2 })
-    expect(vals(world.__topics.consume(erased(T), 'newcomer'))).toEqual([2])
+    expect(vals(world.__topics.consume(erased(T), 'first-plan'))).toEqual([1, 2])
+    // Once an update has run, a newly-initialized reader is a late join: head start, no replay.
+    world.__topics.beginUpdate()
+    world.__topics.endUpdate()
+    world.publish(T, { n: 3 })
+    world.__topics.initCursor(erased(T), 'newcomer')
+    world.publish(T, { n: 4 })
+    expect(vals(world.__topics.consume(erased(T), 'newcomer'))).toEqual([4])
   })
 })
 
@@ -246,6 +255,41 @@ describe('phase + update guards (the canonical ring is serial-phase-only)', () =
     expect(() => world.publish(T, { n: 2 })).toThrow(/during world update/)
     world.__topics.endUpdate()
     world.publish(T, { n: 3 })
+  })
+
+  test('beginUpdate while an update is already in progress throws (reentrancy guard)', () => {
+    const world = createWorld({})
+    world.__topics.beginUpdate()
+    expect(() => world.__topics.beginUpdate()).toThrow(/beginUpdate re-entered/)
+    world.__topics.endUpdate()
+    world.__topics.beginUpdate() // legal again after the update ends
+    world.__topics.endUpdate()
+  })
+})
+
+describe('stageWords drop paths (worker OP_PUBLISH records that cannot be routed)', () => {
+  test('an unknown topic id warns and drops the record without corrupting the stream', () => {
+    const T = defineTopic('KnownTopic', { n: 'i32' })
+    const world = createWorld({})
+    world.__topics.register(erased(T))
+    world.__topics.stageWords(9999, 0, [42], 0, 1)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/OP_PUBLISH names unknown topic id 9999.*dropped/))
+    world.__topics.mergeStaged()
+    expect(world.__topics.bounds(erased(T)).head).toBe(0) // nothing merged
+  })
+
+  test('a field-word width mismatch warns naming the topic and drops the record', () => {
+    const T = defineTopic('WidthTopic', { a: 'i32', b: 'i32' }) // 2 field words
+    const world = createWorld({})
+    world.__topics.register(erased(T))
+    world.__topics.stageWords(T.id as number, 0, [1, 2, 3], 0, 3)
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/OP_PUBLISH for topic 'WidthTopic' carries 3 field words, expected 2.*dropped/),
+    )
+    // A well-formed record on the same topic still routes.
+    world.__topics.stageWords(T.id as number, 0, [7, 8], 0, 2)
+    world.__topics.mergeStaged()
+    expect(vals(world.__topics.consume(erased(T), 'r'), 'a')).toEqual([7])
   })
 })
 

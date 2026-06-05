@@ -4,7 +4,7 @@
 // right kind + component name, the wave ordering separates the conflicting systems, and the pin reason.
 
 import { describe, expect, test } from 'vitest'
-import { createWorld, defineComponent, object } from '@ecsia/core'
+import { createWorld, defineComponent, defineTopic, object } from '@ecsia/core'
 import { createScheduler, defineSystem, inAnyOrderWith } from '@ecsia/scheduler'
 import { explainPlan, componentNameMap, renderText } from '../src/index.js'
 
@@ -158,6 +158,63 @@ describe('explainPlan — the WHY of a real schedule', () => {
     for (const c of plan.conflicts) {
       expect(coord.get(c.a)).not.toBe(coord.get(c.b)) // never a same-slot (concurrent) pair
     }
+  })
+
+  test('a topic consumer is pinned with reason topic-consumer and the explain carries publish/consume', () => {
+    const T = defineTopic('dt_evt', { n: 'i32' })
+    const world = createWorld({})
+    const Pub = defineSystem({ name: 'Pub', publish: [T], run() {} })
+    const Cons = defineSystem({ name: 'Cons', consume: [T], run() {} })
+    const plan = explainPlan(createScheduler(world, [Pub, Cons]))
+
+    const pin = plan.pinned.find((p) => p.system === 'Cons')
+    expect(pin).toBeDefined()
+    expect(pin!.reason).toBe('topic-consumer')
+
+    // The topic edge's WHY is visible: the publisher's wave precedes the consumer's, and the
+    // per-system explain names the topic on both ends.
+    const waveOf = (name: string): number => {
+      for (const w of plan.waves) {
+        for (const b of w.batches) if (b.systems.some((s) => s.name === name)) return w.index
+      }
+      return -1
+    }
+    expect(waveOf('Pub')).toBeLessThan(waveOf('Cons'))
+    const all = plan.waves.flatMap((w) => w.batches).flatMap((b) => b.systems)
+    expect(all.find((s) => s.name === 'Pub')!.publishes).toEqual(['dt_evt'])
+    expect(all.find((s) => s.name === 'Pub')!.consumes).toEqual([])
+    expect(all.find((s) => s.name === 'Cons')!.consumes).toEqual(['dt_evt'])
+    expect(all.find((s) => s.name === 'Cons')!.publishes).toEqual([])
+  })
+
+  test('a system with BOTH rich fields and a topic consume reports rich-fields (the permanent cause)', () => {
+    const T = defineTopic('dt_both', { n: 'i32' })
+    const Rich = defineComponent({ obj: object<string>() }, { name: 'dt_rich_both' })
+    const world = createWorld({ components: [Rich] })
+    const Pub = defineSystem({ name: 'Pub', publish: [T], run() {} })
+    const Both = defineSystem({ name: 'Both', write: [Rich], consume: [T], run() {} })
+    const plan = explainPlan(createScheduler(world, [Pub, Both]))
+    const pin = plan.pinned.find((p) => p.system === 'Both')
+    expect(pin).toBeDefined()
+    expect(pin!.reason).toBe('rich-fields')
+  })
+
+  test('renderText shows pub/con segments only for topic-using systems', () => {
+    const T = defineTopic('dt_render', { n: 'i32' })
+    const world = createWorld({})
+    const Pub = defineSystem({ name: 'Pub', publish: [T], run() {} })
+    const Cons = defineSystem({ name: 'Cons', consume: [T], run() {} })
+    const Plain = defineSystem({ name: 'Plain', run() {} })
+    const txt = renderText(explainPlan(createScheduler(world, [Pub, Cons, Plain])))
+    expect(txt).toContain('pub:[dt_render]')
+    expect(txt).toContain('con:[dt_render]')
+    // Per-system segment (batch lines join concurrent systems with '  |  ').
+    const plainSeg = txt
+      .split('\n')
+      .flatMap((l) => l.split('  |  '))
+      .find((seg) => seg.includes('Plain'))!
+    expect(plainSeg).not.toContain('pub:[')
+    expect(plainSeg).not.toContain('con:[')
   })
 
   test('accepts either a SchedulerHandle or a bare plan and yields identical output', () => {

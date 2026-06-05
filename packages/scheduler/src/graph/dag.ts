@@ -30,13 +30,13 @@ function adjacency(n: number, edges: readonly Edge[]): SystemId[][] {
   return succ
 }
 
-function edgeCause(edges: readonly Edge[], from: SystemId, to: SystemId): string {
+function edgeOf(edges: readonly Edge[], from: SystemId, to: SystemId): Edge | undefined {
   const fn = from as unknown as number
   const tn = to as unknown as number
   for (const e of edges) {
-    if ((e.from as unknown as number) === fn && (e.to as unknown as number) === tn) return e.cause
+    if ((e.from as unknown as number) === fn && (e.to as unknown as number) === tn) return e
   }
-  return ''
+  return undefined
 }
 
 /**
@@ -75,10 +75,13 @@ function detectCycle(systems: readonly SystemBox[], succ: readonly SystemId[][],
 function reportChain(systems: readonly SystemBox[], edges: readonly Edge[], cycle: readonly SystemId[]): string {
   const name = (id: SystemId): string => systems[id as unknown as number]?.name ?? `#${id as unknown as number}`
   const lines: string[] = ['System cycle detected:']
+  let hasTopicEdge = false
   for (let i = 0; i + 1 < cycle.length; i++) {
     const from = cycle[i]!
     const to = cycle[i + 1]!
-    const cause = edgeCause(edges, from, to)
+    const edge = edgeOf(edges, from, to)
+    if (edge?.topic === true) hasTopicEdge = true
+    const cause = edge?.cause ?? ''
     lines.push(`  ${name(from)} → ${name(to)}${cause ? `   (${cause})` : ''}`)
   }
   // Suggest breaking the first implicit-looking edge with inAnyOrderWith.
@@ -87,6 +90,11 @@ function reportChain(systems: readonly SystemBox[], edges: readonly Edge[], cycl
   lines.push(
     `Break it by declaring inAnyOrderWith(${a}, ${b}) if the order is irrelevant, or remove one of the conflicting declarations.`,
   )
+  if (hasTopicEdge) {
+    lines.push(
+      'A topic edge (publisher → consumer) is part of this cycle: keep same-frame delivery by declaring consumer.after = [publisher] (the explicit edge overrides the opposing one), or declare inAnyOrderWith(publisher, consumer) to suppress the topic edge in BOTH directions — the consumer then falls back to next-frame delivery.',
+    )
+  }
   return lines.join('\n')
 }
 

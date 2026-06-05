@@ -98,7 +98,9 @@ function renderPlanText(p: PlanExplain): string {
     wave.batches.forEach((batch, b) => {
       const sys = batch.systems
         .map((s) => {
-          const access = `r:[${s.reads.join(',')}] w:[${s.writes.join(',')}]`
+          let access = `r:[${s.reads.join(',')}] w:[${s.writes.join(',')}]`
+          if (s.publishes.length > 0) access += ` pub:[${s.publishes.join(',')}]`
+          if (s.consumes.length > 0) access += ` con:[${s.consumes.join(',')}]`
           return `${s.name}${s.workerEligible ? '' : '*'} ${access}`
         })
         .join('  |  ')

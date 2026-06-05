@@ -65,7 +65,13 @@ interface TopicRuntime {
   /** Per-publishing-system staging segments: SystemId -> FIFO field words + event count. */
   readonly staged: Map<number, { words: number[]; events: number }>
   stagedEvents: number
-  /** Per-reader consume cursors (sequence numbers), keyed by a stable reader key (system name). */
+  /**
+   * Per-reader consume cursors (sequence numbers), keyed by a stable reader key (system name).
+   * Name-keyed entries are retained across re-plans INTENTIONALLY: a consumer removed and re-added
+   * under the same name resumes its cursor, preserving exactly-once delivery across the re-plan
+   * (head-init would silently skip events; replay would double-deliver). The cost is one map entry
+   * per never-returning name — bounded by distinct consumer names ever planned, never per-event.
+   */
   readonly cursors: Map<string, number>
   /** The pooled consume view + its rebind hook (one per topic; never store the view). */
   readonly view: Record<string, unknown>
@@ -95,6 +101,13 @@ export class Topics {
   /** Topics with >= 1 staged segment this cycle — the O(1) merge-skip gate, not an event count. */
   #stagedTopics = 0
   #inUpdate = false
+  /**
+   * Has any update (or manual merge) ever run? Discriminates the FIRST plan from a late re-plan:
+   * a consumer in the first plan must see `world.publish` events appended before the plan existed
+   * (the input-event contract — "every system sees it next update"), while a consumer added by a
+   * re-plan after frames have run starts at the head (no replay of stale retained events).
+   */
+  #everUpdated = false
 
   constructor(cfg: TopicsConfig) {
     this.#buffers = cfg.buffers
@@ -192,7 +205,11 @@ export class Topics {
 
   /** Scheduler frame hooks: world.publish is illegal while an update is in progress. */
   beginUpdate(): void {
+    if (this.#inUpdate) {
+      throw new Error('topics: beginUpdate re-entered — a world update is already in progress (nested scheduler.update?)')
+    }
     this.#inUpdate = true
+    this.#everUpdated = true
   }
 
   endUpdate(): void {
@@ -259,6 +276,7 @@ export class Topics {
    * execution mode.
    */
   mergeStaged(): void {
+    this.#everUpdated = true
     if (this.#stagedTopics === 0) return
     if (this.#phase() !== 'serial') {
       throw new Error('topics: canonical stream merge attempted outside the serial phase')
@@ -303,10 +321,15 @@ export class Topics {
     if (retained > rt.peakRows) rt.peakRows = retained
   }
 
-  /** Eagerly position a reader's cursor at the current head (a late-added system sees no replay). */
+  /**
+   * Eagerly position a reader's cursor at plan time. Before the first update has ever run
+   * (the FIRST plan), the cursor starts at the oldest retained event so `world.publish` calls made
+   * before `createScheduler` are still delivered; once any update has run, a newly-added reader
+   * (a late re-plan join) starts at the current head — no replay of stale retained events.
+   */
   initCursor(def: TopicDef<Schema>, readerKey: string): void {
     const rt = this.#runtimeOf(def)
-    if (!rt.cursors.has(readerKey)) rt.cursors.set(readerKey, rt.head)
+    if (!rt.cursors.has(readerKey)) rt.cursors.set(readerKey, this.#everUpdated ? rt.head : rt.tail)
   }
 
   /**
@@ -315,8 +338,9 @@ export class Topics {
    * yielded view is pooled: read fields inside the loop, never store the view itself.
    *
    * A reader with no cursor starts at the oldest retained event (the manual-consumption default);
-   * scheduler consumers are positioned at the head eagerly via `initCursor` at plan time, which is
-   * what gives a late-added system its no-replay start.
+   * scheduler consumers are positioned eagerly via `initCursor` at plan time — at the oldest
+   * retained event for the first plan (pre-plan `world.publish` events are delivered), at the
+   * current head for a re-plan join (no replay).
    */
   *consume(def: TopicDef<Schema>, readerKey: string): IterableIterator<Record<string, unknown>> {
     const rt = this.#runtimeOf(def)

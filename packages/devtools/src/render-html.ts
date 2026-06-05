@@ -104,7 +104,10 @@ function renderPlanHTML(p: PlanExplain): string {
         const sys = batch.systems
           .map((s) => {
             const pin = s.workerEligible ? '' : ' <span class="pin">(pinned)</span>'
-            return `<span class="sys"><b>${esc(s.name)}</b>${pin}<br><span class="muted">r:[${esc(s.reads.join(', '))}] w:[${esc(s.writes.join(', '))}]</span></span>`
+            let access = `r:[${esc(s.reads.join(', '))}] w:[${esc(s.writes.join(', '))}]`
+            if (s.publishes.length > 0) access += ` pub:[${esc(s.publishes.join(', '))}]`
+            if (s.consumes.length > 0) access += ` con:[${esc(s.consumes.join(', '))}]`
+            return `<span class="sys"><b>${esc(s.name)}</b>${pin}<br><span class="muted">${access}</span></span>`
           })
           .join('')
         return `<div class="batch">batch ${b}: ${sys || '<span class="muted">(empty)</span>'}</div>`

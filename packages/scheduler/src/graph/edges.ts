@@ -15,6 +15,9 @@ export interface Edge {
   readonly weight: EdgeWeight
   /** Human-readable cause used in cycle reporting. */
   readonly cause: string
+  /** Set when a topic publisher → consumer derivation contributed — the cycle reporter uses it
+   *  to suggest the topic-specific break (consumer.after vs inAnyOrderWith). */
+  readonly topic?: true
 }
 
 function key(from: number, to: number): number {
@@ -41,7 +44,8 @@ function offer(b: EdgeBuilders, edge: Edge): void {
   if (prev === undefined || edge.weight > prev.weight) {
     b.best.set(k, edge)
   } else if (edge.weight === prev.weight && edge.cause !== prev.cause) {
-    b.best.set(k, { ...prev, cause: `${prev.cause}; ${edge.cause}` })
+    const merged: Edge = { ...prev, cause: `${prev.cause}; ${edge.cause}` }
+    b.best.set(k, edge.topic === true ? { ...merged, topic: true } : merged)
   }
 }
 
@@ -236,6 +240,7 @@ function deriveTopicEdges(systems: readonly SystemBox[], denied: Set<number>, b:
           to: c,
           weight: EdgeWeight.IMPLICIT,
           cause: `${nameOf(systems, p)} publishes topic '${topic.name}' consumed by ${nameOf(systems, c)}`,
+          topic: true,
         })
       }
     }

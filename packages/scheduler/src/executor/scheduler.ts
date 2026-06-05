@@ -93,8 +93,10 @@ export function createScheduler(
   const systems = resolveOrdering(lowerSystems(defs, accessStrideWords), defs)
 
   // Register every declared topic with the world (idempotent — re-plans and world.publish-first
-  // topics share the same store), then position each consumer's cursor at the CURRENT visible head:
-  // a system added by a re-plan sees only events published after it joined, never a stale replay.
+  // topics share the same store), then position each consumer's cursor: a FIRST-plan consumer
+  // starts at the oldest retained event (world.publish before createScheduler is still delivered),
+  // while a system added by a re-plan after frames have run starts at the current visible head —
+  // it sees only events published after it joined, never a stale replay.
   const topics = world.__topics
   for (const sb of systems) {
     for (const t of sb.publishTopics) topics.register(t)
