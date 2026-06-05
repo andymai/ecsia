@@ -20,6 +20,14 @@ type DeferredOp =
       /** Value-carrying spawn (Item 8): `[def, values]` initializers applied after placement. */
       readonly values: readonly (readonly [ComponentDef<Schema>, Record<string, unknown>])[]
     }
+  | {
+      /** A reserved handle whose placement is a caller-supplied build (the relations template-spawn
+       * path: one migration + per-field copy + pair bookkeeping that typed verbs cannot express).
+       * Main-thread-only closure — this buffer never crosses a worker boundary. */
+      readonly kind: 'buildReserved'
+      readonly handle: EntityHandle
+      readonly build: (handle: EntityHandle) => void
+    }
   | { readonly kind: 'add'; readonly handle: EntityHandle; readonly def: ComponentDef<Schema> }
   | { readonly kind: 'remove'; readonly handle: EntityHandle; readonly def: ComponentDef<Schema> }
   | { readonly kind: 'despawn'; readonly handle: EntityHandle }
@@ -99,6 +107,9 @@ export class ObserverCommandBuffer {
   ): void {
     this.#pending.push({ kind: 'spawnWith', handle, defs: defs.slice(), values: values.slice() })
   }
+  stageBuildReserved(handle: EntityHandle, build: (handle: EntityHandle) => void): void {
+    this.#pending.push({ kind: 'buildReserved', handle, build })
+  }
   stageAdd(handle: EntityHandle, def: ComponentDef<Schema>): void {
     this.#pending.push({ kind: 'add', handle, def })
   }
@@ -146,6 +157,15 @@ export class ObserverCommandBuffer {
           if (apply.isAlive(op.handle)) {
             apply.placeReserved(op.handle, op.defs)
             for (const [def, values] of op.values) apply.writePayload(op.handle, def, values)
+          }
+          break
+        }
+        case 'buildReserved': {
+          // Place the reserved handle into the EMPTY archetype, then hand it to the staged build
+          // (which performs its own single migration + value writes — the spawnFrom flush leg).
+          if (apply.isAlive(op.handle)) {
+            apply.placeReserved(op.handle, [])
+            op.build(op.handle)
           }
           break
         }

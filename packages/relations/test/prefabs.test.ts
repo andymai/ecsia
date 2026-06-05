@@ -14,7 +14,7 @@
 // archetype accounting: N same-shape instances share ONE archetype; subtypes get their own.
 
 import { describe, it, expect, vi } from 'vitest'
-import { createWorld, defineComponent, defineTag, has, object, read, staticString, vec2, without } from '@ecsia/core'
+import { createWorld, defineComponent, defineTag, has, object, onAdd, onRemove, read, staticString, vec2, without } from '@ecsia/core'
 import type { ComponentDef, EntityHandle, Schema } from '@ecsia/core'
 import { createRelations, Wildcard } from '../src/index.js'
 
@@ -184,6 +184,24 @@ describe('prefabs — inheritance chains & override precedence', () => {
       warn.mockRestore()
     }
   })
+
+  it('re-parenting: addPair(B, IsA, A) after instances exist affects FUTURE spawns only', () => {
+    const { world, rel, Health } = makeKit()
+    const a = rel.definePrefab([Health, { hp: 1 }])
+    const b = rel.definePrefab([Health, { hp: 2 }])
+    const before = rel.spawnFrom(b)
+    rel.addPair(b, rel.IsA, a)
+    const after = rel.spawnFrom(b)
+
+    expect(rel.hasPair(before, rel.IsA, a)).toBe(false) // the stamp is immutable
+    expect(rel.hasPair(before, rel.IsA, b)).toBe(true)
+    expect(rel.hasPair(after, rel.IsA, a)).toBe(true) // the new ancestor records going forward
+    expect(rel.hasPair(after, rel.IsA, b)).toBe(true)
+
+    const ofA: number[] = []
+    world.query(rel.Pair(rel.IsA, a)).each((m) => ofA.push(m.handle as number))
+    expect(ofA).toEqual([after as number])
+  })
 })
 
 describe('prefabs — default query exclusion', () => {
@@ -257,7 +275,7 @@ describe('prefabs — lifecycle & archetype accounting', () => {
       expect(isaQuery.count).toBe(1)
 
       world.despawn(goblin)
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('live instance'))
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('live subject'))
       expect(world.isAlive(e)).toBe(true)
       expect((world.entity(e).read(Health) as { hp: number }).hp).toBe(35) // data survives
       expect(rel.hasRelation(e, rel.IsA)).toBe(false) // the edge does not
@@ -290,6 +308,12 @@ describe('prefabs — lifecycle & archetype accounting', () => {
     expect(() => rel.spawnFrom(goblin)).toThrow(/dead/)
   })
 
+  it('spawnFrom on a live NON-prefab entity throws in dev (same discipline as definePrefab extends)', () => {
+    const { world, rel, Health } = makeKit()
+    const plain = world.spawnWith([Health, { hp: 5 }])
+    expect(() => rel.spawnFrom(plain)).toThrow(/not a Prefab-tagged/)
+  })
+
   it('definePrefab({ extends }) with a dead base throws in dev', () => {
     const { world, rel, Health } = makeKit()
     const goblin = rel.definePrefab([Health, { hp: 35 }])
@@ -319,5 +343,113 @@ describe('prefabs — lifecycle & archetype accounting', () => {
     expect(archOf(world, b as number)).not.toBe(first)
     // …and the templates never share an archetype with their instances (the Prefab bit).
     expect(archOf(world, goblin as number)).not.toBe(first)
+  })
+})
+
+describe('prefabs — cold archetypes (the copy path must resolve cold rows)', () => {
+  it('maxHotArchetypes: 1 — definePrefab + spawnFrom copy values through cold blocks, not zeros', () => {
+    const Health = defineComponent({ hp: 'i32', regen: 'f32' }, { name: 'health' })
+    const world = createWorld({ prefabs: true, components: [Health], maxHotArchetypes: 1 })
+    const rel = createRelations(world)
+    // Only EMPTY is hot: the template's archetype AND the instance's archetype are both cold.
+    const goblin = rel.definePrefab([Health, { hp: 35, regen: 0.5 }])
+    const e = rel.spawnFrom(goblin)
+    expect((world.entity(e).read(Health) as { hp: number; regen: number }).hp).toBe(35)
+    expect((world.entity(e).read(Health) as { hp: number; regen: number }).regen).toBe(0.5)
+  })
+
+  it('maxHotArchetypes: 1 — definePrefab({ extends }) flattens a COLD base template correctly', () => {
+    const Health = defineComponent({ hp: 'i32', regen: 'f32' }, { name: 'health' })
+    const Attack = defineComponent({ dmg: 'i32' }, { name: 'attack' })
+    const world = createWorld({ prefabs: true, components: [Health, Attack], maxHotArchetypes: 1 })
+    const rel = createRelations(world)
+    const goblin = rel.definePrefab([Health, { hp: 35, regen: 0.5 }], [Attack, { dmg: 10 }])
+    const boss = rel.definePrefab({ extends: goblin }, [Health, { hp: 200 }])
+    const e = rel.spawnFrom(boss)
+    expect((world.entity(e).read(Health) as { hp: number; regen: number }).hp).toBe(200) // child wins
+    expect((world.entity(e).read(Health) as { hp: number; regen: number }).regen).toBe(0.5) // base survives the cold flatten
+    expect((world.entity(e).read(Attack) as { dmg: number }).dmg).toBe(10)
+  })
+
+  it('maxHotArchetypes: 2 — a HOT template copies into a COLD instance archetype (mixed chain)', () => {
+    const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
+    const world = createWorld({ prefabs: true, components: [Health], maxHotArchetypes: 2 })
+    const rel = createRelations(world)
+    // Creation order: EMPTY (hot) → [Health, Prefab] for goblin (hot) → everything after is cold.
+    const goblin = rel.definePrefab([Health, { hp: 35 }])
+    const boss = rel.definePrefab({ extends: goblin }, [Health, { hp: 200 }]) // cold, flattened from hot
+    const i1 = rel.spawnFrom(goblin) // cold instance, hot source
+    const i2 = rel.spawnFrom(boss) // cold instance, cold source
+    expect((world.entity(i1).read(Health) as { hp: number }).hp).toBe(35)
+    expect((world.entity(i2).read(Health) as { hp: number }).hp).toBe(200)
+  })
+
+  it('a rich+numeric mixed component on a cold archetype copies both legs', () => {
+    const Mixed = defineComponent({ hp: 'i32', label: 'string' }, { name: 'mixed' })
+    const world = createWorld({ prefabs: true, components: [Mixed], maxHotArchetypes: 1 })
+    const rel = createRelations(world)
+    const p = rel.definePrefab([Mixed, { hp: 7, label: 'goblin' }])
+    const e = rel.spawnFrom(p)
+    expect((world.entity(e).read(Mixed) as { hp: number; label: string }).hp).toBe(7) // numeric leg (cold column)
+    expect((world.entity(e).read(Mixed) as { hp: number; label: string }).label).toBe('goblin') // rich leg (sidecar)
+  })
+})
+
+describe('prefabs — spawnFrom inside an observer handler stages to the deferred buffer', () => {
+  it('inside onAdd: the handle is reserved-alive immediately; the build applies at the next flush and matches a direct spawnFrom', () => {
+    const { world, rel, Health, Hostile } = makeKit()
+    const goblin = rel.definePrefab([Health, { hp: 35, regen: 0.5 }])
+
+    let staged: EntityHandle | null = null
+    let aliveInHandler = false
+    let placedInHandler = true
+    world.observe(onAdd(Hostile), () => {
+      staged = rel.spawnFrom(goblin, [Health, { hp: 50 }])
+      aliveInHandler = world.isAlive(staged)
+      placedInHandler = world.has(staged, Health)
+    })
+
+    world.spawnWith(Hostile)
+    world.observerDrain() // the handler fires; its spawnFrom stages
+    expect(aliveInHandler).toBe(true) // usable handle returned mid-drain
+    expect(placedInHandler).toBe(false) // …but NOT placed mid-drain
+    expect(world.has(staged as unknown as EntityHandle, Health)).toBe(false) // still staged after the drain
+
+    world.frameReset()
+    world.observerDrain() // the next serial flush applies the staged build
+    const e = staged as unknown as EntityHandle
+    expect(world.has(e, Health)).toBe(true)
+    expect((world.entity(e).read(Health) as { hp: number; regen: number }).hp).toBe(50)
+    expect((world.entity(e).read(Health) as { hp: number; regen: number }).regen).toBe(0.5)
+    expect(rel.hasPair(e, rel.IsA, goblin)).toBe(true)
+
+    // Post-drain state matches an equivalent direct spawnFrom: same archetype, same field state.
+    const direct = rel.spawnFrom(goblin, [Health, { hp: 50 }])
+    expect(archOf(world, e as number)).toBe(archOf(world, direct as number))
+    expect((world.entity(direct).read(Health) as { hp: number; regen: number }).hp).toBe(50)
+  })
+
+  it('inside onRemove: likewise staged; the instance materializes at the next flush', () => {
+    const { world, rel, Health, Hostile } = makeKit()
+    const goblin = rel.definePrefab([Health, { hp: 35 }])
+
+    let staged: EntityHandle | null = null
+    world.observe(onRemove(Hostile), () => {
+      staged = rel.spawnFrom(goblin)
+    })
+
+    const victim = world.spawnWith(Hostile)
+    world.observerDrain() // flush the spawn's add events; nothing staged yet
+    world.frameReset()
+    world.despawn(victim)
+    world.observerDrain() // onRemove fires; its spawnFrom stages
+    expect(staged).not.toBeNull()
+    expect(world.has(staged as unknown as EntityHandle, Health)).toBe(false)
+
+    world.frameReset()
+    world.observerDrain()
+    const e = staged as unknown as EntityHandle
+    expect((world.entity(e).read(Health) as { hp: number }).hp).toBe(35)
+    expect(rel.hasPair(e, rel.IsA, goblin)).toBe(true)
   })
 })

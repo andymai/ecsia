@@ -124,7 +124,13 @@ export function resolveOptions(options: WorldOptions = {}): ResolvedWorldOptions
     throw new ConfigError(`reactivity.maxShapeChangesPerFrame must be a positive integer; got ${maxShapeChangesPerFrame}`)
   }
   // Two-word log entries when any relation is registered ( C2). prefabs: true registers the
-  // built-in IsA relation, so it flips the width the same way a declared relation does.
+  // built-in IsA relation, so it flips the width the same way a declared relation does. An
+  // explicit one-word override is contradictory there — pair shape entries need the second word.
+  if (r.logEntryWords === 1 && (relations.length > 0 || prefabs)) {
+    throw new ConfigError(
+      'reactivity.logEntryWords: 1 is incompatible with relations/prefabs — pair shape-log entries need two words; drop the override or use logEntryWords: 2',
+    )
+  }
   const logEntryWords: 1 | 2 = r.logEntryWords ?? (relations.length > 0 || prefabs ? 2 : 1)
 
   const workers: WorkerOption = options.scheduler?.workers ?? 0

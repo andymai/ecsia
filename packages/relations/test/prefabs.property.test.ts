@@ -85,6 +85,22 @@ describe('PROP-PREFAB spawnFrom == spawnWith(flattened ⊕ overrides) + IsA pair
           // …plus the IsA pair set: one pair per ancestor, nothing else distinguishes them.
           for (const p of prefabs) expect(rel.hasPair(instance, rel.IsA, p)).toBe(true)
           expect(rel.hasRelation(oracle, rel.IsA)).toBe(false)
+
+          // EXACT-signature oracle: instance signature = oracle signature ∪ {one IsA pair per
+          // ancestor + the IsA presence bit} and NOTHING else — no surplus state (no Prefab tag,
+          // no extra pairs, no stray components).
+          const sigOf = (h: EntityHandle): readonly number[] => {
+            const archId = (world.entity(h) as unknown as { __archetypeId: number }).__archetypeId
+            const arch = world.__inspect.archetypes().find((x) => x.id === archId)
+            return (arch?.signature ?? []) as unknown as readonly number[]
+          }
+          const instSig = new Set<number>(sigOf(instance))
+          const oracleSig = sigOf(oracle)
+          for (const c of oracleSig) expect(instSig.has(c)).toBe(true)
+          // |instance| − |oracle| = chain length (one pair per ancestor) + 1 (IsA presence): the
+          // exact IsA pair count, with zero room for surplus bits.
+          expect(instSig.size).toBe(oracleSig.length + prefabs.length + 1)
+          expect(world.has(instance, rel.Prefab)).toBe(false)
         },
       ),
       { numRuns: 40 },

@@ -367,6 +367,9 @@ export function createRelations(world: World): RelationsApi {
   // --- exclusive subject target column access -------------------------
 
   function exclusiveTargetCol(rt: RelationRuntime, subject: EntityHandle): { col: Column; row: number } | null {
+    // TODO: route through host.fieldLocationFor when exclusive relations get cold-archetype
+    // coverage — columnSetFor is hot-only, so an exclusive target read/re-target on a COLD subject
+    // silently no-ops today (the same hole the prefab copy path had before fieldLocationFor).
     const r = host.columnSetFor(subject, rt.presenceDef)
     if (r === null) return null
     const col = r.set.columns[rt.subjectTargetFieldIndex]
@@ -730,8 +733,8 @@ export function createRelations(world: World): RelationsApi {
       const instances = isaRt.backref.get(dIdx)
       if (instances !== undefined && instances.size > 0) {
         console.warn(
-          `[ecsia] despawning a Prefab-tagged entity with ${instances.size} live instance(s): ` +
-            'instances keep their copied values but lose Pair(IsA, prefab) queryability for this ancestor',
+          `[ecsia] despawning a Prefab-tagged entity with ${instances.size} live subject(s) — instances and derived prefabs: ` +
+            'they keep their copied values but lose Pair(IsA, prefab) queryability for this ancestor',
         )
       }
     }
@@ -979,12 +982,14 @@ export function createRelations(world: World): RelationsApi {
    * Per-field copy of one component's values, src row → dst row. Numeric/vec/staticString fields
    * copy by column word; `eid` fields copy the stored handle VERBATIM (every instance aliases the
    * same target the prefab pointed at); rich fields ride the sidecar — 'string' by value,
-   * object<T> by REFERENCE (dev warn: prefab and instances then share one object).
+   * object<T> by REFERENCE (dev warn: prefab and instances then share one object). Resolution is
+   * cold-capable on both ends: a template (or instance) parked in a cold archetype copies through
+   * its per-type cold block, never silently defaulting.
    */
   function copyComponentValues(src: EntityHandle, dst: EntityHandle, def: ComponentDef<Schema>): void {
     let copied = false
-    const from = host.columnSetFor(src, def)
-    const to = host.columnSetFor(dst, def)
+    const from = host.fieldLocationFor(src, def)
+    const to = host.fieldLocationFor(dst, def)
     if (from !== null && to !== null && from.set.columns.length > 0) {
       copied = true
       for (let k = 0; k < from.set.columns.length; k++) {
@@ -1018,6 +1023,11 @@ export function createRelations(world: World): RelationsApi {
    * The shared template-spawn body: ONE migration EMPTY → target signature (components ∪ override
    * additions ∪ the IsA pair set ∪ presence), then the per-field copy, then overrides on top, then
    * the addPair bookkeeping (back-ref, refcount, counter, shape log) the single migration folded in.
+   *
+   * Mid-drain (an observer handler calling definePrefab/spawnFrom) this STAGES like every other
+   * structural op: the handle is reserved-alive and returned immediately (the spawnWith staging
+   * model), and the build body runs at the next serial flush — never mutating the wave the drain
+   * is replaying.
    */
   function buildFromTemplate(
     copySource: EntityHandle | null,
@@ -1029,55 +1039,73 @@ export function createRelations(world: World): RelationsApi {
   ): EntityHandle {
     const rt = isaRt as RelationRuntime
     const ancestors: number[] = []
+    const ancestorHandles: EntityHandle[] = []
     const seenAncestor = new Set<number>()
     for (const t of ancestorIndices) {
       if (!seenAncestor.has(t)) {
         seenAncestor.add(t)
         ancestors.push(t)
+        ancestorHandles.push(host.handleOfIndex(t))
       }
     }
 
-    const defs: ComponentDef<Schema>[] = []
-    const seen = new Set<ComponentDef<Schema>>()
-    const push = (def: ComponentDef<Schema>): void => {
-      if (!seen.has(def)) {
-        seen.add(def)
-        defs.push(def)
+    const buildInto = (handle: EntityHandle): void => {
+      // In the staged case this body runs at the NEXT serial flush, after earlier-staged ops — the
+      // template or an ancestor may have been despawned in between. A dead copy source degrades to
+      // defaulted values (the components still attach); a dead ancestor drops its IsA pair, exactly
+      // as addPair would refuse a dead target.
+      const liveSource = copySource !== null && host.isAlive(copySource) ? copySource : null
+      const liveAncestors: number[] = []
+      for (let i = 0; i < ancestors.length; i++) {
+        if (host.isAlive(ancestorHandles[i] as EntityHandle)) liveAncestors.push(ancestors[i] as number)
+      }
+
+      const defs: ComponentDef<Schema>[] = []
+      const seen = new Set<ComponentDef<Schema>>()
+      const push = (def: ComponentDef<Schema>): void => {
+        if (!seen.has(def)) {
+          seen.add(def)
+          defs.push(def)
+        }
+      }
+      for (const d of copyDefs) push(d)
+      for (const d of extraDefs) push(d)
+      if (prefabTag !== null) push(prefabTag)
+      const pairCids: ComponentId[] = []
+      for (const tIdx of liveAncestors) {
+        const cid = mintPair(rt, tIdx)
+        pairCids.push(cid)
+        push(pairDefById.get(cid) as ComponentDef<Schema>)
+      }
+      if (liveAncestors.length > 0) push(rt.presenceDef)
+
+      host.migrateAddingMany(handle, defs)
+      const sIdx = host.handleIndex(handle)
+      if (liveSource !== null) for (const d of copyDefs) copyComponentValues(liveSource, handle, d)
+      // Overrides write through the tracked accessor path, so onChange/write-log fire exactly as a
+      // post-spawn write would — and they land AFTER the copy, which is what makes them win.
+      for (const [def, vals] of values) {
+        const view = world.entity(handle).write(def) as Record<string, unknown>
+        for (const k of Object.keys(vals)) view[k] = vals[k]
+      }
+      // MUST mirror addPair's per-pair bookkeeping for a tag relation (counter, refcount, back-ref,
+      // forward index, shape log) — the migration itself was folded into the single move above. If
+      // addPair gains a side-effect, fold it in here too, or instances will silently lack it.
+      for (let i = 0; i < liveAncestors.length; i++) {
+        const tIdx = liveAncestors[i] as number
+        const cid = pairCids[i] as ComponentId
+        incrPairCount(sIdx, rt.relationId)
+        pairRefCount.set(cid, (pairRefCount.get(cid) ?? 0) + 1)
+        backrefAdd(rt, tIdx, handle)
+        forwardAdd(rt, sIdx, tIdx)
+        host.trackShapePair(sIdx, cid, tIdx, true)
       }
     }
-    for (const d of copyDefs) push(d)
-    for (const d of extraDefs) push(d)
-    if (prefabTag !== null) push(prefabTag)
-    const pairCids: ComponentId[] = []
-    for (const tIdx of ancestors) {
-      const cid = mintPair(rt, tIdx)
-      pairCids.push(cid)
-      push(pairDefById.get(cid) as ComponentDef<Schema>)
-    }
-    if (ancestors.length > 0) push(rt.presenceDef)
 
+    const reserved = host.deferTemplateSpawn(buildInto)
+    if (reserved !== null) return reserved
     const handle = host.spawnEmpty()
-    host.migrateAddingMany(handle, defs)
-    const sIdx = host.handleIndex(handle)
-    if (copySource !== null) for (const d of copyDefs) copyComponentValues(copySource, handle, d)
-    // Overrides write through the tracked accessor path, so onChange/write-log fire exactly as a
-    // post-spawn write would — and they land AFTER the copy, which is what makes them win.
-    for (const [def, vals] of values) {
-      const view = world.entity(handle).write(def) as Record<string, unknown>
-      for (const k of Object.keys(vals)) view[k] = vals[k]
-    }
-    // MUST mirror addPair's per-pair bookkeeping for a tag relation (counter, refcount, back-ref,
-    // forward index, shape log) — the migration itself was folded into the single move above. If
-    // addPair gains a side-effect, fold it in here too, or instances will silently lack it.
-    for (let i = 0; i < ancestors.length; i++) {
-      const tIdx = ancestors[i] as number
-      const cid = pairCids[i] as ComponentId
-      incrPairCount(sIdx, rt.relationId)
-      pairRefCount.set(cid, (pairRefCount.get(cid) ?? 0) + 1)
-      backrefAdd(rt, tIdx, handle)
-      forwardAdd(rt, sIdx, tIdx)
-      host.trackShapePair(sIdx, cid, tIdx, true)
-    }
+    buildInto(handle)
     return handle
   }
 
@@ -1112,6 +1140,9 @@ export function createRelations(world: World): RelationsApi {
     if (!host.isAlive(prefab)) {
       if (IS_DEV) throw new Error('spawnFrom: the prefab handle is dead (despawned or stale)')
       return NO_ENTITY
+    }
+    if (IS_DEV && prefabDef !== null && !host.bitmaskHas(host.handleIndex(prefab), prefabDef.id)) {
+      throw new Error('spawnFrom: the source is not a Prefab-tagged entity — pass a handle returned by definePrefab()')
     }
     const { defs: overrideDefs, values: overrideValues } = splitInits(overrides)
     return buildFromTemplate(prefab, copyableDefsOf(prefab), overrideDefs, overrideValues, collectAncestors(prefab), null)

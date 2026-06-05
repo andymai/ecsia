@@ -2,7 +2,7 @@
 // The seven owning modules attach in the fixed order
 // registry → buffers → storage → reactivity → queries → scheduler → serialization.
 
-import { resolveOptions } from './config.js'
+import { ConfigError, resolveOptions } from './config.js'
 import type { ResolvedWorldOptions, WorldOptions } from './config.js'
 import {
   EntityStore,
@@ -95,6 +95,13 @@ export interface RelationsHost {
   bitmaskHas(index: number, id: ComponentId): boolean
   /** Resolve the live ColumnSet + current row for `def` on `handle`, or null if absent / not hot. */
   columnSetFor(handle: EntityHandle, def: ComponentDef<Schema>): { set: ColumnSet; row: number } | null
+  /**
+   * Like columnSetFor, but COLD-capable: a cold resident resolves to its per-type overflow block +
+   * cold row (the same resolution storage's migrate path uses). Null only for dead handles, tags,
+   * or components the entity does not hold. The prefab copy path reads/writes through this so
+   * templates and instances parked in cold archetypes copy correctly.
+   */
+  fieldLocationFor(handle: EntityHandle, def: ComponentDef<Schema>): { set: ColumnSet; row: number } | null
   /** Entity-layer helpers. */
   isAlive(handle: EntityHandle): boolean
   handleIndex(handle: EntityHandle): number
@@ -116,6 +123,14 @@ export interface RelationsHost {
    * REFERENCE — sidecar assignment semantics, same as a plain write.
    */
   copyRichFields(src: EntityHandle, dst: EntityHandle, componentId: ComponentId): void
+  /**
+   * Template-spawn deferral seam (definePrefab / spawnFrom): while an observer drain is running,
+   * reserve a live handle NOW (so the handler gets a usable handle back — the spawnWith staging
+   * model) and stage `build` to run against it at the next serial flush, after placement into the
+   * EMPTY archetype. Returns null when no drain is in flight — the caller spawns and builds
+   * directly.
+   */
+  deferTemplateSpawn(build: (handle: EntityHandle) => void): EntityHandle | null
   /**
    * deferral seam: while an observer drain is running, structural relation
    * ops issued by a handler must STAGE to the world's deferred command buffer rather than mutate the
@@ -403,6 +418,15 @@ export function createWorld(options: WorldOptions = {}): World {
   // registry + schemaHash like any user component, so both sides of a snapshot must agree on the
   // flag. Per-world because registerComponentId binds a def to one world.
   const prefabDef = resolved.prefabs ? (defineTag('ecsia:Prefab') as ComponentDef<Schema>) : null
+  if (IS_DEV) {
+    // "ecsia:" is the built-ins' stable serialization namespace ("ecsia:Prefab", "ecsia:IsA");
+    // a user component squatting on it would collide in the name-keyed snapshot registry.
+    for (const def of resolved.components as readonly ComponentDef<Schema>[]) {
+      if (def.name.startsWith('ecsia:')) {
+        throw new ConfigError(`component name '${def.name}' uses the reserved "ecsia:" prefix (ecsia built-in serialization names)`)
+      }
+    }
+  }
   const userComponents: readonly ComponentDef<Schema>[] =
     prefabDef !== null
       ? [...(resolved.components as readonly ComponentDef<Schema>[]), prefabDef]
@@ -907,6 +931,25 @@ export function createWorld(options: WorldOptions = {}): World {
           if (set === undefined) return null
           return { set, row: records.rowOf(index) }
         },
+        fieldLocationFor: (handle, def) => {
+          if (!entities.isAlive(handle)) return null
+          const index = handleIndexOf(handle as number)
+          const archId = records.archetypeIdOf(index)
+          const arch = storage.archetypes.byId[archId] as Archetype | undefined
+          if (arch === undefined) return null
+          const id = registry.idOf(def)
+          if (id === undefined) return null
+          if (arch.cold) {
+            const set = storage.coldColumnSet(id)
+            if (set === undefined) return null
+            const row = storage.coldRowOf(index, id)
+            if (row < 0) return null
+            return { set, row }
+          }
+          const set = arch.columnSets.get(id)
+          if (set === undefined) return null
+          return { set, row: records.rowOf(index) }
+        },
         isAlive: (handle) => entities.isAlive(handle),
         handleIndex: (handle) => handleIndexOf(handle as number),
         handleOfIndex: (index) => entities.handleOfIndex(index),
@@ -940,6 +983,12 @@ export function createWorld(options: WorldOptions = {}): World {
             }
             fieldIndex += 1
           }
+        },
+        deferTemplateSpawn: (build) => {
+          if (!observerCommands.deferring) return null
+          const handle = reserveEntityBlock(entities.index, -1, 1).handles[0] as EntityHandle
+          observerCommands.stageBuildReserved(handle, build)
+          return handle
         },
         deferRelationOp: (op, subject, relation, target, payload) => {
           if (!observerCommands.deferring) return false
