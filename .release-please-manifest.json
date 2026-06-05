@@ -1,0 +1,10 @@
+{
+  "packages/ecsia": "0.1.0",
+  "packages/core": "0.1.0",
+  "packages/devtools": "0.1.0",
+  "packages/relations": "0.1.0",
+  "packages/scheduler": "0.1.0",
+  "packages/schema": "0.1.0",
+  "packages/serialization": "0.1.0",
+  "packages/three": "0.1.0"
+}
