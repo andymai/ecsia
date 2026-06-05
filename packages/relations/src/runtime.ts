@@ -114,7 +114,10 @@ interface RelationsApi {
    * registered relations at once — "who points at this entity via anything?" — handy before a
    * despawn to see what a removal would touch. Each subject is yielded once, even when it
    * points at `target` through several relations. Reads the same target→subjects index the
-   * despawn cascade uses: O(1) to find the subjects, no world scan.
+   * despawn cascade uses — the typed form is O(1) to the subject set; the wildcard form is
+   * O(R) bucket lookups (R = registered relations) — never an entity scan. When the loop body
+   * mutates pairs (despawn / removePair / exclusive re-target), snapshot first
+   * (`[...rel.subjectsOf(Wildcard, t)]`), then mutate — the cascade discipline.
    */
   subjectsOf(relation: RelationDef<Schema | void> | WildcardToken, target: EntityHandle): Iterable<EntityHandle>
   targetsOf(subject: EntityHandle, relation: RelationDef<Schema | void>): Iterable<EntityHandle>
@@ -525,23 +528,26 @@ export function createRelations(world: World): RelationsApi {
       return
     }
     // Wildcard relation: walk every registered relation's back-ref bucket for this target, yielding
-    // each subject once. The dedup set is allocated only when a SECOND relation holds subjects for
-    // this target — the common single-relation walk iterates the live bucket with no allocation.
-    let first: ReadonlySet<EntityHandle> | null = null
-    let seen: Set<EntityHandle> | null = null
+    // each subject once. Pre-scan O(R) for relations holding a bucket; the dedup set is allocated
+    // only when a SECOND one does — the common single-relation walk iterates the live bucket with
+    // no allocation. `seen` records every actually-yielded handle BEFORE the yield (not a snapshot
+    // of the first bucket), so dedup stays exact when the loop body mutates pairs mid-iteration.
+    let holders = 0
+    for (const rt of relations) if (rt.backref.has(tIdx)) holders++
+    const seen: Set<EntityHandle> | null = holders >= 2 ? new Set() : null
     for (const rt of relations) {
+      // Re-guard the target per relation: a target despawned mid-iteration whose slot was recycled
+      // must not alias the new occupant's buckets (the bucket key is the bare index).
+      if (!host.isAlive(target)) return
       const set = rt.backref.get(tIdx)
       if (set === undefined) continue
-      if (first === null) {
-        first = set
-        for (const s of set) if (host.isAlive(s)) yield s
-        continue
-      }
-      if (seen === null) seen = new Set(first)
       for (const s of set) {
-        if (seen.has(s)) continue
-        seen.add(s)
-        if (host.isAlive(s)) yield s
+        if (!host.isAlive(s)) continue
+        if (seen !== null) {
+          if (seen.has(s)) continue
+          seen.add(s)
+        }
+        yield s
       }
     }
   }

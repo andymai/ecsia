@@ -39,7 +39,8 @@ rel.subjectsOf(Wildcard, parent)   // anyone pointing at `parent` via ANY relati
 The wildcard form is the pre-despawn audit: every entity directly linked to `parent`,
 each one once — the first ring a `world.despawn(parent)` would touch. Both forms read
 the same target→subjects index the cascade machinery maintains, so the lookup never
-scans the world.
+scans the world: the typed form is O(1) to the subject set, the wildcard form is O(R)
+bucket lookups (R = registered relations).
 
 ## Links
 

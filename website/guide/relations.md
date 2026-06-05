@@ -131,8 +131,11 @@ entity via anything?" — which is exactly the question to ask before despawning
 that others may depend on. Each subject comes back once, even if it points at the target
 through several relations.
 
-Both forms read the same target→subjects index the despawn cascade uses, so the lookup is
-O(1) to find the subjects no matter how many entities exist — never a world scan.
+Both forms read the same target→subjects index the despawn cascade uses, so the lookup never
+scans the world no matter how many entities exist: the typed form is O(1) to the subject set,
+the wildcard form is O(R) bucket lookups (R = registered relations). If the loop body mutates
+pairs (despawn, `removePair`, exclusive re-target), snapshot first —
+`[...rel.subjectsOf(Wildcard, t)]` — then mutate, matching the cascade discipline.
 
 ```ts
 import { createWorld, defineComponent, createRelations, Wildcard } from 'ecsia'

@@ -100,6 +100,50 @@ describe('subjectsOf(Wildcard, target) — reverse query across ALL relations', 
     expect([...rel.subjectsOf(Wildcard, target)]).toEqual([survivor])
   })
 
+  it('mid-iteration despawn + slot recycle: the resumed walk never aliases the new occupant', () => {
+    const world = createWorld()
+    const rel = createRelations(world)
+    const Likes = rel.defineRelation(null)
+    const Follows = rel.defineRelation(null)
+    const target = world.spawn()
+    const a = world.spawn()
+    const b = world.spawn()
+    rel.addPair(a, Likes, target)
+
+    const iter = rel.subjectsOf(Wildcard, target)[Symbol.iterator]()
+    expect(iter.next().value).toBe(a) // first yield, from the Likes bucket
+
+    // Despawn the target mid-iteration; the next spawn reuses its slot at a bumped generation.
+    // A pair INTO the recycled slot via another relation lands in a bucket keyed by the SAME bare
+    // index — the resumed walk over the dead target must not alias it.
+    world.despawn(target)
+    const recycled = world.spawn()
+    rel.addPair(b, Follows, recycled)
+
+    expect(iter.next().done).toBe(true)
+    expect([...rel.subjectsOf(Wildcard, recycled)]).toEqual([b]) // the new occupant's own walk is intact
+  })
+
+  it('mid-iteration removePair: a subject already yielded is never yielded again via a later relation', () => {
+    const world = createWorld()
+    const rel = createRelations(world)
+    const Likes = rel.defineRelation(null)
+    const Follows = rel.defineRelation(null)
+    const target = world.spawn()
+    const s = world.spawn()
+    rel.addPair(s, Likes, target)
+    rel.addPair(s, Follows, target)
+
+    // Dropping the first relation's pair between yields mutates the bucket the walk already
+    // consumed — dedup must come from the actually-yielded handles, not a snapshot of that bucket.
+    const out: EntityHandle[] = []
+    for (const subject of rel.subjectsOf(Wildcard, target)) {
+      out.push(subject)
+      rel.removePair(subject, Likes, target)
+    }
+    expect(out).toEqual([s])
+  })
+
   it('exclusive re-target: the old parent loses the subject, the new parent gains it', () => {
     const world = createWorld()
     const rel = createRelations(world)
