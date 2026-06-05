@@ -11,10 +11,14 @@ import { encodeEid } from '@ecsia/core'
 import { ReadCursor } from './cursor.js'
 import {
   FLAG_HAS_RELATIONS,
+  FLAG_HAS_RICH,
+  MIN_SUPPORTED_VERSION,
   NO_ENTITY_U32,
+  RICH_FORMAT_VERSION,
   SERIALIZATION_FORMAT_VERSION,
   SNAPSHOT_MAGIC,
   ordinalToElement,
+  readJsonBytes,
   readString,
 } from './format.js'
 import { readPairPayload } from './payload.js'
@@ -57,9 +61,16 @@ export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
     // --- HEADER ---
     const magic = cur.u32()
     if (magic !== SNAPSHOT_MAGIC) throw new Error('serialization: bad magic (not an ecsia snapshot)')
+    // rich-fields.md §7.2 / G-2: the v2 reader accepts the version RANGE [MIN_SUPPORTED_VERSION,
+    // SERIALIZATION_FORMAT_VERSION] and per-section-gates the v2-only header growth + RICH section. A v1
+    // image (no richSectionOffset word, no RICH section) loads cleanly; a hypothetical newer (>v2) image
+    // is rejected. The inverse (v2 image into a v1 build) is rejected by the v1 build's strict check.
     const version = cur.u16()
-    if (version !== SERIALIZATION_FORMAT_VERSION) {
-      throw new Error(`serialization: unsupported format version ${version}`)
+    if (version < MIN_SUPPORTED_VERSION || version > SERIALIZATION_FORMAT_VERSION) {
+      throw new Error(
+        `serialization: unsupported format version ${version} (this build reads ` +
+          `${MIN_SUPPORTED_VERSION}..${SERIALIZATION_FORMAT_VERSION})`,
+      )
     }
     const endian = cur.u8()
     if (endian !== 1) throw new Error('serialization: big-endian image unsupported (the wire format is little-endian)')
@@ -76,6 +87,9 @@ export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
     const archCount = cur.u32()
     const registryOffset = cur.u32()
     const structureOffset = cur.u32()
+    // v2 grew the header by one word (richSectionOffset at byte 32). v1 images stop at byte 32 — gate the
+    // read so a v1 image is not mis-parsed (G-5). 0 means "no RICH section present" even in a v2 image.
+    const richSectionOffset = version >= RICH_FORMAT_VERSION ? cur.u32() : 0
 
     if (mode === 'replace' && s.aliveCount() > 0) {
       s.clearAll()
@@ -237,6 +251,29 @@ export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
         const target = targetH === NO_ENTITY_U32 ? null : remap.get(targetH as EntityHandle) ?? null
         if (targetH !== NO_ENTITY_U32 && target === null) continue // dangling target → drop (§8.3)
         relProvider.addPair(subject, localRel, target, payload)
+      }
+    }
+
+    // --- SECTION 5: RICH (JSON sidecar) — version-gated + flag-gated, seeked via richSectionOffset ---
+    // Per-section gating (G-2): only a v2+ image with FLAG_HAS_RICH and a non-zero offset carries one, so
+    // a v1 image skips this entirely. Producer handles remap through PASS 1's table; producer component
+    // ids remap by name (producerCidToLocal). Field index is producer-local but the field-layout guard
+    // (numComponents loop above) guarantees it is parallel on both sides (§7.2).
+    if (version >= RICH_FORMAT_VERSION && (flags & FLAG_HAS_RICH) !== 0 && richSectionOffset !== 0) {
+      cur.seek(richSectionOffset)
+      const richEntryCount = cur.u32()
+      for (let i = 0; i < richEntryCount; i++) {
+        const producerHandle = cur.u32()
+        const producerCid = cur.u32()
+        const fieldIndex = cur.u16()
+        cur.u8() // kind ordinal (0=string,1=object) — receiver re-derives from its own descriptor
+        const json = readJsonBytes(cur)
+        cur.alignTo4()
+        const localHandle = remap.get(producerHandle as EntityHandle)
+        if (localHandle === undefined) continue // unremapped producer entity → drop (RF-ROUNDTRIP)
+        const localCid = producerCidToLocal.get(producerCid)
+        if (localCid === undefined) continue
+        s.setRichValue(localHandle, localCid, fieldIndex, JSON.parse(json) as unknown)
       }
     }
 

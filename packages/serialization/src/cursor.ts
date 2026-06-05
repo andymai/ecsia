@@ -61,6 +61,11 @@ export class WriteCursor {
     this.#view.setUint32(at, v >>> 0, LE)
   }
 
+  /** Back-patch a single byte already written at `at` (e.g. the header flags byte, rich-fields.md §7.2). */
+  patchU8(at: number, v: number): void {
+    this.#view.setUint8(at, v & 0xff)
+  }
+
   /** Pad to a 4-byte boundary (SoA sections are word-aligned, §2). */
   alignTo4(): void {
     while ((this.#pos & 3) !== 0) this.u8(0)

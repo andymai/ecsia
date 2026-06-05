@@ -20,6 +20,9 @@ export type { SnapshotDeserializer, DeserializeResult } from './deserialize.js'
 export { createDeltaSerializer, applyDelta } from './delta.js'
 export type { DeltaSerializer, DeltaOptions } from './delta.js'
 
+// Rich-field serialization policy hook (rich-fields.md §7.4) — shared by SnapshotOptions + DeltaOptions.
+export type { OnUnserializable, UnserializableContext } from './rich.js'
+
 // ---- Structural delta stream / observer log (Layer 2) ----
 export { encodeStructuralOps, applyStructuralOps, createObserverLog } from './structural.js'
 export type { ObserverLog, DeltaRecord } from './structural.js'

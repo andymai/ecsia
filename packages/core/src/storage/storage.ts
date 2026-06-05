@@ -234,7 +234,7 @@ export class Storage {
     }
     if (set === undefined) {
       const rt = def as ComponentRuntime<Schema>
-      if (rt.columnLayouts.length === 0) {
+      if (rt.columnLayouts.length === 0 && !rt.hasRichFields) {
         throw new Error(`storage.resolve: component '${def.name}' is a tag (no fields to read/write)`)
       }
       throw new Error(`storage.resolve: entity does not hold component '${def.name}'`)

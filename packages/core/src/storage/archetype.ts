@@ -59,7 +59,9 @@ export function attachHotColumns(arch: Archetype, deps: ArchetypeColumnDeps): vo
     const def = defOf(c)
     if (def === undefined) continue // pair/synthetic id with no registered def yet (relations, M8)
     const rt = def as ComponentRuntime<Schema>
-    if (rt.columnLayouts.length === 0) continue // tag / zero-field: no ColumnSet (§3.4)
+    // A pure tag (no columns AND no rich fields) gets no ColumnSet. A rich-only or mixed component DOES
+    // get one — its accessor carries the sidecar getters/setters even with zero columns (rich-fields.md).
+    if (rt.columnLayouts.length === 0 && !rt.hasRichFields) continue
     arch.columnSets.set(
       c,
       buildColumnSet({ buffers, archetypeId: arch.id as number, def, world: accessorWorld, initialCapacity }),
