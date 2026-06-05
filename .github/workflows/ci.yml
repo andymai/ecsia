@@ -33,3 +33,79 @@ jobs:
 
       - name: Test (unit + property + worker + type-level)
         run: pnpm test
+
+  # ---------------------------------------------------------------------------
+  # Runtime lanes (P3): prove the SHIPPED dist actually runs on each claimed runtime.
+  # Each lane builds first (the smoke imports packages/ecsia/dist), then runs the SAME
+  # scripts/runtime-smoke.mjs — node, bun, deno — plus a browser lane via Playwright.
+  # ---------------------------------------------------------------------------
+
+  node-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build (tsc -b, all packages)
+        run: pnpm build
+      - name: Runtime smoke (Node — incl real worker_threads pool round-trip)
+        run: node scripts/runtime-smoke.mjs
+
+  bun-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - run: pnpm install --frozen-lockfile
+      - name: Build (tsc -b, all packages)
+        run: pnpm build
+      - name: Runtime smoke (Bun — core paths; pool section may skip)
+        run: bun scripts/runtime-smoke.mjs
+
+  deno-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: "2.8.2"
+      - run: pnpm install --frozen-lockfile
+      - name: Build (tsc -b, all packages)
+        run: pnpm build
+      - name: Runtime smoke (Deno — core paths; pool section skips by design)
+        run: deno run --allow-read scripts/runtime-smoke.mjs
+
+  browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build (tsc -b, all packages)
+        run: pnpm build
+      - name: Bundle the browser smoke (esbuild)
+        run: pnpm smoke:browser:bundle
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Browser smoke (isolated + non-isolated variants)
+        run: pnpm smoke:browser
