@@ -51,6 +51,18 @@ importers:
         specifier: workspace:*
         version: link:../schema
 
+  packages/devtools:
+    dependencies:
+      '@ecsia/core':
+        specifier: workspace:*
+        version: link:../core
+      '@ecsia/scheduler':
+        specifier: workspace:*
+        version: link:../scheduler
+      '@ecsia/schema':
+        specifier: workspace:*
+        version: link:../schema
+
   packages/ecsia:
     dependencies:
       '@ecsia/core':

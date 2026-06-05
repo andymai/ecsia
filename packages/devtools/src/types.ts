@@ -1,0 +1,126 @@
+// @ecsia/devtools — the DATA LAYER report shapes (P5). Every report is a PLAIN, serializable object
+// (no class instances, no functions, no live handles) so it can be JSON-stringified, snapshotted, diffed,
+// and asserted headless. The renderers (renderText / renderHTML) are PURE functions over exactly these
+// shapes — they never touch a live world.
+
+/** One component type's storage census (inspector §1). */
+export interface ComponentReport {
+  readonly name: string
+  readonly id: number
+  /** Total declared field count (column-backed + rich). */
+  readonly fields: number
+  /** Rich (sidecar-backed: 'string' / object<T>) field names, in declaration order. */
+  readonly richFields: readonly string[]
+  /** Bytes one row of this component's COLUMN-backed fields occupies (rich fields contribute 0). */
+  readonly bytesPerRow: number
+  /** bytesPerRow × (live rows across all hot archetypes holding this component). */
+  readonly totalBytes: number
+}
+
+/** One archetype's census (inspector §1). Includes cold + empty archetypes. */
+export interface ArchetypeReport {
+  readonly id: number
+  /** Component names in this archetype's signature (synthetic pair/presence ids rendered as `#id`). */
+  readonly signature: readonly string[]
+  readonly count: number
+  /** 'hot' = column-backed; 'cold' = lazily-materialized (archetype-storage §10). */
+  readonly temperature: 'hot' | 'cold'
+}
+
+/** One live (compiled, cached) query's census (inspector §1). */
+export interface QueryReport {
+  /** Human-rendered terms, e.g. `read(position)`, `write(velocity)`, `without(frozen)`. */
+  readonly terms: readonly string[]
+  readonly matchedArchetypes: number
+  readonly size: number
+}
+
+/** One relation's live-pair census (inspector §1). */
+export interface RelationReport {
+  readonly name: string
+  readonly pairCount: number
+}
+
+/** The whole-world inspection report — a plain serializable snapshot (inspector §1). */
+export interface WorldReport {
+  readonly entities: {
+    readonly alive: number
+    readonly capacity: number
+  }
+  readonly archetypes: readonly ArchetypeReport[]
+  readonly components: readonly ComponentReport[]
+  readonly queries: readonly QueryReport[]
+  readonly memory: {
+    /** Sum of every component's totalBytes (live column bytes across hot archetypes). */
+    readonly columnsBytes: number
+    /** Number of rich (sidecar) field columns registered across all components. */
+    readonly sidecarEntries: number
+  }
+  readonly relations: readonly RelationReport[]
+}
+
+// --- watch mode (§2) -------------------------------------------------------
+
+/** One frame's deltas vs the previous observed frame (watch §2). */
+export interface FrameDelta {
+  /** 0-based frame index since watch start. */
+  readonly frame: number
+  /** Entities spawned since the previous sample (aliveCount rise + churn). */
+  readonly spawned: number
+  /** Entities despawned since the previous sample. */
+  readonly despawned: number
+  /** Net alive change (spawned − despawned). */
+  readonly aliveDelta: number
+  /** Archetypes created since the previous sample (archetype churn). */
+  readonly archetypesCreated: number
+  /** Components whose `.changed` write-log fired this frame, keyed by component name → count. */
+  readonly changedComponents: Readonly<Record<string, number>>
+  /** Total change-tracked writes observed this frame. */
+  readonly changedTotal: number
+}
+
+// --- wave visualizer (§3) --------------------------------------------------
+
+/** One system's per-wave introspection (waves §3). */
+export interface SystemExplain {
+  readonly name: string
+  readonly reads: readonly string[]
+  readonly writes: readonly string[]
+  readonly workerEligible: boolean
+}
+
+/** One batch (concurrent round member set) within a wave (waves §3). */
+export interface BatchExplain {
+  readonly systems: readonly SystemExplain[]
+}
+
+/** One wave: an ordered set of batches (rounds) that run after the previous wave (waves §3). */
+export interface WaveExplain {
+  readonly index: number
+  readonly batches: readonly BatchExplain[]
+}
+
+/**
+ * An access overlap that the schedule ACTUALLY enforced — two systems with overlapping write-write or
+ * read-write access that the plan placed in different waves/rounds (waves §3). Pairs whose overlap the
+ * scheduler suppressed via `inAnyOrderWith` (kept concurrent, same round) are NOT reported here.
+ */
+export interface ConflictExplain {
+  readonly a: string
+  readonly b: string
+  readonly on: string
+  readonly kind: 'write-write' | 'read-write'
+}
+
+/** A system pinned to the main thread, with the reason it cannot run on a worker (waves §3). */
+export interface PinExplain {
+  readonly system: string
+  readonly reason: 'rich-fields' | 'main-thread'
+}
+
+/** The whole-plan explanation — the WHY of the schedule, plain + serializable (waves §3). */
+export interface PlanExplain {
+  readonly waves: readonly WaveExplain[]
+  readonly conflicts: readonly ConflictExplain[]
+  readonly pinned: readonly PinExplain[]
+}

@@ -12,6 +12,7 @@ const alias = {
   '@ecsia/serialization': pkg('serialization'),
   '@ecsia/ecsia': pkg('ecsia'),
   '@ecsia/three': pkg('three'),
+  '@ecsia/devtools': pkg('devtools'),
 }
 
 export default defineWorkspace([
