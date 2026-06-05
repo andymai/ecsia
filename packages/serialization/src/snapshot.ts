@@ -35,6 +35,12 @@ export interface SnapshotOptions {
  * sidecar section; only WRITTEN values are emitted (default slots re-default on
  * load). Non-serializable rich values follow the `onUnserializable` policy (SKIP + dev-warn by default).
  *
+ * BIT-EXACTNESS CARVE-OUT: a snapshot round-trip is bit-exact for PERSISTED fields only. A field
+ * declared `field(token, { persist: false })` (or any field of a `persist: false` component) is
+ * never written; on load it takes its declared default. Component MEMBERSHIP (the signature bit)
+ * always persists — `persist` controls values, not structure. The persisted-field subset is folded
+ * into the schemaHash, so an image produced under different persist flags is rejected on load.
+ *
  * LIMITATION — RF-NOREMAP: an `EntityHandle` stored INSIDE an `object<T>` rich
  * field is serialized as a raw number and is NOT remapped on deserialize — the JSON path cannot
  * introspect an opaque object graph for handles. After a round-trip such a handle refers to the
@@ -142,17 +148,21 @@ export function createSnapshotSerializer(world: World, opts: SnapshotOptions = {
       for (const cid of a.signature) cur.u32(cid)
     }
 
-    // --- SECTION 3: SoA DATA (one set() per column) ---
+    // --- SECTION 3: SoA DATA (one set() per column; PERSISTED columns only) ---
     cur.alignTo4()
     for (const a of archs) {
+      // Persisted columns only; a component whose every column is non-persisted is omitted entirely.
+      // The receiver derives the same wire-position → column mapping from its own (schemaHash-matched)
+      // descriptors, so the positional grammar stays aligned.
+      const persisted = a.components
+        .map((comp) => ({ comp, cols: comp.columns.filter((_, i) => comp.fields[i]?.persist !== false) }))
+        .filter((e) => e.cols.length > 0)
       cur.u32(a.id)
-      cur.u16(a.components.length)
-      for (const comp of a.components) {
+      cur.u16(persisted.length)
+      for (const { comp, cols } of persisted) {
         cur.u32(comp.componentId as number)
-        cur.u16(comp.columns.length)
-        for (let i = 0; i < comp.columns.length; i++) {
-          const col = comp.columns[i]
-          if (col === undefined) continue
+        cur.u16(cols.length)
+        for (const col of cols) {
           const stride = col.layout.stride
           const elems = a.count * stride
           cur.u8(elementOrdinal(col.layout.element))
@@ -187,6 +197,7 @@ export function createSnapshotSerializer(world: World, opts: SnapshotOptions = {
       type RF = (typeof richFields)[number]
       const byComponent = new Map<number, RF[]>()
       for (const rf of richFields) {
+        if (!rf.persist) continue
         let bucket = byComponent.get(rf.componentId as number)
         if (bucket === undefined) {
           bucket = []

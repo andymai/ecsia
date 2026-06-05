@@ -55,7 +55,7 @@ describe('defineComponent — fail-fast validation (define.ts )', () => {
     expect(() => defineComponent({ x: 'f32' }, { maxHistory: 2.5 })).toThrow(/maxHistory must be a non-negative integer/)
     // Valid options resolve.
     const C = defineComponent({ x: 'f32' }, { name: 'cValid', storage: 'sparse', maxHistory: 4 })
-    expect(C.options).toEqual({ storage: 'sparse', maxHistory: 4 })
+    expect(C.options).toEqual({ storage: 'sparse', maxHistory: 4, persist: true })
   })
 
   test('registerComponentId throws on a second registration (define.ts:166-168)', () => {

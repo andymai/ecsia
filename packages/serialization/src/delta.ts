@@ -147,18 +147,25 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
       // it is re-considered next delta). The shadow updates to the EMITTED values after selection.
       const rows = epsilon !== undefined ? filterByEpsilon(a, allRows, shadow, epsilon) : allRows
       if (rows.length === 0) continue
+      // PERSISTED columns only. The changeVersion stamp is per-entity and shared with the public
+      // `.changed` predicate, so a write to a non-persisted field still stamps the row (reactivity
+      // must see it) — the filter happens HERE, at emission. Documented cost: such a row is emitted
+      // with its (unchanged) persisted values — a harmless, receiver-idempotent over-send. An
+      // archetype with no persisted columns at all contributes nothing to SECTION V.
+      const persisted = a.components
+        .map((comp) => ({ comp, cols: comp.columns.filter((_, i) => comp.fields[i]?.persist !== false) }))
+        .filter((e) => e.cols.length > 0)
+      if (persisted.length === 0) continue
       changedArchetypeCount += 1
       cur.u32(a.id)
       cur.u32(rows.length)
       // Per changed row: the FULL entity handle (the boundary-stable row identity).
       for (const r of rows) cur.u32(a.rows[r] as number)
-      cur.u16(a.components.length)
-      for (const comp of a.components) {
+      cur.u16(persisted.length)
+      for (const { comp, cols } of persisted) {
         cur.u32(comp.componentId as number)
-        cur.u16(comp.columns.length)
-        for (let ci = 0; ci < comp.columns.length; ci++) {
-          const col = comp.columns[ci]
-          if (col === undefined) continue
+        cur.u16(cols.length)
+        for (const col of cols) {
           const stride = col.layout.stride
           // U8 element ordinal + u8 stride, then per CHANGED row the stride elements at the
           // column's NATIVE element width (a raw byte copy — no f64 widening, no per-row allocation).
@@ -183,6 +190,7 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
       type RF = (typeof richFields)[number]
       const byComponent = new Map<number, RF[]>()
       for (const rf of richFields) {
+        if (!rf.persist) continue
         let bucket = byComponent.get(rf.componentId as number)
         if (bucket === undefined) {
           bucket = []
@@ -273,7 +281,14 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
 // value, a fresh shadow cell is seeded to the current value and the row is kept (the first observation is
 // always emitted, matching "the receiver must learn the value at least once").
 function filterByEpsilon(
-  a: { id: number; count: number; components: readonly { columns: readonly ({ view: ArrayLike<number>; layout: { stride: number; element: ElementKind } } | undefined)[] }[] },
+  a: {
+    id: number
+    count: number
+    components: readonly {
+      columns: readonly ({ view: ArrayLike<number>; layout: { stride: number; element: ElementKind } } | undefined)[]
+      fields: readonly { persist: boolean }[]
+    }[]
+  },
   rows: readonly number[],
   shadow: Map<number, Map<number, Float64Array>>,
   epsilon: number,
@@ -283,8 +298,10 @@ function filterByEpsilon(
     archShadow = new Map()
     shadow.set(a.id, archShadow)
   }
-  // Enumerate the archetype's numeric columns in a stable (component, column) order, parallel to how
-  // SECTION V walks them, assigning each a flat shadow column index.
+  // Enumerate the archetype's PERSISTED numeric columns in a stable (component, column) order,
+  // assigning each a flat shadow column index. Non-persisted columns are excluded from the compare
+  // (they never reach the wire, so a transient-field change must not defeat the epsilon drop) but
+  // still consume a flat index so shadow keys stay stable if flags change between serializers.
   interface Col {
     readonly key: number
     readonly view: ArrayLike<number>
@@ -295,8 +312,9 @@ function filterByEpsilon(
   const cols: Col[] = []
   let flatIndex = 0
   for (const comp of a.components) {
-    for (const col of comp.columns) {
-      if (col === undefined) {
+    for (let i = 0; i < comp.columns.length; i++) {
+      const col = comp.columns[i]
+      if (col === undefined || comp.fields[i]?.persist === false) {
         flatIndex += 1
         continue
       }
@@ -447,7 +465,7 @@ function writeRowField(
   s: World['__serialize'],
   handle: EntityHandle,
   componentId: ComponentId,
-  fieldColIndex: number,
+  wireFieldIndex: number,
   element: ElementKind,
   stride: number,
   raw: Uint8Array,
@@ -455,20 +473,28 @@ function writeRowField(
 ): void {
   const dst = s.columnsOf(handle, componentId)
   if (dst === null) return
-  const col = dst.columns[fieldColIndex]
-  if (col === undefined) return
-  const view = col.view as unknown as { [i: number]: number }
-  // Find the descriptor parallel to this column index to detect eid fields.
+  // The wire carries PERSISTED columns only: the wireFieldIndex-th persisted column-backed field
+  // maps to a local column index through the receiver's own descriptors (parallel on both sides).
   let colIndex = 0
+  let persistedSeen = -1
+  let localColIndex = -1
   let descriptor: FieldDescriptor | undefined
   for (const f of dst.fields) {
     if (f.ctor === null) continue
-    if (colIndex === fieldColIndex) {
-      descriptor = f
-      break
+    if (f.persist) {
+      persistedSeen += 1
+      if (persistedSeen === wireFieldIndex) {
+        descriptor = f
+        localColIndex = colIndex
+        break
+      }
     }
     colIndex += 1
   }
+  if (descriptor === undefined) return
+  const col = dst.columns[localColIndex]
+  if (col === undefined) return
+  const view = col.view as unknown as { [i: number]: number }
   // Reinterpret the raw native-width bytes as the column's typed array (copied to a zero-offset buffer
   // so the typed-array view is validly aligned regardless of the source subarray's byteOffset).
   const copy = raw.slice()
@@ -476,7 +502,7 @@ function writeRowField(
   const base = dst.row * stride
   for (let lane = 0; lane < stride; lane++) {
     const value = values[lane] as number
-    if (descriptor?.token === 'eid') {
+    if (descriptor.token === 'eid') {
       const stored = value | 0
       if (stored === -1) view[base + lane] = -1
       else {

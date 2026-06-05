@@ -3,6 +3,7 @@
 // reactivity ShapeKind — an apply routine dispatches on the same ordinal across all three.
 
 import type { ElementKind } from '@ecsia/core'
+import type { FieldDescriptor } from '@ecsia/schema'
 import type { WriteCursor, ReadCursor } from './cursor.js'
 
 // /: bumps the format to 2 (adds the version-gated RICH section + header
@@ -51,6 +52,23 @@ export function ordinalToElement(ordinal: number): ElementKind {
   const e = ELEMENT_ORDINALS[ordinal]
   if (e === undefined) throw new Error(`serialization: unknown element ordinal ${ordinal}`)
   return e
+}
+
+/**
+ * Indices (within a component's column-backed column list) of the PERSISTED columns, in field
+ * order. The SoA wire sections carry persisted columns only — the wire grammar is unchanged
+ * (counts are self-describing), and the persisted subset is part of the schemaHash, so both
+ * sides derive this identical mapping: wire position `i` ⇒ local column `result[i]`.
+ */
+export function persistedColumnIndices(fields: readonly FieldDescriptor[]): number[] {
+  const out: number[] = []
+  let colIndex = 0
+  for (const f of fields) {
+    if (f.ctor === null) continue
+    if (f.persist) out.push(colIndex)
+    colIndex += 1
+  }
+  return out
 }
 
 /**: the wire is little-endian; raw SoA byte copies assume the platform is LE. */

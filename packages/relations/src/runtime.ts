@@ -807,12 +807,14 @@ export function createRelations(world: World): RelationsApi {
 
   function payloadFieldNames(rt: RelationRuntime): string[] {
     // The presence def's exclusive column is [eid target, ...payload]; the overflow def is [...payload].
+    // persist:false payload fields are excluded — the name-keyed pair-payload wire simply omits them
+    // and the receiver's addPair re-defaults the missing names.
     if (rt.storageKind === 'exclusive-column') {
       const names: string[] = []
-      for (const f of rt.presenceDef.fields) if (f.name !== '$t') names.push(f.name)
+      for (const f of rt.presenceDef.fields) if (f.name !== '$t' && f.persist) names.push(f.name)
       return names
     }
-    if (rt.overflow !== null) return rt.overflow.def.fields.map((f) => f.name)
+    if (rt.overflow !== null) return rt.overflow.def.fields.filter((f) => f.persist).map((f) => f.name)
     return []
   }
 

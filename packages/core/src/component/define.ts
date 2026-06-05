@@ -54,7 +54,7 @@ function validateSchema(schema: Schema): void {
   }
 }
 
-function isFieldSpec(token: unknown): token is { __fieldSpec: true; token: FieldToken; default: unknown } {
+function isFieldSpec(token: unknown): token is { __fieldSpec: true; token: FieldToken; default: unknown; persist?: boolean } {
   return typeof token === 'object' && token !== null && (token as { __fieldSpec?: unknown }).__fieldSpec === true
 }
 
@@ -97,6 +97,9 @@ function validateOptions(options?: ComponentOptions): void {
   if (options?.maxHistory !== undefined && (!Number.isInteger(options.maxHistory) || options.maxHistory < 0)) {
     throw new Error('defineComponent: maxHistory must be a non-negative integer')
   }
+  if (options?.persist !== undefined && typeof options.persist !== 'boolean') {
+    throw new Error('defineComponent: persist must be a boolean')
+  }
 }
 
 // `B`/`N` capture the brand/name LITERALS so the returned def's `name` is the literal the query DSL
@@ -118,13 +121,16 @@ export function defineComponent<
     throw new Error("defineComponent: a 'name' (or 'brand') option is required — it keys the element surface (e.entity.<name>) and prevents anonymous defs from colliding")
   }
 
+  // Component-level persist:false makes EVERY field non-persisted; a per-field FieldSpec
+  // persist flag narrows further within a persisted component.
+  const componentPersist = options?.persist ?? true
   const fields: FieldDescriptor[] = []
   for (const name of Object.keys(schema)) {
     const raw = schema[name] as FieldToken
     if (isFieldSpec(raw)) {
-      fields.push(resolveDescriptor(name, raw.token, raw.default))
+      fields.push(resolveDescriptor(name, raw.token, raw.default, componentPersist && (raw.persist ?? true)))
     } else {
-      fields.push(resolveDescriptor(name, raw))
+      fields.push(resolveDescriptor(name, raw, undefined, componentPersist))
     }
   }
 
@@ -132,6 +138,7 @@ export function defineComponent<
   const resolvedOptions: Required<ComponentOptions> = {
     storage: options?.storage ?? (isTag ? 'sparse' : 'packed'),
     maxHistory: options?.maxHistory ?? 0,
+    persist: componentPersist,
   }
 
   const columnLayouts: ColumnLayout[] = []

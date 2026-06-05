@@ -18,6 +18,7 @@ import {
   SERIALIZATION_FORMAT_VERSION,
   SNAPSHOT_MAGIC,
   ordinalToElement,
+  persistedColumnIndices,
   readJsonBytes,
   readString,
 } from './format.js'
@@ -211,6 +212,10 @@ export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
         const producerCid = cur.u32()
         const fieldCount = cur.u16()
         const localCid = producerCidToLocal.get(producerCid)
+        // The wire carries PERSISTED columns only; map wire position → local column index through
+        // the receiver's own descriptors (identical to the producer's — schemaHash-gated).
+        const localFields = localCid !== undefined ? s.fieldsOf(localCid) : undefined
+        const persistedCols = localFields !== undefined ? persistedColumnIndices(localFields) : []
         for (let fi = 0; fi < fieldCount; fi++) {
           const elementOrd = cur.u8()
           const stride = cur.u8()
@@ -221,7 +226,9 @@ export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
           // Resolve the destination column from the FIRST placed handle (all rows share one ColumnSet).
           const dst = s.columnsOf(handles[0] as EntityHandle, localCid)
           if (dst === null) continue
-          const col = dst.columns[fi]
+          const localCol = persistedCols[fi]
+          if (localCol === undefined) continue
+          const col = dst.columns[localCol]
           if (col === undefined) continue
           const element = ordinalToElement(elementOrd)
           // Reinterpret the raw bytes as the same typed array and copy into the destination column.

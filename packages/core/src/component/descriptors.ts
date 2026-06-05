@@ -66,7 +66,7 @@ function isZeroEquivalentDefault(d: unknown): boolean {
   return d === 0 || d === false
 }
 
-export function resolveDescriptor(name: string, token: FieldToken, userDefault?: unknown): FieldDescriptor {
+export function resolveDescriptor(name: string, token: FieldToken, userDefault?: unknown, persist = true): FieldDescriptor {
   // The free-form 'string' rich token MUST be matched before the scalar dispatch below (it is a
   // `typeof === 'string'` value that scalarRow would reject as an unknown scalar token).
   // Sidecar-backed: no column (ctor null), not shareable, identity encode/decode never invoked.
@@ -83,6 +83,7 @@ export function resolveDescriptor(name: string, token: FieldToken, userDefault?:
       decode: (s) => s as unknown,
       default: userDefault ?? '',
       needsExplicitInit: false,
+      persist,
     }
   }
 
@@ -102,6 +103,7 @@ export function resolveDescriptor(name: string, token: FieldToken, userDefault?:
       decode: row.decode,
       default: def,
       needsExplicitInit,
+      persist,
     }
   }
 
@@ -121,6 +123,7 @@ export function resolveDescriptor(name: string, token: FieldToken, userDefault?:
       decode: row.decode,
       default: def,
       needsExplicitInit,
+      persist,
     }
   }
 
@@ -147,6 +150,7 @@ export function resolveDescriptor(name: string, token: FieldToken, userDefault?:
       default: defaultIndex,
       // The stored slot 0 is choices[0]; only non-zero indices need an explicit fill.
       needsExplicitInit: defaultIndex !== 0,
+      persist,
     }
   }
 
@@ -164,6 +168,7 @@ export function resolveDescriptor(name: string, token: FieldToken, userDefault?:
       decode: (s) => s as unknown,
       default: userDefault,
       needsExplicitInit: false,
+      persist,
     }
   }
 

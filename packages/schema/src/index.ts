@@ -41,13 +41,16 @@ export interface ObjectToken<T> {
 // distinct from the enum-choices staticString. object<T> is the other rich kind.
 export type RichToken = 'string'
 
-// A token wrapped with a user-overridable default.
-// `field('string', { default: 'x' })` or `field(object<T>(), { default: ... })`. The inner token drives
-// every inference path through TokenOf; the default is consumed only at descriptor resolution.
+// A token wrapped with user-overridable per-field options.
+// `field('string', { default: 'x' })`, `field(object<T>(), { default: ... })`, or
+// `field('f32', { persist: false })`. The inner token drives every inference path through TokenOf;
+// the options are consumed only at descriptor resolution.
 export interface FieldSpec<F extends BaseFieldToken> {
   readonly __fieldSpec: true
   readonly token: F
   readonly default: unknown
+  /** false ⇒ the field is excluded from snapshots/deltas (re-defaults on load). Default true. */
+  readonly persist?: boolean | undefined
 }
 
 export type BaseFieldToken =
@@ -80,12 +83,17 @@ export const staticString = <const C extends readonly string[]>(...choices: C): 
 })
 export const object = <T>(): ObjectToken<T> => ({ kind: 'object' })
 
-// Wrap any token with a user-overridable default. Additive: bare tokens still
-// work unwrapped; `field(token, { default })` carries the default through to the FieldDescriptor.
-export const field = <const F extends BaseFieldToken>(token: F, opts: { default: FieldValue<F> }): FieldSpec<F> => ({
+// Wrap any token with per-field options. Additive: bare tokens still work unwrapped;
+// `field(token, { default })` carries the default through to the FieldDescriptor, and
+// `field(token, { persist: false })` marks the field serialization-transient.
+export const field = <const F extends BaseFieldToken>(
+  token: F,
+  opts: { default?: FieldValue<F>; persist?: boolean },
+): FieldSpec<F> => ({
   __fieldSpec: true,
   token,
   default: opts.default,
+  persist: opts.persist,
 })
 
 // ---------------------------------------------------------------------------
@@ -185,6 +193,12 @@ export interface FieldDescriptor {
   // a fresh row must be explicitly written (true for eid and user-overridden defaults).
   readonly default: unknown
   readonly needsExplicitInit: boolean
+  /**
+   * false ⇒ the field is excluded from copy serialization (snapshot/delta value sections, the
+   * structural stream's values-on-add, and relation-payload encodes); on load it re-defaults.
+   * Reactivity (write log, changeVersion stamps) is unaffected — non-persisted writes still stamp.
+   */
+  readonly persist: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +210,11 @@ export type StorageStrategy = 'packed' | 'sparse'
 export interface ComponentOptions {
   readonly storage?: StorageStrategy
   readonly maxHistory?: number
+  /**
+   * false ⇒ every field of the component is excluded from snapshots/deltas (values re-default on
+   * load). Membership (the signature bit) still persists. Type-inert, like `storage`. Default true.
+   */
+  readonly persist?: boolean
 }
 
 export type Schema = Readonly<Record<string, FieldToken>>

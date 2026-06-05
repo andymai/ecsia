@@ -148,13 +148,14 @@ function writeComponentFieldValues(
   fields: readonly FieldDescriptor[],
   row: number,
 ): void {
-  // Emit: u16 fieldWordCount, then per word: name + lane + f64 value.
+  // Emit: u16 fieldWordCount, then per word: name + lane + f64 value. The wire is name-keyed
+  // (self-describing), so non-persisted fields are simply omitted and re-default on apply.
   const words: { name: string; lane: number; value: number }[] = []
   let colIndex = 0
   for (const f of fields) {
     if (f.ctor === null) continue
     const col = columns[colIndex]
-    if (col !== undefined) {
+    if (col !== undefined && f.persist) {
       const stride = col.layout.stride
       for (let lane = 0; lane < stride; lane++) {
         words.push({ name: f.name, lane, value: (col.view[row * stride + lane] as number) })

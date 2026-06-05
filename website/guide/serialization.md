@@ -20,7 +20,9 @@ value bytes.
 
 ## Snapshot: a whole world, bit-exact
 
-`createSnapshotSerializer(world)` round-trips a world bit-exactly. `createSnapshotDeserializer(world)`
+`createSnapshotSerializer(world)` round-trips a world bit-exactly — for every **persisted**
+field; fields marked `persist: false` are skipped and re-default on load (see
+[Skipping transient fields](#skipping-transient-fields)). `createSnapshotDeserializer(world)`
 loads it into a fresh world, returning an entity-id **remap** (loading mints new entity
 handles, and the table maps each producer handle to its loaded handle). Both must run in the
 world's serial phase — a point where no systems are mid-run.
@@ -98,6 +100,46 @@ const since = 0
 const ser = createDeltaSerializer(world, since, { epsilon: 0.001 })
 const patch = ser.deltaCopy()
 ```
+
+## Skipping transient fields
+
+Some component data has no business in a save file: derived values, per-frame caches, debug
+counters. Mark a field — or a whole component — `persist: false` at definition time and the
+snapshot/delta writers skip it; on load it takes its declared default.
+
+```ts
+import { createWorld, defineComponent, field } from 'ecsia'
+
+// One transient field inside an otherwise-persisted component:
+const Body = defineComponent(
+  {
+    x: 'f32',
+    y: 'f32',
+    speedCache: field('f32', { persist: false }), // derived from x/y deltas — recomputed after load
+  },
+  { name: 'body' },
+)
+
+// Or an entirely transient component:
+const PathCache = defineComponent({ next: 'eid' }, { name: 'pathCache', persist: false })
+
+const world = createWorld({ components: [Body, PathCache], maxEntities: 1 << 16 })
+```
+
+The rules:
+
+- **Values only, never structure.** A `persist: false` component keeps its membership across a
+  round-trip (the entity still *has* it — including tags); only its field values re-default.
+- **Defaults still apply.** A skipped field declared `field('u8', { default: 3, persist: false })`
+  reads back `3` after a load, not `0`.
+- **Reactivity is unaffected.** Writes to skipped fields still feed the write log and the
+  `.changed` version stamps. Because those stamps are shared per-entity, a delta whose row
+  changed *only* in a skipped field still re-sends that row's persisted values — a harmless,
+  receiver-idempotent over-send; the skipped value itself never reaches the wire.
+- **Mismatched flags fail loudly.** The persisted-field subset is folded into the `schemaHash`,
+  so loading an image produced under different `persist` flags throws instead of mis-reading
+  columns. (Relation payloads are name-keyed on the wire, so a skipped payload field is simply
+  omitted and re-defaults without affecting the hash.)
 
 ## Structural journal & observer log
 
