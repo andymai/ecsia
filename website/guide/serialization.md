@@ -18,7 +18,7 @@ producer handles → loaded handles). Both must run in the world's serial phase.
 import {
   createWorld, defineComponent,
   createSnapshotSerializer, createSnapshotDeserializer,
-} from '@ecsia/ecsia'
+} from 'ecsia'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 
@@ -45,8 +45,8 @@ remap)`, passing the remap that ties producer handles to this world's handles.
 import {
   createWorld, defineComponent,
   createDeltaSerializer, applyDelta,
-} from '@ecsia/ecsia'
-import type { EntityHandle } from '@ecsia/ecsia'
+} from 'ecsia'
+import type { EntityHandle } from 'ecsia'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const world = createWorld({ components: [Position], maxEntities: 1 << 16 })
@@ -120,7 +120,7 @@ To carry a reference that survives the wire, either:
 2. store a **stable application id** and resolve it after load with `createStableIndex`.
 
 ```ts
-import { createWorld, defineComponent, createStableIndex } from '@ecsia/ecsia'
+import { createWorld, defineComponent, createStableIndex } from 'ecsia'
 
 // A stable, app-meaningful id lives in a 'string' field; build an id → entity index over it.
 const Identity = defineComponent({ uid: 'string' }, { name: 'identity' })

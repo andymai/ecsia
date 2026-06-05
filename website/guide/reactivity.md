@@ -10,7 +10,7 @@ written this frame). Both are deterministic — they agree across the serial and
 `world.observe(term, handler)`, which returns a handle with `dispose()`.
 
 ```ts
-import { createWorld, defineComponent, onRemove } from '@ecsia/ecsia'
+import { createWorld, defineComponent, onRemove } from 'ecsia'
 
 const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
 const world = createWorld({ components: [Health], maxEntities: 1 << 16 })
@@ -33,7 +33,7 @@ slot**, and mutations you make inside a handler stage to a command buffer and ap
 That is what keeps reactivity bit-identical between the serial and parallel executors.
 
 ```ts
-import { createWorld, defineComponent, onAdd, onChange } from '@ecsia/ecsia'
+import { createWorld, defineComponent, onAdd, onChange } from 'ecsia'
 
 const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
 const world = createWorld({ components: [Health], maxEntities: 1 << 16 })
@@ -52,7 +52,7 @@ Chain `.changed()` onto a query to narrow it to the entities **written this fram
 `.eachChanged(...)`. This is the write-log-driven pull side.
 
 ```ts
-import { createWorld, defineComponent, read, write } from '@ecsia/ecsia'
+import { createWorld, defineComponent, read, write } from 'ecsia'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const world = createWorld({ components: [Position], maxEntities: 1 << 16 })
@@ -73,7 +73,7 @@ whether the entity's stamp moved since `tick`. It is the same change-version mec
 serializer rides.
 
 ```ts
-import { createWorld, defineComponent } from '@ecsia/ecsia'
+import { createWorld, defineComponent } from 'ecsia'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const world = createWorld({ components: [Position], maxEntities: 1 << 16 })

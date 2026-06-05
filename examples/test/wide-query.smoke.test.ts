@@ -5,8 +5,8 @@
 // annotation escape hatch reads real fields, not `any`).
 
 import { describe, expect, test } from 'vitest'
-import { createWorld, defineComponent, read, write, MAX_QUERY_ARITY } from '@ecsia/ecsia'
-import type { ComponentDef, Has, HasWrite, Schema } from '@ecsia/ecsia'
+import { createWorld, defineComponent, read, write, MAX_QUERY_ARITY } from 'ecsia'
+import type { ComponentDef, Has, HasWrite, Schema } from 'ecsia'
 
 // Nine single-field components → a 9-term query, one past the inference cap. Literal `name`s so the
 // element property keys (CompKey<C> = the name literal) carry through to the typed escape hatch.

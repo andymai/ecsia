@@ -2,10 +2,10 @@
 // tree; a transform-propagation pass walks nodes in depth order (relations.md depthOf) so a child's
 // world transform = parent world transform ∘ local transform. Demonstrates the first-class relations
 // runtime (createRelations), exclusive-relation re-target without archetype churn, depthOf, and
-// targetsOf for parent resolution — all through the @ecsia/ecsia umbrella.
+// targetsOf for parent resolution — all through the ecsia umbrella.
 
-import { createWorld, defineComponent, createRelations } from '@ecsia/ecsia'
-import type { EntityHandle } from '@ecsia/ecsia'
+import { createWorld, defineComponent, createRelations } from 'ecsia'
+import type { EntityHandle } from 'ecsia'
 
 export interface SceneNodeSpec {
   readonly local: { x: number; y: number }

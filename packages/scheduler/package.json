@@ -1,13 +1,41 @@
 {
   "name": "@ecsia/scheduler",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "The ecsia frame scheduler: an access-graph conflict DAG, a wave executor, and an auto-parallel worker pool (worker_threads + Atomics wave-sync + fixed-index command-buffer merge) whose result is bit-identical to the serial path.",
+  "keywords": [
+    "ecs",
+    "entity-component-system",
+    "ecsia",
+    "scheduler",
+    "parallel",
+    "worker-threads",
+    "atomics",
+    "data-oriented",
+    "typescript"
+  ],
+  "license": "MIT",
+  "author": "Andy Aragon",
+  "homepage": "https://github.com/andymai/ecsia",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andymai/ecsia.git",
+    "directory": "packages/scheduler"
+  },
+  "bugs": {
+    "url": "https://github.com/andymai/ecsia/issues"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": ["dist"],
+  "publishConfig": { "access": "public" },
   "scripts": { "build": "tsc -b" },
   "dependencies": {
     "@ecsia/core": "workspace:*",

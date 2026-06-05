@@ -1,6 +1,6 @@
 // M12 cross-package integration fuzz — the milestone headline (build-plan.md M12; public-api.md §11).
 //
-// A single random op-sequence is driven THROUGH THE @ecsia/ecsia UMBRELLA API only (no reaching into a
+// A single random op-sequence is driven THROUGH THE ecsia UMBRELLA API only (no reaching into a
 // sub-package), so this test is also the proof that the umbrella's re-exports compose into a working
 // whole. The model is a self-checking oracle: alongside the real world we maintain a plain-JS shadow of
 // the intended state, and after every applied op we assert the live world still satisfies ALL of:
@@ -18,7 +18,7 @@
 //   SER  (serialize↔deserialize identity) — at checkpoints, snapshotCopy → load into a fresh world
 //        reproduces the live component values, membership, and relations bit-faithfully (eids remapped).
 //
-// Everything below imports from '@ecsia/ecsia' — that is the integration surface under test.
+// Everything below imports from 'ecsia' — that is the integration surface under test.
 
 import fc from 'fast-check'
 import { describe, expect, test } from 'vitest'
@@ -32,8 +32,8 @@ import {
   createRelations,
   createSnapshotSerializer,
   createSnapshotDeserializer,
-} from '@ecsia/ecsia'
-import type { ComponentDef, EntityHandle, RelationDef, Schema, World } from '@ecsia/ecsia'
+} from 'ecsia'
+import type { ComponentDef, EntityHandle, RelationDef, Schema, World } from 'ecsia'
 
 // ---------------------------------------------------------------------------
 // Fixed component/relation universe. Built fresh per world so a producer and a deserialize-receiver
@@ -406,7 +406,7 @@ function applyOp(kit: Kit, model: Model, handles: (EntityHandle | undefined)[], 
 // now GREEN every run. Keep numRuns high; do NOT lower it to mask a flake.
 const FUZZ_SEED = 0x12c0ffee
 
-describe('M12 — cross-package integration fuzz through the @ecsia/ecsia umbrella', () => {
+describe('M12 — cross-package integration fuzz through the ecsia umbrella', () => {
   test('random op sequences preserve entity/bitmask/relation invariants at every step (I*, BM-2, P1/P4)', () => {
     fc.assert(
       fc.property(fc.array(opArb, { minLength: 1, maxLength: 60 }), (ops) => {
@@ -449,7 +449,7 @@ describe('M12 — cross-package integration fuzz through the @ecsia/ecsia umbrel
   test('a system run through write(C) drives the Changed filter end-to-end (write log ↔ query.changed)', () => {
     // A miniature scheduler-free "system": iterate a write query, mutate, then assert the changed filter
     // names exactly the rows the system touched — the full write-tracking loop across core's query +
-    // reactivity reached only through '@ecsia/ecsia'.
+    // reactivity reached only through 'ecsia'.
     const kit = makeKit()
     const { world, D } = kit
     const handles: EntityHandle[] = []

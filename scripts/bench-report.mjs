@@ -10,7 +10,7 @@
 // then writes bench/RESULTS.json (env + raw numbers) AND website/guide/_perf-tables.md (the tables the
 // VitePress page includes). Re-running regenerates both, so the page can never drift from the artifact.
 //
-// TSX-FREE / IMPORT-FROM-BUILT: the bench builders are TypeScript that import `@ecsia/ecsia`. We compile
+// TSX-FREE / IMPORT-FROM-BUILT: the bench builders are TypeScript that import `ecsia`. We compile
 // them ONCE to plain ESM (bench/.report-dist via tsconfig.report.json) and import that — the same spirit
 // as scripts/runtime-smoke.mjs importing the built dist, no tsx/vitest in the loop. The `@ecsia/*` bare
 // specifiers resolve from the repo-root node_modules workspace links (added as root devDependencies).
@@ -21,7 +21,7 @@ import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import { Bench } from 'tinybench'
-import { createWorld, defineComponent, write, read } from '@ecsia/ecsia'
+import { createWorld, defineComponent, write, read } from 'ecsia'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(HERE, '..')

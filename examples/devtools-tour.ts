@@ -7,7 +7,7 @@
 // report objects the inspect/explain functions return.
 
 // devtools is an OPT-IN, core-level diagnostic: inspectWorld/watchWorld read the world's internal
-// `__serialize`/`__inspect` seams, which the @ecsia/ecsia umbrella facade deliberately omits (PA-1..8).
+// `__serialize`/`__inspect` seams, which the ecsia umbrella facade deliberately omits (PA-1..8).
 // So this example takes the world from @ecsia/core (the seam-carrying World) and drives it with the
 // scheduler/relations packages directly — the same way a real devtools consumer would wire it.
 import { createWorld, defineComponent, read, write, object } from '@ecsia/core'

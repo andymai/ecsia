@@ -10,7 +10,7 @@ trips newcomers — the **pooled `EntityRef`**.
 capacity; spawning lands an entity in the archetype for its exact component set.
 
 ```ts
-import { createWorld, defineComponent } from '@ecsia/ecsia'
+import { createWorld, defineComponent } from 'ecsia'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
@@ -29,7 +29,7 @@ A component is a **schema of typed fields**. Numeric fields (`'f32'`, `'i32'`, `
 columns — Structure-of-Arrays — so iteration is cache-friendly and worker-shareable.
 
 ```ts
-import { defineComponent, vec3 } from '@ecsia/ecsia'
+import { defineComponent, vec3 } from 'ecsia'
 
 const Transform = defineComponent(
   { position: vec3(), scale: 'f32' },
@@ -48,7 +48,7 @@ You can also pin a closed set of string choices with `staticString(...)`, which 
 stores a small index), so it stays worker-eligible.
 
 ```ts
-import { defineComponent, object, staticString } from '@ecsia/ecsia'
+import { defineComponent, object, staticString } from 'ecsia'
 
 const Label = defineComponent(
   {
@@ -72,7 +72,7 @@ A query selects entities by the components they hold and binds typed accessors. 
 to declare per-component access; the query yields one `EntityRef` per matched row.
 
 ```ts
-import { createWorld, defineComponent, read, write } from '@ecsia/ecsia'
+import { createWorld, defineComponent, read, write } from 'ecsia'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
@@ -95,7 +95,7 @@ A system is a `run` body plus its declared `{ read, write }` access. The schedul
 order systems; the body iterates queries.
 
 ```ts
-import { defineComponent, defineSystem, read, write } from '@ecsia/ecsia'
+import { defineComponent, defineSystem, read, write } from 'ecsia'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
@@ -124,8 +124,8 @@ The idiomatic pattern: collect targets during iteration, mutate after the loop, 
 the archetype you're walking.
 
 ```ts
-import { defineComponent, defineSystem, read } from '@ecsia/ecsia'
-import type { EntityHandle } from '@ecsia/ecsia'
+import { defineComponent, defineSystem, read } from 'ecsia'
+import type { EntityHandle } from 'ecsia'
 
 const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
 
@@ -151,7 +151,7 @@ call. Don't hold two live accessors across a `world.entity()` call. Pull the fie
 :::
 
 ```ts
-import { createWorld, defineComponent } from '@ecsia/ecsia'
+import { createWorld, defineComponent } from 'ecsia'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })

@@ -16,7 +16,7 @@ import { defineComponent } from '@ecsia/core'
 
 /**
  * The narrow slice of the world surface the bridge actually uses, declared structurally so BOTH the
- * `@ecsia/core` `World` AND the `@ecsia/ecsia` umbrella's public `World` facade (which omits the
+ * `@ecsia/core` `World` AND the `ecsia` umbrella's public `World` facade (which omits the
  * internal `__` wiring seams) satisfy it. Importing core's full `World` here would reject the umbrella
  * facade users actually pass, so we accept this minimal shape instead — the bridge never touches a seam.
  */

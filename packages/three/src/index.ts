@@ -1,5 +1,5 @@
 // @ecsia/three — the THREE.js bridge (P4). An OPT-IN package: it is deliberately NOT re-exported from
-// the @ecsia/ecsia umbrella. The umbrella is the renderer-agnostic core cohort; pulling `three` (a large
+// the ecsia umbrella. The umbrella is the renderer-agnostic core cohort; pulling `three` (a large
 // peer dependency with WebGL/DOM assumptions) into everyone's bundle would be wrong. A game that wants
 // the bridge installs `three` + `@ecsia/three` explicitly. This package depends ONLY on @ecsia/core +
 // @ecsia/schema (and `three` as a PEER dep) and is NEVER imported by them — the dependency arrow points

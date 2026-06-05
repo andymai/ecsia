@@ -1,4 +1,4 @@
-// Bundles entry.ts -> dist/entry.js with esbuild (devDep). The bundle inlines the @ecsia/ecsia dist
+// Bundles entry.ts -> dist/entry.js with esbuild (devDep). The bundle inlines the ecsia dist
 // umbrella so the browser page runs the SHIPPED artifact with no import-map / node resolution in-tab.
 //
 // Run: node scripts/browser-smoke/build.mjs   (also wired as `pnpm smoke:browser:bundle`)

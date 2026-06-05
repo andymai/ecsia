@@ -5,7 +5,7 @@ program runs single-threaded everywhere and across a worker pool where the host 
 parallel result is **bit-identical** to the serial one.
 
 ```ts
-import { createWorld, defineComponent } from '@ecsia/ecsia'
+import { createWorld, defineComponent } from 'ecsia'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 
@@ -75,7 +75,7 @@ Read it top to bottom:
 ## Two disjoint-write systems share a wave
 
 ```ts
-import { defineComponent, defineSystem, write } from '@ecsia/ecsia'
+import { defineComponent, defineSystem, write } from 'ecsia'
 
 const PositionA = defineComponent({ x: 'f32', y: 'f32' }, { name: 'positionA' })
 const PositionB = defineComponent({ x: 'f32', y: 'f32' }, { name: 'positionB' })

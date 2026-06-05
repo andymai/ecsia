@@ -11,7 +11,7 @@
 // PUBLIC SURFACE ONLY (P0.5 surface diet). The DAG/wave builders, command-buffer encoder, executor
 // run loop, and worker SAB primitives are implementation internals — they live in `./internal.ts`,
 // are NOT re-exported here, and are reached by this package's own tests through a relative import.
-// The umbrella (@ecsia/ecsia) re-exports exactly the symbols below.
+// The umbrella (ecsia) re-exports exactly the symbols below.
 
 // --- planner: the system descriptor + ordering hints (§3) ---
 export { defineSystem, inAnyOrderWith, beforeWritersOf, afterReadersOf } from './planner/index.js'

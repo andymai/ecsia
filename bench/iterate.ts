@@ -1,10 +1,10 @@
 // Cross-library iteration micro-bench: integrate Position from Velocity over N entities, the canonical
-// ECS hot loop. ecsia (via @ecsia/ecsia) vs miniplex vs bitECS. Each builder returns a `step()` that
+// ECS hot loop. ecsia (via ecsia) vs miniplex vs bitECS. Each builder returns a `step()` that
 // advances every entity one frame; tinybench times step() in the runner. Kept allocation-free in the
 // loop so the measurement is the storage/iteration cost, not GC.
 
-import { createWorld, defineComponent, write } from '@ecsia/ecsia'
-import type { QueryChunk } from '@ecsia/ecsia'
+import { createWorld, defineComponent, write } from 'ecsia'
+import type { QueryChunk } from 'ecsia'
 import { World as MiniplexWorld } from 'miniplex'
 import {
   createWorld as bitCreateWorld,

@@ -27,7 +27,7 @@
     "docs:build": "pnpm docs:api && vitepress build website && pnpm docs:check"
   },
   "devDependencies": {
-    "@ecsia/ecsia": "workspace:*",
+    "ecsia": "workspace:*",
     "@ecsia/scheduler": "workspace:*",
     "@ecsia/schema": "workspace:*",
     "@playwright/test": "1.49.1",

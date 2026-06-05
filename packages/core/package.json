@@ -1,13 +1,41 @@
 {
   "name": "@ecsia/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "The single-threaded ecsia kernel: archetype/SoA tables, serial-only bitmask membership index, monomorphic typed accessors, live queries, and reactivity. Runs standalone; the opt-in scheduler/relations/serialization layers attach via injected seams.",
+  "keywords": [
+    "ecs",
+    "entity-component-system",
+    "ecsia",
+    "archetype",
+    "soa",
+    "data-oriented",
+    "gamedev",
+    "simulation",
+    "typescript"
+  ],
+  "license": "MIT",
+  "author": "Andy Aragon",
+  "homepage": "https://github.com/andymai/ecsia",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andymai/ecsia.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/andymai/ecsia/issues"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": ["dist"],
+  "publishConfig": { "access": "public" },
   "scripts": { "build": "tsc -b" },
   "dependencies": {
     "@ecsia/schema": "workspace:*"

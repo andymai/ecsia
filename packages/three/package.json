@@ -1,20 +1,48 @@
 {
   "name": "@ecsia/three",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "THREE.js bridge for the ecsia ECS: drive three.js objects from ecsia components. Deliberately NOT re-exported from the umbrella, since three is a large peer dependency.",
+  "keywords": [
+    "ecs",
+    "entity-component-system",
+    "ecsia",
+    "three",
+    "threejs",
+    "3d",
+    "rendering",
+    "gamedev",
+    "typescript"
+  ],
+  "license": "MIT",
+  "author": "Andy Aragon",
+  "homepage": "https://github.com/andymai/ecsia",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andymai/ecsia.git",
+    "directory": "packages/three"
+  },
+  "bugs": {
+    "url": "https://github.com/andymai/ecsia/issues"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": ["dist"],
+  "publishConfig": { "access": "public" },
   "scripts": { "build": "tsc -b" },
   "dependencies": {
     "@ecsia/core": "workspace:*",
     "@ecsia/schema": "workspace:*"
   },
   "peerDependencies": {
-    "three": "^0.169"
+    "three": ">=0.169 <1"
   },
   "devDependencies": {
     "three": "^0.169.0",

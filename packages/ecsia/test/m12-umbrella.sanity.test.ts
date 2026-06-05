@@ -1,4 +1,4 @@
-// M12 umbrella sanity (public-api.md §10): importing '@ecsia/ecsia' gives the documented cohesive
+// M12 umbrella sanity (public-api.md §10): importing 'ecsia' gives the documented cohesive
 // surface — a user assembles a whole world (component/tag/relation/query/system/serialization) from the
 // ONE import, never reaching into a sub-package. This file double-duties as a type-check gate: the named
 // imports below resolve to real values/types through the umbrella's re-exports, so if a re-export is
@@ -6,7 +6,7 @@
 // assertions below make the runtime surface explicit too).
 
 import { describe, expect, test } from 'vitest'
-import * as ecsia from '@ecsia/ecsia'
+import * as ecsia from 'ecsia'
 import {
   // world
   createWorld,
@@ -47,7 +47,7 @@ import {
   NO_ENTITY,
   NULL_ENTITY,
   isNoEntity,
-} from '@ecsia/ecsia'
+} from 'ecsia'
 // Type-only surface (public-api.md §10): if any of these is not re-exported, this import fails to compile.
 import type {
   World,
@@ -73,9 +73,9 @@ import type {
   SystemDef,
   SystemContext,
   Schema,
-} from '@ecsia/ecsia'
+} from 'ecsia'
 
-describe('M12 umbrella — the documented public surface is importable from @ecsia/ecsia', () => {
+describe('M12 umbrella — the documented public surface is importable from ecsia', () => {
   test('every documented runtime export is a present binding of the right kind', () => {
     const fns = [
       createWorld,
@@ -125,7 +125,7 @@ describe('M12 umbrella — the documented public surface is importable from @ecs
   })
 
   test('a whole world is assembled end-to-end from the single umbrella import (smoke of the cohesive API)', () => {
-    // Use every layer reached through '@ecsia/ecsia' once: schema (defineComponent/Tag), core (createWorld/
+    // Use every layer reached through 'ecsia' once: schema (defineComponent/Tag), core (createWorld/
     // query/accessors/observe), relations (createRelations), scheduler (defineSystem/createScheduler),
     // serialization (snapshot/createSnapshotDeserializer). A single linear program — the documented UX.
     const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
