@@ -24,6 +24,24 @@ a world via `createRelations(world)`.
 pnpm add @ecsia/relations @ecsia/core   # not yet published — local workspace for now
 ```
 
+## Reverse queries
+
+Every link has two ends: the **subject** (the entity doing the pointing) and the
+**target** (the entity pointed at). `subjectsOf` answers the reverse question — "who
+points at this entity?" — either for one relation, or across **all** relations at once
+by passing `Wildcard` in the relation position:
+
+```ts
+rel.subjectsOf(ChildOf, parent)    // every child of `parent`
+rel.subjectsOf(Wildcard, parent)   // anyone pointing at `parent` via ANY relation
+```
+
+The wildcard form is the pre-despawn audit: every entity directly linked to `parent`,
+each one once — the first ring a `world.despawn(parent)` would touch. Both forms read
+the same target→subjects index the cascade machinery maintains, so the lookup never
+scans the world: the typed form is O(1) to the subject set, the wildcard form is O(R)
+bucket lookups (R = registered relations).
+
 ## Links
 
 - Repository & full docs: https://github.com/andymai/ecsia
