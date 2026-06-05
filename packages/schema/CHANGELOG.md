@@ -1,0 +1,28 @@
+# Changelog
+
+## [0.1.0](https://github.com/andymai/ecsia/compare/schema-v0.1.0...schema-v0.1.0) (2026-06-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename umbrella package to 'ecsia'; prepare 0.1.0
+* API polish — naming unification and ergonomics
+
+### Features
+
+* API polish — naming unification and ergonomics ([53df674](https://github.com/andymai/ecsia/commit/53df6740f2240921a90b63b5cbb7b5942975eed8))
+* **core:** first-class string and object component fields ([ee0ab69](https://github.com/andymai/ecsia/commit/ee0ab69fec7b0ce288ddd25a72fb38df2226325d))
+* **core:** memory buffers, defineComponent, typed accessors ([844bdb4](https://github.com/andymai/ecsia/commit/844bdb4b824f6a82ec861bc212a31e8344633254))
+* **core:** query DSL and live queries ([74ba6ad](https://github.com/andymai/ecsia/commit/74ba6ad561032f7b91655a277896eb327e64efdb))
+* project scaffold and entity layer ([fc93556](https://github.com/andymai/ecsia/commit/fc93556dc1783ca6c294a290e78adda706f1c09e))
+* **schema:** query arity inference hardening ([3ad790f](https://github.com/andymai/ecsia/commit/3ad790fa3f96de9ed194d3d9b180470baa54352f))
+
+
+### Performance
+
+* iteration tuning, worker benchmark, column-growth aliasing fix ([d875ce8](https://github.com/andymai/ecsia/commit/d875ce803ceeeee213e25aa5fee9bbd12c00ddc9))
+
+
+### Miscellaneous
+
+* rename umbrella package to 'ecsia'; prepare 0.1.0 ([546ffc5](https://github.com/andymai/ecsia/commit/546ffc58f0bf3825b85d21cf559525c2dcc63cd3))

@@ -1,0 +1,34 @@
+# Changelog
+
+## [0.1.0](https://github.com/andymai/ecsia/compare/serialization-v0.1.0...serialization-v0.1.0) (2026-06-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename scheduler.workers 'postMessage-fallback' to 'no-sab'
+* rename umbrella package to 'ecsia'; prepare 0.1.0
+* API polish — naming unification and ergonomics
+
+### Features
+
+* API polish — naming unification and ergonomics ([53df674](https://github.com/andymai/ecsia/commit/53df6740f2240921a90b63b5cbb7b5942975eed8))
+* **core:** first-class string and object component fields ([ee0ab69](https://github.com/andymai/ecsia/commit/ee0ab69fec7b0ce288ddd25a72fb38df2226325d))
+* project scaffold and entity layer ([fc93556](https://github.com/andymai/ecsia/commit/fc93556dc1783ca6c294a290e78adda706f1c09e))
+* rename scheduler.workers 'postMessage-fallback' to 'no-sab' ([69b6acb](https://github.com/andymai/ecsia/commit/69b6acb3f3059210fa45754489432cf65f744b78))
+* **serialization:** snapshots, deltas, and worker bootstrap ([566057e](https://github.com/andymai/ecsia/commit/566057eeb64d418f101d1a6b1c9ad0a1fb0507fd))
+* **serialization:** structural change section in deltas ([47915af](https://github.com/andymai/ecsia/commit/47915af5311e48dc7ba597e5bf180c71ab8728b6))
+
+
+### Miscellaneous
+
+* rename umbrella package to 'ecsia'; prepare 0.1.0 ([546ffc5](https://github.com/andymai/ecsia/commit/546ffc58f0bf3825b85d21cf559525c2dcc63cd3))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.1.0
+    * @ecsia/schema bumped to 0.1.0
+  * devDependencies
+    * @ecsia/relations bumped to 0.1.0
