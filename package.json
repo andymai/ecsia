@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@vitest/coverage-v8": "2.1.9",
     "bitecs": "^0.3.40",
     "fast-check": "^3.23.0",
     "miniplex": "^2.0.0",
