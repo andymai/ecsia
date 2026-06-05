@@ -138,6 +138,49 @@ describe('replication — tick-chaining enforcement (G2)', () => {
   })
 })
 
+describe('replication — a corrupt delta poisons the receiver until a baseline heals it', () => {
+  it('a truncated payload → needBaseline; every later delta refused; a baseline restores convergence', () => {
+    const { P, src, R, dst, stream, receiver } = pair()
+    const a = src.spawnWith(P)
+
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { x: number }).x = 1
+    const covered = stream.tick() // same-flush delta, normally skipped idempotently after the join
+    const join = stream.baseline()
+    expect(receiver.apply(join).applied).toBe(true)
+
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { x: number }).x = 2
+    const b = src.spawnWith(P) // structural op — lands BEFORE the corrupt value bytes are hit
+    const d = stream.tick()
+    // Valid envelope fields, corrupt payload: the value section's tail is cut off mid-row, so
+    // applyDelta throws AFTER the structural section already applied — partially-applied state.
+    const truncated: typeof d = { ...d, bytes: d.bytes.subarray(0, d.bytes.byteLength - 4) }
+    expect(receiver.apply(truncated)).toEqual({ applied: false, needBaseline: true, tick: join.tick })
+
+    // Poisoned: even an already-covered message must NOT take the idempotent-skip path — the
+    // world no longer matches what "covered" meant.
+    expect(receiver.apply(covered)).toEqual({ applied: false, needBaseline: true, tick: join.tick })
+
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { x: number }).x = 3
+    const afterPoison = receiver.apply(stream.tick())
+    expect(afterPoison.applied).toBe(false)
+    expect(afterPoison.needBaseline).toBe(true)
+
+    // A baseline's replace-load heals the partial state; the chain and convergence resume.
+    expect(receiver.apply(stream.baseline()).applied).toBe(true)
+    const localA = receiver.remap.get(a) as EntityHandle
+    expect((dst.entity(localA).read(R) as { x: number }).x).toBeCloseTo(3)
+    expect(dst.isAlive(receiver.remap.get(b) as EntityHandle)).toBe(true)
+
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { x: number }).x = 4
+    expect(receiver.apply(stream.tick()).applied).toBe(true)
+    expect((dst.entity(localA).read(R) as { x: number }).x).toBeCloseTo(4)
+  })
+})
+
 describe('replication — journal gap forces a baseline (G3)', () => {
   it('structural churn beyond the journal window degrades tick() to kind "baseline", and the next delta chains', () => {
     const P = defP()
@@ -273,6 +316,41 @@ describe('replication — epsilon stream converges to within epsilon', () => {
     const serverX = (src.entity(a).read(P) as { x: number }).x
     expect(clientX).toBeCloseTo(10)
     expect(Math.abs(serverX - clientX)).toBeLessThanOrEqual(epsilon)
+  })
+
+  it('a baseline snaps the shadow: a post-rebaseline change between ε and 2ε reaches the receiver', () => {
+    const P = defP()
+    const src = createWorld({ components: [P] })
+    const R = defP()
+    const dst = createWorld({ components: [R] })
+    const epsilon = 0.5
+    const stream = createReplicationStream(src, { epsilon })
+    const receiver = createReplicationReceiver(dst)
+    const a = src.spawnWith(P)
+    receiver.apply(stream.baseline())
+
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { x: number }).x = 10 // emitted — the shadow holds 10
+    receiver.apply(stream.tick())
+
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { x: number }).x = 10.4 // within ε of the shadow — held back
+    receiver.apply(stream.tick())
+
+    // The rebasing baseline delivers the EXACT 10.4 …
+    expect(receiver.apply(stream.baseline()).applied).toBe(true)
+    const localA = receiver.remap.get(a) as EntityHandle
+    expect((dst.entity(localA).read(R) as { x: number }).x).toBeCloseTo(10.4)
+
+    // … so a change of magnitude between ε and 2ε vs the receiver's state must be emitted.
+    // Without the shadow snap it is within ε of the stale last-EMITTED 10 and held back,
+    // leaving the rebased receiver 0.8 (> ε) adrift.
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { x: number }).x = 9.6
+    expect(receiver.apply(stream.tick()).applied).toBe(true)
+    const clientX = (dst.entity(localA).read(R) as { x: number }).x
+    expect(clientX).toBeCloseTo(9.6)
+    expect(Math.abs((src.entity(a).read(P) as { x: number }).x - clientX)).toBeLessThanOrEqual(epsilon)
   })
 })
 

@@ -212,6 +212,12 @@ export async function main(opts: ReplicationOptions = {}): Promise<ReplicationRe
   const clientEntities = collect(client, C)
   // The client-side uid → handle lookup. Replicated handles are client-local mints, so identity
   // crosses the wire as the Identity uid, and counterparts are found by that stable id.
+  // WORKAROUND: a hand-rolled query map instead of createStableIndex, deliberately —
+  // createStableIndex is currently unsafe across load(…, 'replace') / recycled entity indices:
+  // SidecarStore.readForObserver returns the pending-clear stash keyed by index only, so onAdd
+  // observers read PRE-load rich values after a second replace-load (every resync baseline here),
+  // permanently corrupting the index (core bug, tracked). Don't "clean this up" back to
+  // createStableIndex until that is fixed.
   const clientByUid = new Map<string, EntityHandle>()
   for (const e of client.query(read(C.Identity))) clientByUid.set(e.identity.uid, e.handle)
 

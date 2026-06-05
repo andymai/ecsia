@@ -115,12 +115,18 @@ message and enforces the rules a hand-rolled loop tends to get wrong:
 - **Deltas must chain.** Each delta names the tick it starts from; the receiver applies it
   only if that matches the tick it last applied. A lost or reordered message breaks the
   chain, and `apply` answers `needBaseline: true` — ask the server for a fresh `baseline()`
-  and the stream resumes. There is no partial apply.
+  and the stream resumes. An unappliable message is refused whole; the one exception is a
+  payload whose bytes are corrupt and throw *mid*-apply, which leaves partially-applied state:
+  the receiver then answers `needBaseline` for every delta until a baseline rebases it.
 - **A producer-side history gap resyncs itself.** The structural journal that feeds deltas
   is a bounded ring; if churn overflows it, `tick()` notices the window can't be covered and
   returns a full baseline instead of a silently incomplete delta.
 - **The receiver owns the remap.** The producer-to-local entity table grows as deltas create
   entities, for the lifetime of the stream — you never thread it by hand.
+
+The mirror world must be **dedicated** to the stream: every baseline (a join, a resync, a
+journal-gap degrade) rebases via a replace-load that clears all entities in the receiver
+world, so receiver-local entities do not survive. Keep non-replicated state elsewhere.
 
 ```ts
 import {

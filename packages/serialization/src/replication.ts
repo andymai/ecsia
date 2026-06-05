@@ -10,8 +10,10 @@
 // G5 the message envelope itself (seq/kind + a 24-byte binary header).
 //
 // Loss model: the delta cursor advances on every emission and cannot rewind, so a dropped or
-// reordered message means resync via a fresh baseline — there is no ack-based re-emission and
-// no partial apply, ever.
+// reordered message means resync via a fresh baseline — there is no ack-based re-emission, and
+// an unappliable message is refused whole. The one exception is a corrupt payload that throws
+// MID-apply: that leaves partially-applied state, so the receiver poisons itself (every delta
+// answers needBaseline) until a baseline's replace-load heals it.
 
 import type { EntityHandle } from '@ecsia/schema'
 import type { World } from '@ecsia/core'
@@ -24,7 +26,11 @@ import type { OnUnserializable } from './rich.js'
 
 /** One replication stream emission: the envelope fields + the unchanged snapshot/delta image. */
 export interface ReplicationMessage {
-  /** Per-stream monotone emit counter (transport debugging; ticks are the correctness chain). */
+  /**
+   * Per-stream monotone emit counter. Baselines consume seq too, so a broadcast observer sees
+   * gaps where joiner/resync baselines went out to someone else — seq is transport debugging
+   * ONLY; ticks are the correctness chain.
+   */
   readonly seq: number
   readonly kind: 'baseline' | 'delta'
   /** Extends the snapshot's schema gate to every message (G1). */
@@ -63,6 +69,11 @@ export interface ReplicationStream {
    * The next delta, covering (last emission, now]. Automatically a `'baseline'` when the bounded
    * structural journal cannot cover the window (gap ⇒ forced resync, closing G3) — receivers
    * rebase on any baseline, so the degradation needs no out-of-band signal.
+   *
+   * Call AFTER all of this tick's mutations, at the serial flush point. Selection is STRICT
+   * (`> sinceTick`): a structural op journaled at tick T after `tick()` has already run falls
+   * outside every later window — it is lost to the stream forever, and only a baseline re-covers
+   * the missing entity/component on receivers.
    */
   tick(): ReplicationMessage
 }
@@ -78,6 +89,10 @@ export function createReplicationStream(world: World, opts: ReplicationStreamOpt
   let seq = 0
 
   function baselineMessage(): ReplicationMessage {
+    // The snapshot delivers EXACT values, but the epsilon shadow holds last-EMITTED ones — a
+    // receiver rebased on this baseline would otherwise be epsilon-compared against stale
+    // emissions and could drift up to 2·epsilon before a held-back row re-crossed tolerance.
+    ser.refreshEpsilonShadow()
     return {
       seq: seq++,
       kind: 'baseline',
@@ -96,8 +111,8 @@ export function createReplicationStream(world: World, opts: ReplicationStreamOpt
       // and consumes nothing. A gap means (sinceTick, now] cannot be structurally reconstructed —
       // the raw delta would silently omit the structural section, diverging every receiver.
       if (s.drainStructuralSince(ser.sinceTick).gap) {
-        // Advance the delta cursor past the gap with a discarded emission (also refreshes the
-        // epsilon shadow), so the NEXT tick() chains from this baseline's tick.
+        // Advance the delta cursor past the gap with a discarded emission, so the NEXT tick()
+        // chains from this baseline's tick (baselineMessage snaps the epsilon shadow itself).
         ser.delta()
         return baselineMessage()
       }
@@ -116,13 +131,24 @@ export interface ReplicationApplyResult {
   readonly tick: number
 }
 
+/**
+ * The consumer side: mirrors one producer stream into a DEDICATED world. Every baseline rebases
+ * via a replace-load that clears ALL entities in the receiver world first — receiver-local
+ * entities do not survive a join, a resync, or a journal-gap baseline, so keep non-replicated
+ * state in a separate world.
+ */
 export interface ReplicationReceiver {
   /**
    * Validates schemaHash (throws — G1) and tick-chaining (G2): a delta applies only when its
    * `baselineTick` equals the last applied tick; any baseline rebases (full reload + fresh remap);
    * an already-covered delta (`tick <= lastApplied`, e.g. the same-flush delta arriving right
    * after a join baseline) is skipped idempotently; anything else → `needBaseline`.
-   * No partial apply, ever. Must run at a serial flush point.
+   * No partial apply across messages. Must run at a serial flush point.
+   *
+   * CORRUPT PAYLOAD: a delta whose bytes throw mid-apply leaves PARTIALLY-APPLIED state (its
+   * structural ops may have landed before the bad bytes were hit), and only a baseline's full
+   * replace-load heals it. `apply` catches the throw, answers `needBaseline: true`, and refuses
+   * every subsequent delta the same way until a baseline rebases the world.
    */
   apply(msg: ReplicationMessage): ReplicationApplyResult
   /** The stream-lifetime producer→receiver entity remap, owned by the receiver (G4). */
@@ -134,6 +160,9 @@ export function createReplicationReceiver(world: World): ReplicationReceiver {
   const deser = createSnapshotDeserializer(world)
   const remap = new Map<EntityHandle, EntityHandle>()
   let lastAppliedTick = -1
+  // Set when a delta threw mid-apply: the world holds partially-applied state that only a
+  // baseline's replace-load can heal, so every delta is refused until one arrives.
+  let poisoned = false
 
   return {
     apply(msg: ReplicationMessage): ReplicationApplyResult {
@@ -150,11 +179,20 @@ export function createReplicationReceiver(world: World): ReplicationReceiver {
         remap.clear()
         for (const [producer, local] of result.remap) remap.set(producer, local)
         lastAppliedTick = result.tick
+        poisoned = false
         return { applied: true, needBaseline: false, tick: lastAppliedTick }
       }
+      if (poisoned) {
+        return { applied: false, needBaseline: true, tick: lastAppliedTick }
+      }
       if (lastAppliedTick >= 0 && msg.baselineTick === lastAppliedTick) {
-        // applyDelta extends the mutable remap with handles for entities this delta created.
-        lastAppliedTick = applyDelta(world, msg.bytes, remap)
+        try {
+          // applyDelta extends the mutable remap with handles for entities this delta created.
+          lastAppliedTick = applyDelta(world, msg.bytes, remap)
+        } catch {
+          poisoned = true
+          return { applied: false, needBaseline: true, tick: lastAppliedTick }
+        }
         return { applied: true, needBaseline: false, tick: lastAppliedTick }
       }
       if (lastAppliedTick >= 0 && msg.tick <= lastAppliedTick) {
