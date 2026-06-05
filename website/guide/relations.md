@@ -122,6 +122,41 @@ for (const e of world.query(rel.Pair(ChildOf, Wildcard))) {
 }
 ```
 
+## Reverse queries
+
+`targetsOf` walks a link forward — "who does this entity point at?". `subjectsOf` walks it
+the other way: every entity pointing **at** a given target through a relation. Pass
+`Wildcard` as the relation to ask across **all** relations at once — "who points at this
+entity via anything?" — which is exactly the question to ask before despawning an entity
+that others may depend on. Each subject comes back once, even if it points at the target
+through several relations.
+
+Both forms read the same target→subjects index the despawn cascade uses, so the lookup is
+O(1) to find the subjects no matter how many entities exist — never a world scan.
+
+```ts
+import { createWorld, defineComponent, createRelations, Wildcard } from 'ecsia'
+
+const Mob = defineComponent({ hp: 'i32' }, { name: 'mob' })
+const world = createWorld({ components: [Mob], maxEntities: 1 << 16 })
+const rel = createRelations(world)
+const ChildOf = rel.defineRelation(null, { exclusive: true })
+const Targets = rel.defineRelation(null)
+
+const hub = world.spawnWith(Mob)
+const child = world.spawnWith(Mob)
+const turret = world.spawnWith(Mob)
+rel.addPair(child, ChildOf, hub)
+rel.addPair(turret, Targets, hub)
+
+for (const s of rel.subjectsOf(ChildOf, hub)) {
+  s // child — only ChildOf pointers
+}
+for (const s of rel.subjectsOf(Wildcard, hub)) {
+  s // child AND turret — anyone pointing at hub via anything
+}
+```
+
 ## Cascade directions
 
 Cascade is declared on the relation and fires when a participant is despawned (removed from

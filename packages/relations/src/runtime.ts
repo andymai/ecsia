@@ -108,7 +108,15 @@ interface RelationsApi {
   hasPair(subject: EntityHandle, relation: RelationDef<Schema | void>, target: EntityHandle): boolean
   hasRelation(subject: EntityHandle, relation: RelationDef<Schema | void>): boolean
   getPair<R extends RelationDef<Schema | void>>(subject: EntityHandle, relation: R, target: EntityHandle): PairAccessor<R>
-  subjectsOf(relation: RelationDef<Schema | void>, target: EntityHandle): Iterable<EntityHandle>
+  /**
+   * Reverse query: every entity that points AT `target` (each one a "subject" — the pointing
+   * end of a pair) through `relation`. Pass `Wildcard` as the relation to ask across ALL
+   * registered relations at once — "who points at this entity via anything?" — handy before a
+   * despawn to see what a removal would touch. Each subject is yielded once, even when it
+   * points at `target` through several relations. Reads the same target→subjects index the
+   * despawn cascade uses: O(1) to find the subjects, no world scan.
+   */
+  subjectsOf(relation: RelationDef<Schema | void> | WildcardToken, target: EntityHandle): Iterable<EntityHandle>
   targetsOf(subject: EntityHandle, relation: RelationDef<Schema | void>): Iterable<EntityHandle>
   /**: the single current target of an exclusive relation (eid column read, O(1)); null if absent. Throws on a non-exclusive relation. */
   targetOf(subject: EntityHandle, relation: RelationDef<Schema | void>): EntityHandle | null
@@ -504,14 +512,38 @@ export function createRelations(world: World): RelationsApi {
     return { read: inert, write: inert }
   }
 
-  function* subjectsOf(relation: RelationDef<Schema | void>, target: EntityHandle): Iterable<EntityHandle> {
-    const rt = requireRuntime(relation)
+  function* subjectsOf(relation: RelationDef<Schema | void> | WildcardToken, target: EntityHandle): Iterable<EntityHandle> {
     // (no-dangling): the back-ref index is keyed by bare entity INDEX (handleIndex strips generation),
     // so a despawned handle whose index was recycled would alias the live entity now in that slot. Guard
     // the queried target's liveness/generation FIRST — a dead handle has no subjects.
     if (!host.isAlive(target)) return
-    const set = rt.backref.get(host.handleIndex(target)) ?? EMPTY_SET
-    for (const s of set) if (host.isAlive(s)) yield s
+    const tIdx = host.handleIndex(target)
+    if ((relation as unknown) !== WILDCARD) {
+      const rt = requireRuntime(relation as RelationDef<Schema | void>)
+      const set = rt.backref.get(tIdx) ?? EMPTY_SET
+      for (const s of set) if (host.isAlive(s)) yield s
+      return
+    }
+    // Wildcard relation: walk every registered relation's back-ref bucket for this target, yielding
+    // each subject once. The dedup set is allocated only when a SECOND relation holds subjects for
+    // this target — the common single-relation walk iterates the live bucket with no allocation.
+    let first: ReadonlySet<EntityHandle> | null = null
+    let seen: Set<EntityHandle> | null = null
+    for (const rt of relations) {
+      const set = rt.backref.get(tIdx)
+      if (set === undefined) continue
+      if (first === null) {
+        first = set
+        for (const s of set) if (host.isAlive(s)) yield s
+        continue
+      }
+      if (seen === null) seen = new Set(first)
+      for (const s of set) {
+        if (seen.has(s)) continue
+        seen.add(s)
+        if (host.isAlive(s)) yield s
+      }
+    }
   }
 
   function* targetsOf(subject: EntityHandle, relation: RelationDef<Schema | void>): Iterable<EntityHandle> {
