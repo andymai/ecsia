@@ -41,12 +41,24 @@ const canShare = (): boolean =>
 // Resizable {Shared}ArrayBuffer is ES2024; lib is ES2023, so the maxByteLength option is typed
 // through these ctor shims rather than the global lib type.
 type ResizableCtor<B> = new (byteLength: number, options: { maxByteLength: number }) => B
-const ResizableSab = SharedArrayBuffer as unknown as ResizableCtor<SharedArrayBuffer>
+// SharedArrayBuffer does not EXIST as a global in non-cross-origin-isolated browsers — referencing
+// it at module scope would throw on load. Resolve it lazily behind a typeof guard.
+const sabCtor = (): ResizableCtor<SharedArrayBuffer> | undefined =>
+  typeof SharedArrayBuffer === 'undefined'
+    ? undefined
+    : (SharedArrayBuffer as unknown as ResizableCtor<SharedArrayBuffer>)
+const plainSabCtor = (): (new (byteLength: number) => SharedArrayBuffer) | undefined =>
+  typeof SharedArrayBuffer === 'undefined' ? undefined : SharedArrayBuffer
+const missingSab = (): never => {
+  throw new Error('shared backing requested but SharedArrayBuffer is unavailable (page not cross-origin isolated)')
+}
 const ResizableAb = ArrayBuffer as unknown as ResizableCtor<ArrayBuffer>
 
 const tryResizableSab = (byteLen: number, maxBytes: number): SharedArrayBuffer | undefined => {
   try {
-    return new ResizableSab(byteLen, { maxByteLength: maxBytes })
+    const Sab = sabCtor()
+    if (!Sab) return undefined
+    return new Sab(byteLen, { maxByteLength: maxBytes })
   } catch {
     return undefined
   }
@@ -85,7 +97,7 @@ export function allocU32(length: number, opts: AllocU32Options = {}): U32Region 
       backing = ab ?? new ArrayBuffer(byteLen)
     }
   } else {
-    backing = wantShared ? new SharedArrayBuffer(byteLen) : new ArrayBuffer(byteLen)
+    backing = wantShared ? new (plainSabCtor() ?? missingSab())(byteLen) : new ArrayBuffer(byteLen)
     shared = wantShared
   }
 
