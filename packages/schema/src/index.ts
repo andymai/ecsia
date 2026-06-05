@@ -368,12 +368,28 @@ export type LooseQueryElement = Readonly<Record<string, Readonly<Record<string, 
   handle: EntityHandle
 }
 
+// §9 the opt-in column-cursor surface: one reused chunk per matched hot archetype exposing raw SoA
+// columns + a row span. The runtime class lands in @ecsia/core; this fixes the structural shape.
+export interface QueryChunk {
+  /** Rows in this chunk (the archetype's dense row count). Iterate `0..count`. */
+  readonly count: number
+  /** Dense row→EntityHandle list (row `r`'s entity is `entities[r]`). */
+  readonly entities: Uint32Array
+  /** The live typed column view for `def.field`. Stride-1 scalars index by row directly. */
+  column<S extends Schema>(def: ComponentDef<S>, field: string): ArrayLike<number> & { [i: number]: number }
+  /** Slots per row for `def.field` (1 scalar, N vec): row `r` starts at `r * stride`. */
+  stride<S extends Schema>(def: ComponentDef<S>, field: string): number
+}
+
 // §9.1 the Query surface (runtime side lands in @ecsia/core; this fixes the typed shape).
 export interface Query<Terms extends readonly QueryTerm[]> {
   readonly terms: Terms
   /** Iterate every matching entity; `e` is the pooled element (do NOT store it across iterations). */
   each(fn: (e: QueryElement<Terms> & { handle: EntityHandle }) => void): void
   [Symbol.iterator](): Iterator<QueryElement<Terms> & { handle: EntityHandle }>
+  /** Opt-in SoA fast path (queries.md §9): one reused {@link QueryChunk} per matched hot archetype, with
+   * raw typed column views + a row span. Bypasses the per-row accessor AND the reactivity write log. */
+  eachChunk(fn: (chunk: QueryChunk) => void): void
   /** Flavor declarations (chainable; queries.md §8.1). */
   added(): this
   removed(): this
@@ -398,6 +414,8 @@ export interface LooseQuery {
   readonly terms: readonly QueryTerm[]
   each<EL = LooseQueryElement>(fn: (e: EL & { handle: EntityHandle }) => void): void
   [Symbol.iterator](): Iterator<LooseQueryElement>
+  /** Opt-in SoA fast path (queries.md §9): see {@link Query.eachChunk}. */
+  eachChunk(fn: (chunk: QueryChunk) => void): void
   /** Flavor declarations (chainable; queries.md §8.1). */
   added(): this
   removed(): this

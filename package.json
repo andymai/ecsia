@@ -14,7 +14,8 @@
     "typecheck": "tsc -b --noEmit false",
     "typecheck:extras": "tsc -p examples/tsconfig.json && tsc -p bench/tsconfig.json",
     "bench": "vitest bench --run",
-    "bench:macro": "BENCH_MACRO=1 vitest run --project bench"
+    "bench:macro": "BENCH_MACRO=1 vitest run --project bench",
+    "bench:macro:pool": "BENCH_MACRO=1 vitest run --project bench bench/test/heavy-pool.smoke.test.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

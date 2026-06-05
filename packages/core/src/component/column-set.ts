@@ -59,8 +59,17 @@ export function buildColumnSet(params: BuildColumnSetParams): ColumnSet {
   const binding: AccessorBinding = { world, componentId }
   accessor.__binding = binding
 
-  // Register the singleton as a ViewHolder so a fallback grow re-binds its captured views (§7.5).
-  for (const col of columns) buffers.registerAccessor(col.key, accessor)
+  // Register one ViewHolder PER column so a fallback grow re-binds exactly that field's view (§7.5).
+  // Each column owns a separate backing; a whole-instance rebind would alias every field onto the
+  // single grown backing. `columns` is in accessor field-order, so the index is the rebind target.
+  for (let i = 0; i < columns.length; i++) {
+    const fieldIndex = i
+    buffers.registerAccessor((columns[i] as Column).key, {
+      __rebind(newBacking) {
+        accessor.__rebindField(fieldIndex, newBacking)
+      },
+    })
+  }
 
   return { archetypeId, componentId, columns, accessor }
 }

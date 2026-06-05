@@ -78,6 +78,9 @@ export class Reactivity {
   #maintainHook: ((index: number, componentId: number) => void) | null = null
   #currentMembers: (() => Iterable<number>) | null = null
   #spilledThisFrame = false
+  /** True iff the write log has a consumer (a changed-flavor pointer or a change observer); else the
+   * per-write push is dead (recomputed on (de)registration, not per write). §3.3 fast-out. */
+  #writeLogActive = false
 
   constructor(deps: ReactivityDeps) {
     this.#deps = deps
@@ -179,10 +182,22 @@ export class Reactivity {
 
   // --- hot-path hooks (§3.3, §4.2, §6.2) -------------------------------------
 
-  /** §3.3 + §6.2: push the write entry (always) and stamp changeVersion (when enabled). Single-thread. */
+  /** §3.3 + §6.2: push the write entry (when a consumer exists) and stamp changeVersion (when enabled).
+   * Single-thread. The write log is read ONLY by changed-flavor query pointers and change observers; with
+   * neither present every appended word is dead (rewound at frame-recycle), so the push is a pure cost on
+   * the iteration hot path. Gate it on `#writeLogActive` (recomputed on flavor/observer (de)registration) —
+   * a semantics-preserving fast-out, since a later-attached changed flavor's pointer starts at the live head
+   * (§13.5 forward-only) and sees only writes after it attaches. Pack the word inline (no per-write array). */
   trackWrite(index: number, componentId: ComponentId, fieldIndex?: number): void {
-    // Main thread: append directly to the ring. (Worker corrals merge at mergeCorrals — M7.)
-    for (const w of this.#packWriteEntry(index, componentId as number)) this.#writeLog.pushWord(w)
+    if (this.#writeLogActive) {
+      // Main thread: append directly to the ring. (Worker corrals merge at mergeCorrals — M7.)
+      if (this.#wide) {
+        this.#writeLog.pushWord(index >>> 0)
+        this.#writeLog.pushWord(componentId as number >>> 0)
+      } else {
+        this.#writeLog.pushWord(((((componentId as number) << this.#deps.indexBits) | (index & this.#indexMask)) >>> 0))
+      }
+    }
     if (this.#changeVersion.enabled) {
       // fieldIndex affects only field-granular stamping (Q-CD1, deferred); component-granular default
       // stamps the whole-entity slot regardless of which component/field changed. Keyed by entity INDEX
@@ -304,8 +319,22 @@ export class Reactivity {
 
   // --- observers (§7) --------------------------------------------------------
 
+  /** Recompute the write-log fast-out flag after any consumer (de)registers (§3.3). */
+  #refreshWriteLogActive(): void {
+    this.#writeLogActive = this.#changedPointers.length > 0 || this.#observers.hasChangeObservers
+  }
+
   observe(term: ObserverTerm, handler: ObserverHandler): ObserverHandle {
-    return this.#observers.observe(term, handler)
+    const handle = this.#observers.observe(term, handler)
+    this.#refreshWriteLogActive()
+    const dispose = handle.dispose
+    return {
+      id: handle.id,
+      dispose: (): void => {
+        dispose()
+        this.#refreshWriteLogActive()
+      },
+    }
   }
 
   /** §7.4: is there a remove-observer on `componentId` (gates deferred row reclaim)? */
@@ -330,6 +359,7 @@ export class Reactivity {
       out: new Uint32Array(64),
       componentIds: new Set(componentIds),
     })
+    this.#refreshWriteLogActive()
   }
 
   /**
