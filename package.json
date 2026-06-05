@@ -2,6 +2,7 @@
   "name": "ecsia-monorepo",
   "version": "0.0.0",
   "private": true,
+  "packageManager": "pnpm@11.2.2",
   "type": "module",
   "engines": {
     "node": ">=20"
