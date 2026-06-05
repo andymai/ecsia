@@ -3,14 +3,8 @@
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, object } from '@ecsia/core'
-import {
-  defineSystem,
-  inAnyOrderWith,
-  beforeWritersOf,
-  afterReadersOf,
-  lowerSystems,
-  aggregateAccess,
-} from '@ecsia/scheduler'
+import { defineSystem, inAnyOrderWith, beforeWritersOf, afterReadersOf } from '@ecsia/scheduler'
+import { lowerSystems, aggregateAccess } from '../src/internal.js'
 import type { SystemDef } from '@ecsia/scheduler'
 import type { ComponentDef, Schema } from '@ecsia/schema'
 

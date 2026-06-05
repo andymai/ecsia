@@ -1,6 +1,7 @@
 import fc from 'fast-check'
 import { describe, expect, test } from 'vitest'
-import { handleGeneration, handleIndex, makeHandle, makeHandleLayout } from '@ecsia/core'
+import { handleIndex, makeHandleLayout } from '@ecsia/core'
+import { handleGeneration, makeHandle } from '../src/internal.js'
 import type { EntityHandle, HandleLayout } from '@ecsia/core'
 import { EntityIndex } from '../src/entity/index-allocator.js'
 import type { EntityIndexArrays } from '../src/entity/index-allocator.js'

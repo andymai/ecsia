@@ -58,14 +58,14 @@ describe('depthOf — chain walk + cache backfill (§9)', () => {
     rel.addPair(b, ChildOf, a)
     rel.addPair(c, ChildOf, b)
 
-    expect(rel.depthOf(ChildOf, root)).toBe(0)
+    expect(rel.depthOf(root, ChildOf)).toBe(0)
     // First query of c walks the whole chain and backfills b, a's depths in the cache.
-    expect(rel.depthOf(ChildOf, c)).toBe(3)
+    expect(rel.depthOf(c, ChildOf)).toBe(3)
     // Subsequent queries hit the cache (backfilled by the chain walk) and stay correct.
-    expect(rel.depthOf(ChildOf, b)).toBe(2)
-    expect(rel.depthOf(ChildOf, a)).toBe(1)
+    expect(rel.depthOf(b, ChildOf)).toBe(2)
+    expect(rel.depthOf(a, ChildOf)).toBe(1)
     // Re-querying c again uses the cached value.
-    expect(rel.depthOf(ChildOf, c)).toBe(3)
+    expect(rel.depthOf(c, ChildOf)).toBe(3)
   })
 
   it('throws on a non-exclusive relation', () => {
@@ -73,7 +73,7 @@ describe('depthOf — chain walk + cache backfill (§9)', () => {
     const rel = createRelations(world)
     const Likes = rel.defineRelation(null)
     const s = world.spawn()
-    expect(() => rel.depthOf(Likes, s)).toThrow(/only valid for exclusive/)
+    expect(() => rel.depthOf(s, Likes)).toThrow(/only valid for exclusive/)
   })
 
   it('detects a cycle in the parent chain', () => {
@@ -84,7 +84,7 @@ describe('depthOf — chain walk + cache backfill (§9)', () => {
     const y = world.spawn()
     rel.addPair(x, ChildOf, y)
     rel.addPair(y, ChildOf, x) // 2-cycle
-    expect(() => rel.depthOf(ChildOf, x)).toThrow(/cycle detected/)
+    expect(() => rel.depthOf(x, ChildOf)).toThrow(/cycle detected/)
   })
 })
 

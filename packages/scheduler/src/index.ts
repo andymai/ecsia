@@ -1,83 +1,26 @@
 // @ecsia/scheduler — the system access graph (read/write declarations → conflict DAG), wave-level
 // topological layering with type-level conflict detection (v1), the CORRECT single-threaded executor
 // (wave order + serial slots for command-buffer flush and deferred observers), the world.update()
-// frame loop, and the parallel-READY seams (worker dispatch + Atomics wave-sync — INTERFACES, bodies
-// at M7). DEPENDS ON @ecsia/core; @ecsia/core NEVER imports this package (acyclic: schema ← core ←
-// scheduler).
+// frame loop, and the parallel-READY seams (worker dispatch + Atomics wave-sync). DEPENDS ON
+// @ecsia/core; @ecsia/core NEVER imports this package (acyclic: schema ← core ← scheduler).
 //
 // The kernel runs single-threaded WITHOUT this module; the scheduler is an opt-in layer
 // (public-api.md §10). Importing it + `createScheduler(world, systems).update(dt)` pulls in the DAG +
 // waves; nothing else changes for the user.
+//
+// PUBLIC SURFACE ONLY (P0.5 surface diet). The DAG/wave builders, command-buffer encoder, executor
+// run loop, and worker SAB primitives are implementation internals — they live in `./internal.ts`,
+// are NOT re-exported here, and are reached by this package's own tests through a relative import.
+// The umbrella (@ecsia/ecsia) re-exports exactly the symbols below.
 
-export const SCHEDULER_PACKAGE = 'scheduler' as const
-
-// --- planner: system definition + access-set aggregation (§3) ---
+// --- planner: the system descriptor + ordering hints (§3) ---
 export { defineSystem, inAnyOrderWith, beforeWritersOf, afterReadersOf } from './planner/index.js'
-export { lowerSystems, aggregateAccess, DEFAULT_MAX_SPAWNS_PER_WAVE } from './planner/index.js'
-export type { SystemDef, SystemContext, SystemBox, OrderingHint, AccessMaps } from './planner/index.js'
+export type { SystemDef, SystemContext, OrderingHint } from './planner/index.js'
 
-// --- graph: priority-weighted DAG + waves + WAVE-CONFLICT (§4, §5) ---
-export { EdgeWeight, resolveOrdering, buildEdges, buildDAG, CycleError, buildPlan, concurrencyCompatible } from './graph/index.js'
-export type { Edge, DAG, SchedulePlan, ScheduleWave, SystemBatch } from './graph/index.js'
+// --- executor: the opt-in frame scheduler (§6) ---
+export { createScheduler } from './executor/index.js'
+export type { SchedulerHandle, CreateSchedulerOptions, RoundDispatcher } from './executor/index.js'
 
-// --- executor: the single-threaded wave runner + frame loop + world-driving seam (§6, §12) ---
-export { createScheduler, buildSchedulePlan, runUpdate, runUpdateThreaded, runWave, buildScopedQueries, makeScopedQuery } from './executor/index.js'
-export type { SchedulerHandle, CreateSchedulerOptions, ExecutorEnv, RoundDispatcher } from './executor/index.js'
-
-// --- parallel-ready seams (§7) — interfaces only; worker bodies at M7 ---
-export { selectWaitTier } from './executor/seams.js'
-export type {
-  WorkerMode,
-  WaveSync,
-  WaveCounter,
-  WaveSyncTier,
-  WaveSyncTierProbe,
-  WorkerHandle,
-  WorkerDispatch,
-} from './executor/seams.js'
-
-// --- commands: the command-buffer ENCODING FORMAT contract (op ordinals CANON 0..6) + apply path ---
-export { Op, recordLen, directApplySink, flushAll, makeCommandBuffer, resetBuffer, ensureWords, makeEncoder, buildFieldCodec } from './commands/index.js'
-export type {
-  CommandSink,
-  StructuralIntent,
-  WorldApply,
-  CommandBuffer,
-  BufferReservation,
-  CommandEncoder,
-  ComponentEncodeInfo,
-  EncoderEnv,
-  ComponentFieldCodec,
-} from './commands/index.js'
-
-// --- workers (M7): SAB worker pool, wave dispatch, Atomics wave-sync, deterministic merge ---
-export {
-  WorkerPool,
-  makeWaveCounter,
-  makeWaveSync,
-  completeWave,
-  setWaveError,
-  waveErrored,
-  workerHead,
-  makeReservationSab,
-  fillReservation,
-  takeReserved,
-  consumedCount,
-  buildWorkerWorldView,
-  matchComponentsOf,
-  hasWaitAsync,
-  waitAsync,
-} from './workers/index.js'
-export type {
-  PoolConfig,
-  PoolSystem,
-  WorkerReservationSab,
-  WorkerWorldView,
-  WorkerSystemDef,
-  WorkerSystemKernel,
-  WorkerSystemBox,
-  WorkerBootstrap,
-  ComponentManifestEntry,
-  DispatchMessage,
-  WaitAsyncResult,
-} from './workers/index.js'
+// --- workers (M7): the worker pool the threaded frame loop drives (§7) ---
+export { WorkerPool } from './workers/index.js'
+export type { PoolConfig, PoolSystem } from './workers/index.js'

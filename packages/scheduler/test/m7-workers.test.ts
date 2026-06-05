@@ -69,7 +69,7 @@ describe('M7 worker pool — 2-worker disjoint-write wave (serial-equivalent)', 
 
     pool = new WorkerPool({
       world,
-      workerCount: 2,
+      workers: 2,
       kernelModule: KERNEL_MODULE,
       workerEntryUrl: WORKER_ENTRY,
       systems,
@@ -110,7 +110,7 @@ describe('M7 worker pool — 2-worker disjoint-write wave (serial-equivalent)', 
     ]
     pool = new WorkerPool({
       world,
-      workerCount: 1,
+      workers: 1,
       kernelModule: KERNEL_MODULE,
       workerEntryUrl: WORKER_ENTRY,
       systems,
@@ -146,7 +146,7 @@ describe('M7 worker pool — 2-worker disjoint-write wave (serial-equivalent)', 
     ]
     pool = new WorkerPool({
       world,
-      workerCount: 1,
+      workers: 1,
       kernelModule: KERNEL_MODULE,
       workerEntryUrl: WORKER_ENTRY,
       systems,
@@ -177,7 +177,7 @@ describe('M7 worker pool — 2-worker disjoint-write wave (serial-equivalent)', 
       { id: 0 as unknown as SystemId, name: 'Regen', matchComponents: [Health], kernel: () => {}, maxSpawnsPerWave: 0 },
       { id: 1 as unknown as SystemId, name: 'Channel', matchComponents: [Mana], kernel: () => {}, maxSpawnsPerWave: 0 },
     ]
-    pool = new WorkerPool({ world, workerCount: 2, kernelModule: KERNEL_MODULE, workerEntryUrl: WORKER_ENTRY, systems })
+    pool = new WorkerPool({ world, workers: 2, kernelModule: KERNEL_MODULE, workerEntryUrl: WORKER_ENTRY, systems })
     await pool.ready()
 
     for (let f = 0; f < 3; f++) {

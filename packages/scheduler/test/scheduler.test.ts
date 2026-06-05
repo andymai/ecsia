@@ -1,20 +1,7 @@
 import { describe, expect, test, vi } from 'vitest'
 import { createWorld, defineComponent, write } from '@ecsia/core'
-import {
-  EdgeWeight,
-  CycleError,
-  aggregateAccess,
-  buildDAG,
-  buildEdges,
-  buildPlan,
-  concurrencyCompatible,
-  createScheduler,
-  defineSystem,
-  inAnyOrderWith,
-  lowerSystems,
-  resolveOrdering,
-  Op,
-} from '@ecsia/scheduler'
+import { createScheduler, defineSystem, inAnyOrderWith } from '@ecsia/scheduler'
+import { EdgeWeight, CycleError, aggregateAccess, buildDAG, buildEdges, buildPlan, concurrencyCompatible, lowerSystems, resolveOrdering, Op } from '../src/internal.js'
 import type { SystemDef } from '@ecsia/scheduler'
 
 // A ComponentDef interns to exactly one world, so each test mints fresh defs + its own world.

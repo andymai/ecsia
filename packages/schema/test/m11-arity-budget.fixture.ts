@@ -10,7 +10,7 @@
 // the just-past-cap (9) degradation, so the budget covers both the full fold and the loose fallback.
 
 import type { ComponentDef, EntityHandle, RelationDef, PairDef, WorldQuery } from '@ecsia/schema'
-import { read, write, With, Without, optional } from '@ecsia/schema'
+import { read, write, has, without, optional } from '@ecsia/schema'
 
 declare const A: ComponentDef<{ x: 'f32'; y: 'f32'; z: 'f32' }> & { name: 'a' }
 declare const B: ComponentDef<{ x: 'f32'; y: 'f32' }> & { name: 'b' }
@@ -25,8 +25,8 @@ declare const ownsPair: PairDef<typeof Owns>
 
 declare const w: { query: WorldQuery }
 
-// Max-arity (8) full fold: read · write · With · Without · optional · bare · pair · read.
-const qMax = w.query(read(A), write(B), With(Tag), Without(C), optional(D), Ecmp, ownsPair, read(Fcmp))
+// Max-arity (8) full fold: read · write · has · without · optional · bare · pair · read.
+const qMax = w.query(read(A), write(B), has(Tag), without(C), optional(D), Ecmp, ownsPair, read(Fcmp))
 qMax.each((el) => {
   const _h: EntityHandle = el.handle
   const _ax: number = el.a.x

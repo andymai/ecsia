@@ -14,7 +14,7 @@ describe('bootstrapForWorker — serial-phase guard + manifest shape (§3)', () 
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const world = createWorld({ components: [P as ComponentDef<Schema>] })
     world.__setPhase('wave')
-    expect(() => bootstrapForWorker(world)).toThrow(/serial flush point/)
+    expect(() => bootstrapForWorker(world)).toThrow(/serial phase/)
     world.__setPhase('serial')
   })
 

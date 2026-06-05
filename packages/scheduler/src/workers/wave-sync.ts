@@ -12,12 +12,12 @@ const EPOCH = 1
 const ERROR = 2
 
 /**
- * Words [0..3] are the control block (remaining, epoch, errorFlag, padding); words [4..4+workerCount)
+ * Words [0..3] are the control block (remaining, epoch, errorFlag, padding); words [4..4+workers)
  * are the per-worker buffer `head` each worker stores before completing, so the main thread reads the
  * record count after the fence without any postMessage on the hot path (tier-2 blocking-main path).
  */
-export function makeWaveCounter(workerCount: number): WaveCounter {
-  const sab = new SharedArrayBuffer((4 + Math.max(workerCount, 0)) * 4)
+export function makeWaveCounter(workers: number): WaveCounter {
+  const sab = new SharedArrayBuffer((4 + Math.max(workers, 0)) * 4)
   return { sab, view: new Int32Array(sab) }
 }
 

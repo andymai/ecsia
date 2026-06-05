@@ -17,7 +17,7 @@ function defOfTerm(term: QueryTerm): { def: ComponentDef<Schema> | null; role: '
     case 'read':
     case 'optional':
       return { def: t.c ?? null, role: 'read' }
-    case 'with':
+    case 'has':
     case 'without':
       return { def: t.c ?? null, role: 'other' }
     default:
@@ -47,11 +47,12 @@ export function makeScopedQuery(world: World, sb: SystemBox, dev: boolean): Worl
       if (role === 'write') {
         if (!writeSet.has(id)) {
           warn(
-            `system '${sb.name}' issues a write(${def.name}) term but '${def.name}' is not in its declared write set (Must-Fix #2)`,
+            `system '${sb.name}' issues a write(${def.name}) term but '${def.name}' is not in its declared write set — ` +
+              `add it to the system's write access so parallel scheduling can serialize conflicting writers`,
           )
         }
       } else if (role === 'read' && !readSet.has(id) && !writeSet.has(id)) {
-        // `with`/`without` are presence FILTERS (role 'other'), not data access — declaring the
+        // `has`/`without` are presence FILTERS (role 'other'), not data access — declaring the
         // filtered component would be spurious, so only genuine read terms are access-checked.
         warn(
           `system '${sb.name}' references ${def.name} in a query but it is not in the system's declared read/write set`,

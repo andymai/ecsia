@@ -19,8 +19,10 @@ import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
 import { createWorld, defineComponent, handleIndex, onAdd, onRemove, onChange } from '@ecsia/core'
 import type { EntityHandle, World } from '@ecsia/core'
-import { WorkerPool, flushAll, makeCommandBuffer, makeEncoder, buildFieldCodec } from '@ecsia/scheduler'
-import type { CommandBuffer, CommandEncoder, ComponentFieldCodec, PoolSystem, WorldApply } from '@ecsia/scheduler'
+import { WorkerPool } from '@ecsia/scheduler'
+import { flushAll, makeCommandBuffer, makeEncoder, buildFieldCodec } from '../src/internal.js'
+import type { PoolSystem } from '@ecsia/scheduler'
+import type { CommandBuffer, CommandEncoder, ComponentFieldCodec, WorldApply } from '../src/internal.js'
 import type { ComponentDef, ComponentId, Schema, SystemId } from '@ecsia/schema'
 
 const WORKER_ENTRY = fileURLToPath(new URL('../dist/workers/worker-entry.js', import.meta.url))
@@ -338,7 +340,7 @@ describe('NO WORKER BITMASK ACCESS during a wave (Must-Fix #1)', () => {
     const h = world.spawnWith(Health)
     expect(world.has(h, Health)).toBe(true) // serial: fine
     world.__setPhase('wave')
-    expect(() => world.has(h, Health)).toThrow(/serial-only/i) // wave: bitmask access forbidden
+    expect(() => world.has(h, Health)).toThrow(/serial-phase only/i) // wave: bitmask access forbidden
     world.__setPhase('serial')
   })
 
@@ -365,7 +367,7 @@ describe('NO WORKER BITMASK ACCESS during a wave (Must-Fix #1)', () => {
           { id: 0 as unknown as SystemId, name: 'Regen', matchComponents: [Health], kernel: () => {}, maxSpawnsPerWave: 0 },
           { id: 1 as unknown as SystemId, name: 'Channel', matchComponents: [Mana], kernel: () => {}, maxSpawnsPerWave: 0 },
         ]
-        const localPool = new WorkerPool({ world, workerCount: 2, kernelModule: KERNEL_MODULE, workerEntryUrl: WORKER_ENTRY, systems, diagnostic: (m) => diags.push(m) })
+        const localPool = new WorkerPool({ world, workers: 2, kernelModule: KERNEL_MODULE, workerEntryUrl: WORKER_ENTRY, systems, diagnostic: (m) => diags.push(m) })
         try {
           await localPool.ready()
           for (let r = 0; r < rounds; r++) {
@@ -379,7 +381,7 @@ describe('NO WORKER BITMASK ACCESS during a wave (Must-Fix #1)', () => {
           }
           // No worker error / bitmask-gate trip (workers read ARCHETYPE TABLES only), and the result is
           // serial-equivalent: Health += rounds, Mana -= rounds for every entity.
-          expect(diags.filter((m) => /serial-only|error|threw/i.test(m))).toEqual([])
+          expect(diags.filter((m) => /serial-only|serial-phase only|error|threw/i.test(m))).toEqual([])
           for (let i = 0; i < handles.length; i++) {
             expect((world.entity(handles[i]!).read(Health) as { hp: number }).hp).toBe(i + rounds)
             expect((world.entity(handles[i]!).read(Mana) as { mp: number }).mp).toBe(100 + i - rounds)
@@ -428,7 +430,7 @@ describe('NO MID-WAVE STRUCTURAL MUTATION (CO-1)', () => {
         const diags: string[] = []
         const localPool = new WorkerPool({
           world,
-          workerCount: 1,
+          workers: 1,
           kernelModule: KERNEL_MODULE,
           workerEntryUrl: WORKER_ENTRY,
           systems,
@@ -444,7 +446,7 @@ describe('NO MID-WAVE STRUCTURAL MUTATION (CO-1)', () => {
             // serial flush — structural change happens at the flush, never inside the wave.
             await localPool.runRound([{ systemId: 0 as unknown as SystemId, workerIndex: 0 }], 1)
           }
-          expect(diags.filter((m) => /serial-only|error|threw/i.test(m))).toEqual([]) // no mid-wave mutation
+          expect(diags.filter((m) => /serial-only|serial-phase only|error|threw/i.test(m))).toEqual([]) // no mid-wave mutation
           expect(world.handleStats().aliveCount).toBe(before + rounds * handles.length)
           expect(world.phase).toBe('serial')
         } finally {
@@ -476,7 +478,7 @@ describe('SANITY — 2-worker disjoint throughput (non-flaky; speedup BENCH is D
       { id: 0 as unknown as SystemId, name: 'Regen', matchComponents: [Health], kernel: () => {}, maxSpawnsPerWave: 0 },
       { id: 1 as unknown as SystemId, name: 'Channel', matchComponents: [Mana], kernel: () => {}, maxSpawnsPerWave: 0 },
     ]
-    const localPool = new WorkerPool({ world, workerCount: 2, kernelModule: KERNEL_MODULE, workerEntryUrl: WORKER_ENTRY, systems })
+    const localPool = new WorkerPool({ world, workers: 2, kernelModule: KERNEL_MODULE, workerEntryUrl: WORKER_ENTRY, systems })
     try {
       await localPool.ready()
       await localPool.runRound(

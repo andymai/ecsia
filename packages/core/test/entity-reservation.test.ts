@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import { CapacityExceeded, createWorld, handleGeneration, handleIndex, makeHandleLayout } from '@ecsia/core'
+import { createWorld, handleIndex, makeHandleLayout } from '@ecsia/core'
+import { CapacityExceeded, handleGeneration } from '../src/internal.js'
 import type { EntityHandle } from '@ecsia/core'
 import { EntityIndex } from '../src/entity/index-allocator.js'
 import { reserveEntityBlock, returnReservedIds } from '../src/entity/reservation.js'

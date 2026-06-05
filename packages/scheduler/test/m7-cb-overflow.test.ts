@@ -8,8 +8,8 @@
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, handleIndex } from '@ecsia/core'
 import type { World } from '@ecsia/core'
-import { flushAll, makeCommandBuffer, makeEncoder, buildFieldCodec, recordLen, Op } from '@ecsia/scheduler'
-import type { CommandBuffer, ComponentFieldCodec, WorldApply } from '@ecsia/scheduler'
+import { flushAll, makeCommandBuffer, makeEncoder, buildFieldCodec, recordLen, Op } from '../src/internal.js'
+import type { CommandBuffer, ComponentFieldCodec, WorldApply } from '../src/internal.js'
 import type { ComponentDef, ComponentId, Schema } from '@ecsia/schema'
 
 function kit() {

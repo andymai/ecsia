@@ -9,7 +9,7 @@ import type { DAG } from './dag.js'
 
 export interface SystemBatch {
   readonly systemId: SystemId
-  /** 0..workerCount-1 for worker batches; -1 = main-thread slot. */
+  /** 0..workers-1 for worker batches; -1 = main-thread slot. */
   readonly workerIndex: number
 }
 
@@ -24,7 +24,7 @@ export interface SchedulePlan {
   readonly waves: readonly ScheduleWave[]
   readonly systems: readonly SystemBox[]
   readonly accessStrideWords: number
-  readonly workerCount: number
+  readonly workers: number
 }
 
 /**
@@ -82,7 +82,7 @@ function extractWaves(dag: DAG): SystemId[][] {
  * incompatibility graph (`A—B` iff !concurrencyCompatible). Worker-ineligible systems are pinned to a
  * main-thread slot (workerIndex -1); each round holds at most one main-thread slot.
  */
-function packWave(wave: readonly SystemId[], systems: readonly SystemBox[], workerCount: number): ScheduleWave {
+function packWave(wave: readonly SystemId[], systems: readonly SystemBox[], workers: number): ScheduleWave {
   interface RoundState {
     readonly members: SystemBatch[]
     readonly boxes: SystemBox[]
@@ -90,7 +90,7 @@ function packWave(wave: readonly SystemId[], systems: readonly SystemBox[], work
     nextWorker: number
   }
   const rounds: RoundState[] = []
-  const perWorkerSpawn = new Uint32Array(Math.max(workerCount, 0))
+  const perWorkerSpawn = new Uint32Array(Math.max(workers, 0))
 
   for (const id of wave) {
     const sb = systems[id as unknown as number]!
@@ -100,16 +100,16 @@ function packWave(wave: readonly SystemId[], systems: readonly SystemBox[], work
       if (!compatible) continue
       if (sb.workerEligible) {
         // Eligible system: assign to a worker slot if any worker exists, else the main-thread slot.
-        if (workerCount > 0 && round.nextWorker < workerCount) {
+        if (workers > 0 && round.nextWorker < workers) {
           const wi = round.nextWorker
           round.nextWorker += 1
           round.members.push({ systemId: id, workerIndex: wi })
           round.boxes.push(sb)
-          if (workerCount > 0) perWorkerSpawn[wi]! += sb.maxSpawnsPerWave
+          if (workers > 0) perWorkerSpawn[wi]! += sb.maxSpawnsPerWave
           placed = true
           break
         }
-        if (workerCount === 0 && !round.hasMainThreadSlot) {
+        if (workers === 0 && !round.hasMainThreadSlot) {
           round.hasMainThreadSlot = true
           round.members.push({ systemId: id, workerIndex: -1 })
           round.boxes.push(sb)
@@ -126,7 +126,7 @@ function packWave(wave: readonly SystemId[], systems: readonly SystemBox[], work
       }
     }
     if (!placed) {
-      const wi = sb.workerEligible && workerCount > 0 ? 0 : -1
+      const wi = sb.workerEligible && workers > 0 ? 0 : -1
       const round: RoundState = {
         members: [{ systemId: id, workerIndex: wi }],
         boxes: [sb],
@@ -149,14 +149,14 @@ export function buildPlan(
   systems: readonly SystemBox[],
   dag: DAG,
   accessStrideWords: number,
-  workerCount: number,
+  workers: number,
 ): SchedulePlan {
   const waveIds = extractWaves(dag)
-  const waves = waveIds.map((wave) => packWave(wave, systems, workerCount))
+  const waves = waveIds.map((wave) => packWave(wave, systems, workers))
   return Object.freeze({
     waves,
     systems,
     accessStrideWords,
-    workerCount,
+    workers,
   })
 }

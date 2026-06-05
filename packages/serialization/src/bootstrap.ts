@@ -62,7 +62,7 @@ export interface ColumnsAdded {
 
 export function bootstrapForWorker(world: World): WorldBootstrap {
   if (world.phase !== 'serial') {
-    throw new Error('bootstrapForWorker must run at a serial flush point (§3 / §12)')
+    throw new Error('bootstrapForWorker must run while the world is in its serial phase (outside scheduler.update / worker waves)')
   }
   const s = world.__serialize
   const manifest = world.__exportShared()
@@ -103,14 +103,14 @@ export function bootstrapForWorker(world: World): WorldBootstrap {
 
 export function attachWorld(bootstrap: WorldBootstrap): WorkerWorldView {
   if (!bootstrap.shared) {
-    throw new Error('attachWorld requires a shared (SAB) bootstrap; use the postMessage-fallback path (§3.5)')
+    throw new Error('attachWorld requires a shared (SharedArrayBuffer) bootstrap; use the postMessage-fallback path instead')
   }
   // §3.3 / §10: single-arg. Recompute the local schema hash from the registry the worker was handed
   // (the dense component/relation id assignment is the producer-specific datum, §3.2) and assert it
   // matches the producer's — a fail-fast guard against a worker re-wrapping a mismatched buffer set.
   const localSchemaHash = computeRegistryHash(bootstrap.registry)
   if (localSchemaHash !== bootstrap.registry.schemaHash) {
-    throw new Error('attachWorld: schemaHash mismatch — worker built from stale code (§3.3 / S-10)')
+    throw new Error('attachWorld: schemaHash mismatch — the worker was built from a different component schema than the host (stale worker code)')
   }
   const columns = new Map<ColumnKey, { layout: ColumnLayout; view: TypedArray; backing: SharedArrayBuffer }>()
   for (const c of bootstrap.buffers.columns) {

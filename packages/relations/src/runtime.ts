@@ -8,10 +8,14 @@ import type {
   ComponentDef,
   ComponentId,
   EntityHandle,
+  PairDef,
+  ReadView,
   RelationDef,
   RelationId,
   RelationOptions,
   Schema,
+  WildcardToken,
+  WriteView,
 } from '@ecsia/schema'
 import {
   defineComponent,
@@ -43,11 +47,26 @@ function resolveStorageKind(hasPayload: boolean, exclusive: boolean): StorageKin
   return exclusive ? 'exclusive-column' : 'overflow-table'
 }
 
-/** A monomorphic payload accessor over the exclusive subject column or the overflow row (§4.4). */
-export interface PairAccessor {
-  read(): Record<string, unknown>
-  write(): Record<string, unknown>
+/** The payload schema carried by a relation def, or `void` for a payload-free relation. */
+type PayloadOf<R extends RelationDef<Schema | void>> = R extends RelationDef<infer P> ? P : never
+
+/**
+ * A typed payload accessor over the exclusive subject column or the overflow row (§4.4). The read/write
+ * views are forked from the relation's payload schema (Item 7); a payload-free relation yields an empty
+ * accessor.
+ */
+export interface PairAccessor<R extends RelationDef<Schema | void> = RelationDef<Schema | void>> {
+  read(): PayloadOf<R> extends Schema ? ReadView<PayloadOf<R>> : Record<never, never>
+  write(): PayloadOf<R> extends Schema ? WriteView<PayloadOf<R>> : Record<never, never>
 }
+
+/**
+ * The `addPair` payload argument, threaded from the relation's payload schema (Item 7): a payloaded
+ * relation accepts a partial write view; a payload-free relation accepts no payload argument at all.
+ */
+type AddPairPayloadArg<R extends RelationDef<Schema | void>> = PayloadOf<R> extends Schema
+  ? [payload?: Partial<WriteView<PayloadOf<R>>>]
+  : []
 
 interface OverflowTable {
   readonly overflowComponentId: ComponentId
@@ -79,17 +98,27 @@ interface RelationRuntime {
 interface RelationsApi {
   defineRelation<P extends Schema>(payload: P, options?: RelationOptions): RelationDef<P>
   defineRelation(payload: null, options?: RelationOptions): RelationDef<void>
-  addPair(subject: EntityHandle, relation: RelationDef<Schema | void>, target: EntityHandle, payload?: Record<string, unknown>): void
+  addPair<R extends RelationDef<Schema | void>>(
+    subject: EntityHandle,
+    relation: R,
+    target: EntityHandle,
+    ...payload: AddPairPayloadArg<R>
+  ): void
   removePair(subject: EntityHandle, relation: RelationDef<Schema | void>, target: EntityHandle): void
   hasPair(subject: EntityHandle, relation: RelationDef<Schema | void>, target: EntityHandle): boolean
   hasRelation(subject: EntityHandle, relation: RelationDef<Schema | void>): boolean
-  getPair(subject: EntityHandle, relation: RelationDef<Schema | void>, target: EntityHandle): PairAccessor
+  getPair<R extends RelationDef<Schema | void>>(subject: EntityHandle, relation: R, target: EntityHandle): PairAccessor<R>
   subjectsOf(relation: RelationDef<Schema | void>, target: EntityHandle): Iterable<EntityHandle>
   targetsOf(subject: EntityHandle, relation: RelationDef<Schema | void>): Iterable<EntityHandle>
   /** Q-PA1: the single current target of an exclusive relation (eid column read, O(1)); null if absent. Throws on a non-exclusive relation. */
   targetOf(subject: EntityHandle, relation: RelationDef<Schema | void>): EntityHandle | null
-  depthOf(relation: RelationDef<Schema | void>, subject: EntityHandle): number
-  readonly Pair: (relation: RelationDef<Schema | void>, target: EntityHandle | typeof Wildcard) => unknown
+  depthOf(subject: EntityHandle, relation: RelationDef<Schema | void>): number
+  /**
+   * Build a relation-pair query term usable directly in `query(...)`: `query(rel.Pair(ChildOf, parent))`
+   * or `query(rel.Pair(ChildOf, Wildcard))`. Returns a typed `PairDef<R>` — the query compiler resolves
+   * its concrete (presence/pair) ComponentId via the relations resolver at compile time.
+   */
+  readonly Pair: <R extends RelationDef<Schema | void>>(relation: R, target: EntityHandle | WildcardToken) => PairDef<R>
 }
 
 const EMPTY_SET: ReadonlySet<EntityHandle> = new Set()
@@ -532,7 +561,7 @@ export function createRelations(world: World): RelationsApi {
     if (rt.depth !== null) rt.depth.dirty.add(sIdx)
   }
 
-  function depthOf(relation: RelationDef<Schema | void>, subject: EntityHandle): number {
+  function depthOf(subject: EntityHandle, relation: RelationDef<Schema | void>): number {
     const rt = requireRuntime(relation)
     if (!rt.exclusive) throw new Error('depthOf: only valid for exclusive (single-parent) relations')
     if (rt.depth === null) rt.depth = { depth: new Int32Array(host.maxEntities).fill(-1), dirty: new Set() }
@@ -727,10 +756,10 @@ export function createRelations(world: World): RelationsApi {
     return rt
   }
 
-  function Pair(relation: RelationDef<Schema | void>, target: EntityHandle | typeof Wildcard): unknown {
+  function Pair<R extends RelationDef<Schema | void>>(relation: R, target: EntityHandle | WildcardToken): PairDef<R> {
     // The query-term PairDef shape (type-system §7.2): { relation, target, id }. id is UNREGISTERED;
-    // the compiler resolves the concrete pair/presence id via the injected resolver (Q-R2).
-    return { relation, target, id: -1 }
+    // the compiler resolves the concrete pair/presence id via the injected resolver.
+    return { relation, target, id: -1 as PairDef<R>['id'] }
   }
 
   // --- serialization provider (serialization.md §4.6 / §8.3) -----------------
@@ -753,7 +782,7 @@ export function createRelations(world: World): RelationsApi {
     if (rt.storageKind === 'tag') return undefined
     const names = payloadFieldNames(rt)
     if (names.length === 0) return undefined
-    const acc = getPair(subject, rt.def, target).read()
+    const acc = getPair(subject, rt.def, target).read() as Record<string, unknown>
     const out: Record<string, unknown> = {}
     for (const n of names) out[n] = acc[n]
     return out
@@ -847,11 +876,11 @@ export function createRelations(world: World): RelationsApi {
 
   return {
     defineRelation: defineRelation as RelationsApi['defineRelation'],
-    addPair,
+    addPair: addPair as unknown as RelationsApi['addPair'],
     removePair,
     hasPair,
     hasRelation,
-    getPair,
+    getPair: getPair as unknown as RelationsApi['getPair'],
     subjectsOf,
     targetsOf,
     targetOf,

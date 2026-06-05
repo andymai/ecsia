@@ -34,6 +34,18 @@ export interface HandleLayout {
 /** Sentinel for "no entity" in eid fields and APIs that may return absent. NOT a live handle. */
 export const NO_ENTITY = 0xffffffff as EntityHandle
 
+/** Alias of {@link NO_ENTITY} for call sites that prefer the "null handle" spelling. */
+export const NULL_ENTITY = NO_ENTITY
+
+/**
+ * True when `handle` is the {@link NO_ENTITY} sentinel (an absent / null handle). Use this to
+ * discriminate handles returned from APIs that may yield "no entity" without comparing against the
+ * raw `0xffffffff` literal: `if (isNoEntity(h)) { ... }`.
+ */
+export function isNoEntity(handle: EntityHandle): boolean {
+  return (handle as number) === (NO_ENTITY as number)
+}
+
 /**
  * Build the immutable handle layout from a generation-bit split. `indexBits = 32 -
  * generationBits`. `1 << 32` is 1 in JS (shift is mod-32), so the all-ones index mask is

@@ -2,8 +2,8 @@
 // commands/buffer.ts ensureWords growth from a zero-length view (the `newLen === 0 ? need` branch).
 
 import { describe, expect, test } from 'vitest'
-import { recordLen, Op, makeCommandBuffer, ensureWords } from '@ecsia/scheduler'
-import type { CommandBuffer } from '@ecsia/scheduler'
+import { recordLen, Op, makeCommandBuffer, ensureWords } from '../src/internal.js'
+import type { CommandBuffer } from '../src/internal.js'
 
 describe('op.ts: recordLen is self-describing per opcode (§4.6)', () => {
   test('fixed-arity ops report their constant length', () => {

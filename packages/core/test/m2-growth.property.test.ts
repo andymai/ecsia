@@ -12,7 +12,8 @@
 
 import fc from 'fast-check'
 import { describe, expect, test } from 'vitest'
-import { Buffers, makeColumnLayout, probeCapabilities } from '@ecsia/core'
+import { makeColumnLayout } from '@ecsia/core'
+import { Buffers, probeCapabilities } from '../src/internal.js'
 import type { ColumnKey } from '@ecsia/core'
 
 const k = (s: string): ColumnKey => s as ColumnKey

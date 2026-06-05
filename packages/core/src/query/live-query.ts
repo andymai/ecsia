@@ -484,7 +484,7 @@ export class LiveQuery {
           get: () => undefined,
         })
       }
-      // With/Without contribute no value term, hence no prop (handled at compile time).
+      // has/without contribute no value term, hence no prop (handled at compile time).
     }
     binding.elements.set(archId, el)
     return el

@@ -8,8 +8,8 @@
 // makePointer snapshots the live head, so a pointer made after a push starts past those entries.
 
 import { describe, expect, test } from 'vitest'
-import { Buffers, LogRing, WriteCorral, OVERFLOW_SENTINEL, probeCapabilities } from '@ecsia/core'
-import type { LogPointer } from '@ecsia/core'
+import { Buffers, LogRing, WriteCorral, OVERFLOW_SENTINEL, probeCapabilities } from '../src/internal.js'
+import type { LogPointer } from '../src/internal.js'
 import { nextPow2 } from '../src/reactivity/log.js'
 
 const buffers = (): Buffers => new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 16 })

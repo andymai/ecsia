@@ -2,7 +2,7 @@
 // type-checked standalone by the guard test (m11-arity-stress.test.ts) under the project's strict
 // flags; no assertions run. It pins the externally-observable arity contracts:
 //
-//   1. arities 1..8 fully infer EVERY element type (read/write/With/Without/optional + pair) — NO any.
+//   1. arities 1..8 fully infer EVERY element type (read/write/has/without/optional + pair) — NO any.
 //   2. arity 9+ degrades to a TYPED LooseQueryElement (a Readonly<Record<...>>, NEVER any).
 //   3. Has<C>/HasWrite<C> are the explicit-annotation escape hatch past the cap — e.A / e.B still type.
 //
@@ -24,13 +24,13 @@ import type {
   WriteOf,
   ReadTerm,
   WriteTerm,
-  WithTerm,
+  HasTerm,
   WithoutTerm,
   OptionalTerm,
   RelationDef,
   PairDef,
 } from '@ecsia/schema'
-import { read, write, With, Without, optional } from '@ecsia/schema'
+import { read, write, has, without, optional } from '@ecsia/schema'
 
 // ---------------------------------------------------------------------------
 // Hand-typed defs with LITERAL names so CompKey yields distinct element keys.
@@ -50,7 +50,7 @@ declare const w: { query: WorldQuery }
 
 // ---------------------------------------------------------------------------
 // (1) EVERY term kind in ONE within-cap query — full inference, no any.
-//     read → Readonly prop · write → mutable prop · With/Without → no prop ·
+//     read → Readonly prop · write → mutable prop · has/without → no prop ·
 //     optional → ReadOf | undefined · bare def → Readonly prop · pair → payload prop.
 // ---------------------------------------------------------------------------
 
@@ -59,7 +59,7 @@ declare const ownsPair: PairDef<typeof Owns>
 type AllKinds = [
   ReadTerm<typeof A>,
   WriteTerm<typeof B>,
-  WithTerm<typeof Tag>,
+  HasTerm<typeof Tag>,
   WithoutTerm<typeof C>,
   OptionalTerm<typeof D>,
   typeof E, // bare def == read
@@ -74,9 +74,9 @@ e.a.x = 5
 export const _opt: ReadOf<typeof D> | undefined = e.d // optional → ReadOf | undefined
 export const _bare: Readonly<{ id: EntityHandle }> = e.e // bare def == read (Readonly)
 export const _pairWeight: number = e.owns.weight // pair → payload, read view
-// @ts-expect-error 'tag' is membership-only (With contributes no value)
+// @ts-expect-error 'tag' is membership-only (has contributes no value)
 e.tag
-// @ts-expect-error 'c' is excluded (Without contributes no value)
+// @ts-expect-error 'c' is excluded (without contributes no value)
 e.c
 export const _handle: EntityHandle = e.handle
 
@@ -126,24 +126,24 @@ w.query(read(A), write(B), C).each((el) => {
   void [_ax, _cn]
 })
 
-// arity 4 — read + write + With (membership-only) + optional.
-w.query(read(A), write(B), With(Tag), optional(D)).each((el) => {
+// arity 4 — read + write + has (membership-only) + optional.
+w.query(read(A), write(B), has(Tag), optional(D)).each((el) => {
   el.b.y = 2
   const _ax: number = el.a.x
   const _dopt: ReadOf<typeof D> | undefined = el.d
-  // @ts-expect-error 'tag' is membership-only (With contributes no value)
+  // @ts-expect-error 'tag' is membership-only (has contributes no value)
   el.tag
   // @ts-expect-error arity-4 element is precise, NOT any
   el.zzz()
   void [_ax, _dopt]
 })
 
-// arity 5 — adds Without (membership-only, excludes its prop) + eid-typed component.
-w.query(read(A), write(B), With(Tag), Without(C), E).each((el) => {
+// arity 5 — adds without (membership-only, excludes its prop) + eid-typed component.
+w.query(read(A), write(B), has(Tag), without(C), E).each((el) => {
   const _ax: number = el.a.x
   el.b.x = 3
   const _eid: EntityHandle = el.e.id // eid → EntityHandle, not plain number
-  // @ts-expect-error 'c' is excluded (Without contributes no value)
+  // @ts-expect-error 'c' is excluded (without contributes no value)
   el.c
   // @ts-expect-error arity-5 element is precise, NOT any
   el.zzz()
@@ -174,8 +174,8 @@ w.query(read(A), write(B), C, optional(D), E, read(F), ownsPair).each((el) => {
   void [_ax, _fk, _w]
 })
 
-// arity 8 (MAX) — read/write/With/Without/optional + bare + pair all present.
-w.query(read(A), write(B), With(Tag), Without(C), optional(D), E, F, G).each((el) => {
+// arity 8 (MAX) — read/write/has/without/optional + bare + pair all present.
+w.query(read(A), write(B), has(Tag), without(C), optional(D), E, F, G).each((el) => {
   const _h: EntityHandle = el.handle
   const _ax: number = el.a.x
   el.b.x = 3
@@ -183,7 +183,7 @@ w.query(read(A), write(B), With(Tag), Without(C), optional(D), E, F, G).each((el
   const _gv: number = el.g.v
   const _eid: EntityHandle = el.e.id
   const _dopt: ReadOf<typeof D> | undefined = el.d
-  // @ts-expect-error 'c' is excluded at arity 8 too (Without contributes no value)
+  // @ts-expect-error 'c' is excluded at arity 8 too (without contributes no value)
   el.c
   // @ts-expect-error arity-8 element is precise, NOT any
   el.zzz()
@@ -253,4 +253,4 @@ declare const writable: HasWrite<typeof A>
 writable.a.x = 5
 
 // runtime constructors stay value-level callable (terms drive matching at any arity).
-void [read(A), write(B), With(Tag), Without(C), optional(D)]
+void [read(A), write(B), has(Tag), without(C), optional(D)]

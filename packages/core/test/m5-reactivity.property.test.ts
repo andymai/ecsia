@@ -17,8 +17,10 @@
 
 import fc from 'fast-check'
 import { afterEach, describe, expect, test } from 'vitest'
-import { createWorld, defineComponent, read, OVERFLOW_SENTINEL } from '@ecsia/core'
-import type { ComponentDef, EntityHandle, LogPointer, Schema, World } from '@ecsia/core'
+import { createWorld, defineComponent, read } from '@ecsia/core'
+import { OVERFLOW_SENTINEL } from '../src/internal.js'
+import type { ComponentDef, EntityHandle, Schema, World } from '@ecsia/core'
+import type { LogPointer } from '../src/internal.js'
 
 /** Entity index of a handle (the low handle bits the write log packs, §3.3). */
 function idx(world: World, h: EntityHandle): number {

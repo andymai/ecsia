@@ -6,19 +6,10 @@
 //     `continue` (the tag contributes no hot ColumnSet) while still promoting the column-bearing one.
 
 import { describe, expect, test } from 'vitest'
-import {
-  ArchetypeStore,
-  Bitmask,
-  Buffers,
-  ComponentRegistry,
-  canonicalize,
-  createWorld,
-  defineComponent,
-  defineTag,
-  object,
-  probeCapabilities,
-} from '@ecsia/core'
-import type { ComponentDef, ComponentId, RecordSurface, Schema, Signature } from '@ecsia/core'
+import { createWorld, defineComponent, defineTag, object } from '@ecsia/core'
+import { ArchetypeStore, Bitmask, Buffers, ComponentRegistry, canonicalize, probeCapabilities } from '../src/internal.js'
+import type { ComponentDef, ComponentId, Schema } from '@ecsia/core'
+import type { RecordSurface, Signature } from '../src/internal.js'
 
 const newBuffers = (): Buffers =>
   new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 16 })
@@ -30,7 +21,7 @@ function storeKit(componentCount: number, maxHotArchetypes: number): {
 } {
   const buffers = newBuffers()
   const registry = new ComponentRegistry()
-  const defs = Array.from({ length: componentCount }, (_, i) => defineComponent({ ['f' + i]: 'i32' as const }))
+  const defs = Array.from({ length: componentCount }, (_, i) => defineComponent({ ['f' + i]: 'i32' as const }, { name: 'f' + i }))
   registry.register(defs)
   const recordArch = new Map<number, number>()
   const recordRow = new Map<number, number>()

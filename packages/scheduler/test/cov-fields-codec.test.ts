@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from 'vitest'
 import { defineComponent, vec, staticString } from '@ecsia/core'
-import { buildFieldCodec } from '@ecsia/scheduler'
+import { buildFieldCodec } from '../src/internal.js'
 import type { ComponentDef, Schema } from '@ecsia/schema'
 
 function roundTrip(def: ComponentDef<Schema>, init: Record<string, unknown>): Record<string, unknown> {

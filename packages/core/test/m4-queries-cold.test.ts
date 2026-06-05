@@ -7,7 +7,7 @@
 //     matching a query created AFTER the spawn (seed/incremental symmetry).
 
 import { describe, expect, test } from 'vitest'
-import { createWorld, defineComponent, optional, read, With } from '@ecsia/core'
+import { createWorld, defineComponent, optional, read, has } from '@ecsia/core'
 import type { ComponentDef, EntityHandle, Schema } from '@ecsia/core'
 
 function coldKit(): {
@@ -128,7 +128,7 @@ describe('constraint-less query before-spawn / after-spawn symmetry (§6.3)', ()
   test('a component-CONSTRAINED query does NOT pick up a plain spawn', () => {
     const Position = defineComponent({ x: 'f32' }, { name: 'position' })
     const world = createWorld({ components: [Position] as readonly ComponentDef<Schema>[] })
-    const q = world.query(With(Position))
+    const q = world.query(has(Position))
     world.spawn() // no Position → must NOT match
     expect(q.count).toBe(0)
   })

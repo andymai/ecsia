@@ -4,19 +4,10 @@
 // promoting a cold archetype, and the EMPTY_ARCHETYPE_ID spawn path.
 
 import { describe, expect, test } from 'vitest'
-import {
-  ArchetypeStore,
-  Bitmask,
-  Buffers,
-  ComponentRegistry,
-  EMPTY_ARCHETYPE_ID,
-  canonicalize,
-  createWorld,
-  defineComponent,
-  defineTag,
-  probeCapabilities,
-} from '@ecsia/core'
-import type { ComponentId, RecordSurface, Signature } from '@ecsia/core'
+import { createWorld, defineComponent, defineTag } from '@ecsia/core'
+import { ArchetypeStore, Bitmask, Buffers, ComponentRegistry, EMPTY_ARCHETYPE_ID, canonicalize, probeCapabilities } from '../src/internal.js'
+import type { ComponentId } from '@ecsia/core'
+import type { RecordSurface, Signature } from '../src/internal.js'
 
 const newBuffers = (): Buffers =>
   new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 16 })
@@ -28,7 +19,7 @@ function makeStore(componentCount: number, maxHotArchetypes = 1 << 20): {
 } {
   const buffers = newBuffers()
   const registry = new ComponentRegistry()
-  const defs = Array.from({ length: componentCount }, (_, i) => defineComponent({ ['f' + i]: 'i32' as const }))
+  const defs = Array.from({ length: componentCount }, (_, i) => defineComponent({ ['f' + i]: 'i32' as const }, { name: 'f' + i }))
   registry.register(defs)
   const recordArch = new Map<number, number>()
   const recordRow = new Map<number, number>()
@@ -59,8 +50,8 @@ function makeStore(componentCount: number, maxHotArchetypes = 1 << 20): {
 
 describe('add/remove drive the expected migration', () => {
   test('add: entity ends in the target archetype with the shared column carried over', () => {
-    const Position = defineComponent({ x: 'f32', y: 'f32' })
-    const Velocity = defineComponent({ dx: 'f32', dy: 'f32' })
+    const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c1' })
+    const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'c2' })
     const w = createWorld({ components: [Position, Velocity] })
     const e = w.spawnWith(Position)
     const before = w.entity(e).__archetypeId
@@ -77,8 +68,8 @@ describe('add/remove drive the expected migration', () => {
   })
 
   test('added fields are initialized (numeric default 0) after a migration', () => {
-    const A = defineComponent({ a: 'f32' })
-    const B = defineComponent({ b: 'i32', c: 'f32' })
+    const A = defineComponent({ a: 'f32' }, { name: 'c3' })
+    const B = defineComponent({ b: 'i32', c: 'f32' }, { name: 'c4' })
     const w = createWorld({ components: [A, B] })
     const e = w.spawnWith(A)
     ;(w.entity(e).write(A) as { a: number }).a = 5
@@ -90,8 +81,8 @@ describe('add/remove drive the expected migration', () => {
   })
 
   test('remove: entity ends in the smaller archetype; removed component no longer held', () => {
-    const A = defineComponent({ a: 'f32' })
-    const B = defineComponent({ b: 'i32' })
+    const A = defineComponent({ a: 'f32' }, { name: 'c5' })
+    const B = defineComponent({ b: 'i32' }, { name: 'c6' })
     const w = createWorld({ components: [A, B] })
     const e = w.spawnWith(A, B)
     const before = w.entity(e).__archetypeId
@@ -109,7 +100,7 @@ describe('add/remove drive the expected migration', () => {
 describe('tag / zero-field components contribute NO ColumnSet (§3.4)', () => {
   test('a tag adds a distinct archetype but no readable column set', () => {
     const Alive = defineTag('Alive')
-    const Health = defineComponent({ hp: 'i32' })
+    const Health = defineComponent({ hp: 'i32' }, { name: 'c7' })
     const w = createWorld({ components: [Alive, Health] })
     const e = w.spawnWith(Health)
     const before = w.entity(e).__archetypeId
@@ -136,7 +127,7 @@ describe('tag / zero-field components contribute NO ColumnSet (§3.4)', () => {
 
 describe('EMPTY_ARCHETYPE_ID spawn path', () => {
   test('spawn() lands the entity in EMPTY_ARCHETYPE_ID (id 0), holding nothing', () => {
-    const A = defineComponent({ a: 'f32' })
+    const A = defineComponent({ a: 'f32' }, { name: 'c8' })
     const w = createWorld({ components: [A] })
     const e = w.spawn()
     expect(w.entity(e).__archetypeId).toBe(EMPTY_ARCHETYPE_ID as number)
@@ -170,9 +161,9 @@ describe('EMPTY_ARCHETYPE_ID spawn path', () => {
 
 describe('world.warm(sig) promotes a cold archetype (§10.4)', () => {
   test('a forced-cold archetype is promoted to hot and gains real columns', () => {
-    const A = defineComponent({ a: 'f32' })
-    const B = defineComponent({ b: 'f32' })
-    const C = defineComponent({ c: 'f32' })
+    const A = defineComponent({ a: 'f32' }, { name: 'c9' })
+    const B = defineComponent({ b: 'f32' }, { name: 'c10' })
+    const C = defineComponent({ c: 'f32' }, { name: 'c11' })
     // EMPTY(0) hot + {A} hot fill the budget; {B} and {C} land cold.
     const w = createWorld({ components: [A, B, C], maxHotArchetypes: 2 })
     const eB = w.spawnWith(B)

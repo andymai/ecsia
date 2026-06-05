@@ -20,7 +20,7 @@ import type {
   HandleLayout,
   HandleStats,
 } from './entity/index.js'
-import type { ComponentDef, ComponentId, RelationDef, RelationId, Schema } from '@ecsia/schema'
+import type { ComponentDef, ComponentId, RelationDef, RelationId, Schema, SpawnArg, SpawnArgFor } from '@ecsia/schema'
 import { Buffers, probeCapabilities } from './memory/index.js'
 import type { WorkerMode, SharedHandleManifest, RegionKey } from './memory/index.js'
 import { ComponentRegistry } from './registry.js'
@@ -191,8 +191,13 @@ export interface World {
   /**
    * Create a new entity and add the given components in ONE migration (EMPTY → target signature),
    * never N (archetype-storage.md §5.6; entity-model.md §6.1). Main-thread/serial.
+   *
+   * Each argument is either a bare `ComponentDef` (membership only) or a `[def, values]` tuple that
+   * also INITIALIZES the component: `spawnWith([Position, { x: 1, y: 2 }], Velocity)` spawns the entity,
+   * migrates it to the target signature once, then writes the supplied values through the normal tracked
+   * accessor path (so onChange/write-log fire). The value object is type-inferred from the def's schema.
    */
-  spawnWith(...defs: readonly ComponentDef<Schema>[]): EntityHandle
+  spawnWith<const T extends readonly SpawnArg[]>(...specs: { [I in keyof T]: SpawnArgFor<T[I]> }): EntityHandle
   /** Add a component to a live entity (single migration via the cached edge, §5.4). Main-thread/serial. */
   add(handle: EntityHandle, def: ComponentDef<Schema>): void
   /** Remove a component from a live entity (single migration via the cached edge). Main-thread/serial. */
@@ -384,7 +389,7 @@ export function createWorld(options: WorldOptions = {}): World {
     compileContext: {
       idOf: (def) => {
         const id = registry.idOf(def)
-        if (id === undefined) throw new Error(`component '${def.name}' is not registered with this world`)
+        if (id === undefined) throw new Error(`component '${def.name}' is not registered with this world — register it in createWorld({ components: [...] })`)
         return id
       },
       fixedBitCount: stride * 32,
@@ -435,7 +440,7 @@ export function createWorld(options: WorldOptions = {}): World {
     },
     idOf: (def) => {
       const id = registry.idOf(def)
-      if (id === undefined) throw new Error(`component '${def.name}' is not registered with this world`)
+      if (id === undefined) throw new Error(`component '${def.name}' is not registered with this world — register it in createWorld({ components: [...] })`)
       return id
     },
     holdsAll: (index, componentIds) => {
@@ -473,6 +478,10 @@ export function createWorld(options: WorldOptions = {}): World {
     remove: (handle, def) => storage.remove(handle, def),
     despawn: (handle) => entities.despawn(handle),
     isAlive: (handle) => entities.isAlive(handle),
+    writePayload: (handle, def, values) => {
+      const view = entities.entity(handle).write(def) as Record<string, unknown>
+      for (const k of Object.keys(values)) view[k] = values[k]
+    },
     addPair: (subject, relationId, target, payload) => applyAddPair?.(subject, relationId, target, payload),
     removePair: (subject, relationId, target) => applyRemovePair?.(subject, relationId, target),
   }
@@ -759,14 +768,32 @@ export function createWorld(options: WorldOptions = {}): World {
       }
       return entities.spawn()
     },
-    spawnWith(...defs) {
+    spawnWith(...specs) {
+      // Split each arg into its def (for the single EMPTY→target migration) and any `[def, values]`
+      // initializer (Item 8). Values are written AFTER placement through the tracked accessor path so
+      // onChange/write-log fire exactly as a post-spawn write would.
+      const defs: ComponentDef<Schema>[] = []
+      const values: (readonly [ComponentDef<Schema>, Record<string, unknown>])[] = []
+      for (const spec of specs as readonly (ComponentDef<Schema> | readonly [ComponentDef<Schema>, Record<string, unknown>])[]) {
+        if (Array.isArray(spec)) {
+          const [def, vals] = spec as readonly [ComponentDef<Schema>, Record<string, unknown>]
+          defs.push(def)
+          values.push([def, vals])
+        } else {
+          defs.push(spec as ComponentDef<Schema>)
+        }
+      }
       if (observerCommands.deferring) {
         const handle = reserveEntityBlock(entities.index, -1, 1).handles[0] as EntityHandle
-        observerCommands.stageSpawnWith(handle, defs)
+        observerCommands.stageSpawnWith(handle, defs, values)
         return handle
       }
       const handle = entities.spawn()
       storage.spawnWith(handle, defs)
+      for (const [def, vals] of values) {
+        const view = entities.entity(handle).write(def) as Record<string, unknown>
+        for (const k of Object.keys(vals)) view[k] = vals[k]
+      }
       return handle
     },
     add(handle, def) {

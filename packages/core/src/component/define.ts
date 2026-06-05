@@ -90,18 +90,22 @@ function validateOptions(options?: ComponentOptions): void {
 
 // `B`/`N` capture the brand/name LITERALS so the returned def's `name` is the literal the query DSL
 // lifts to a precise element key (CompKey, type-system.md §3/§5.2). The runtime `name` is
-// `brand ?? name ?? 'Component'`, so the literal type mirrors that precedence; absent both it widens
-// to `'Component'`. Defaulting the params to `string` keeps inference-free call sites unchanged.
+// `brand ?? name`. A name (or brand) is REQUIRED (P0.5 Item 6): without it two anonymous defs would
+// both key the element surface as `'Component'` and collide — so the options arg now mandates one and
+// `defineComponent(schema)` is a compile error. defineTag and the relations runtime supply `brand`.
 export function defineComponent<
   const S extends Schema,
-  const B extends string = string,
-  const N extends string = string,
+  const B extends string = never,
+  const N extends string = never,
 >(
   schema: S,
-  options?: ComponentOptions & { readonly brand?: B; readonly name?: N },
-): ComponentDef<S, string extends B ? (string extends N ? 'Component' : N) : B> {
+  options: ComponentOptions & ({ readonly name: N; readonly brand?: B } | { readonly brand: B; readonly name?: N }),
+): ComponentDef<S, [B] extends [never] ? N : B> {
   validateSchema(schema)
   validateOptions(options)
+  if (options?.brand === undefined && options?.name === undefined) {
+    throw new Error("defineComponent: a 'name' (or 'brand') option is required — it keys the element surface (e.entity.<name>) and prevents anonymous defs from colliding")
+  }
 
   const fields: FieldDescriptor[] = []
   for (const name of Object.keys(schema)) {
@@ -125,7 +129,7 @@ export function defineComponent<
   const def = {
     schema,
     fields: Object.freeze(fields),
-    name: options?.brand ?? options?.name ?? 'Component',
+    name: (options.brand ?? options.name) as string,
     options: Object.freeze(resolvedOptions),
     columnLayouts: Object.freeze(columnLayouts),
     defKind: 'component' as const,
@@ -146,15 +150,15 @@ export function defineComponent<
   }
   // The runtime def is built as ComponentRuntime<S> (name: string); the captured literal lives only
   // in the declared return type, so re-narrow here. The runtime value is unchanged.
-  return Object.preventExtensions(def) as unknown as ComponentDef<
-    S,
-    string extends B ? (string extends N ? 'Component' : N) : B
-  >
+  return Object.preventExtensions(def) as unknown as ComponentDef<S, [B] extends [never] ? N : B>
 }
 
-export function defineTag<const N extends string = 'Tag'>(
-  name: N = 'Tag' as N,
-): ComponentDef<Record<never, never>, N> {
+// A name is REQUIRED (P0.5 Item 6): it keys the tag's element/membership identity, so an anonymous tag
+// can no longer collide with another on a default name.
+export function defineTag<const N extends string>(name: N): ComponentDef<Record<never, never>, N> {
+  if (name === undefined || (name as string) === '') {
+    throw new Error("defineTag: a 'name' argument is required — it keys the tag's identity and prevents anonymous tags from colliding")
+  }
   return defineComponent({}, { storage: 'sparse', brand: name }) as ComponentDef<Record<never, never>, N>
 }
 

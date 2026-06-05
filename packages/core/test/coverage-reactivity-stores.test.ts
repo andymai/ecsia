@@ -4,7 +4,8 @@
 // flush with drop-if-dead). Each assertion pins a behavioral outcome that a regression would break.
 
 import { describe, expect, test, vi } from 'vitest'
-import { Buffers, ChangeVersionStore, ObserverRegistry, onAdd, onRemove, onChange, probeCapabilities } from '@ecsia/core'
+import { onAdd, onRemove, onChange } from '@ecsia/core'
+import { Buffers, ChangeVersionStore, ObserverRegistry, probeCapabilities } from '../src/internal.js'
 import type { ComponentDef, ComponentId, Schema } from '@ecsia/core'
 import { ObserverCommandBuffer } from '../src/reactivity/observer-commands.js'
 import type { ObserverCommandApply } from '../src/reactivity/observer-commands.js'

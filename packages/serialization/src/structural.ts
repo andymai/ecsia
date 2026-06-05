@@ -34,7 +34,7 @@ export interface DeltaRecord {
 // is the from-nothing reconstruction source and emits every live entity unconditionally.
 export function encodeStructuralOps(world: World): Uint8Array {
   if (world.phase !== 'serial') {
-    throw new Error('encodeStructuralOps must run at a serial flush point (§7.3)')
+    throw new Error('encodeStructuralOps must run while the world is in its serial phase (outside scheduler.update / worker waves)')
   }
   const s = world.__serialize
   const cur = new WriteCursor(16 * 1024)
@@ -176,7 +176,7 @@ const SCRATCH_F64 = new Float64Array(1)
 // --- apply: replay records into the receiver world through validate-then-apply (§7.3) --------------
 export function applyStructuralOps(world: World, bytes: Uint8Array, remap: Map<EntityHandle, EntityHandle>): void {
   if (world.phase !== 'serial') {
-    throw new Error('applyStructuralOps must run at a serial flush point (§7.3)')
+    throw new Error('applyStructuralOps must run while the world is in its serial phase (outside scheduler.update / worker waves)')
   }
   const s = world.__serialize
   const relProvider = s.relations()

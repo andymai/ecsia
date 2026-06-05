@@ -5,19 +5,10 @@
 // observable so a regression in the branch would fail.
 
 import { describe, expect, test } from 'vitest'
-import {
-  Buffers,
-  ComponentRegistry,
-  buildColumnSet,
-  defineComponent,
-  makeAccessorFactory,
-  probeCapabilities,
-  registerComponentId,
-  resolveDescriptor,
-  staticString,
-  vec,
-} from '@ecsia/core'
-import type { AccessorWorld, ComponentDef, Schema, FieldToken } from '@ecsia/core'
+import { buildColumnSet, defineComponent, staticString, vec } from '@ecsia/core'
+import { Buffers, ComponentRegistry, makeAccessorFactory, probeCapabilities, registerComponentId, resolveDescriptor } from '../src/internal.js'
+import type { ComponentDef, Schema, FieldToken } from '@ecsia/core'
+import type { AccessorWorld } from '../src/internal.js'
 
 const newBuffers = (): Buffers => new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 20 })
 
@@ -27,35 +18,35 @@ function stubWorld(): AccessorWorld {
 
 describe('defineComponent — fail-fast validation (define.ts §2)', () => {
   test('schema must be a plain object (define.ts:42)', () => {
-    expect(() => defineComponent(null as unknown as Schema)).toThrow(/schema must be a plain object/)
-    expect(() => defineComponent([] as unknown as Schema)).toThrow(/schema must be a plain object/)
+    expect(() => defineComponent(null as unknown as Schema, { name: 'c1' })).toThrow(/schema must be a plain object/)
+    expect(() => defineComponent([] as unknown as Schema, { name: 'c2' })).toThrow(/schema must be a plain object/)
   })
 
   test('reserved __ prefix / non-identifier field names rejected (define.ts:48 branch)', () => {
-    expect(() => defineComponent({ __x: 'f32' } as unknown as Schema)).toThrow(/invalid field name/)
-    expect(() => defineComponent({ '1bad': 'f32' } as unknown as Schema)).toThrow(/invalid field name/)
+    expect(() => defineComponent({ __x: 'f32' } as unknown as Schema, { name: 'c3' })).toThrow(/invalid field name/)
+    expect(() => defineComponent({ '1bad': 'f32' } as unknown as Schema, { name: 'c4' })).toThrow(/invalid field name/)
   })
 
   test('a non-object, non-string token is not a valid field token (define.ts:57-59)', () => {
-    expect(() => defineComponent({ x: 42 } as unknown as Schema)).toThrow(/is not a valid field token/)
-    expect(() => defineComponent({ x: null } as unknown as Schema)).toThrow(/is not a valid field token/)
+    expect(() => defineComponent({ x: 42 } as unknown as Schema, { name: 'c5' })).toThrow(/is not a valid field token/)
+    expect(() => defineComponent({ x: null } as unknown as Schema, { name: 'c6' })).toThrow(/is not a valid field token/)
   })
 
   test('vec token validation: numeric elem + integer len >= 1 (define.ts:63-69)', () => {
-    expect(() => defineComponent({ v: { kind: 'vec', elem: 99, len: 2 } } as unknown as Schema)).toThrow(/needs a scalar elem/)
-    expect(() => defineComponent({ v: vec('bool' as never, 2) })).toThrow(/element must be numeric/)
-    expect(() => defineComponent({ v: vec('eid' as never, 2) })).toThrow(/element must be numeric/)
-    expect(() => defineComponent({ v: { kind: 'vec', elem: 'f32', len: 0 } } as unknown as Schema)).toThrow(/len must be an integer >= 1/)
-    expect(() => defineComponent({ v: { kind: 'vec', elem: 'f32', len: 1.5 } } as unknown as Schema)).toThrow(/len must be an integer >= 1/)
+    expect(() => defineComponent({ v: { kind: 'vec', elem: 99, len: 2 } } as unknown as Schema, { name: 'c7' })).toThrow(/needs a scalar elem/)
+    expect(() => defineComponent({ v: vec('bool' as never, 2) }, { name: 'c8' })).toThrow(/element must be numeric/)
+    expect(() => defineComponent({ v: vec('eid' as never, 2) }, { name: 'c9' })).toThrow(/element must be numeric/)
+    expect(() => defineComponent({ v: { kind: 'vec', elem: 'f32', len: 0 } } as unknown as Schema, { name: 'c10' })).toThrow(/len must be an integer >= 1/)
+    expect(() => defineComponent({ v: { kind: 'vec', elem: 'f32', len: 1.5 } } as unknown as Schema, { name: 'c11' })).toThrow(/len must be an integer >= 1/)
   })
 
   test('staticString token validation: >=1 distinct choices (define.ts:73-77)', () => {
-    expect(() => defineComponent({ s: staticString() })).toThrow(/needs >= 1 choice/)
-    expect(() => defineComponent({ s: { kind: 'staticString', choices: ['a', 'a'] } } as unknown as Schema)).toThrow(/must be distinct/)
+    expect(() => defineComponent({ s: staticString() }, { name: 'c12' })).toThrow(/needs >= 1 choice/)
+    expect(() => defineComponent({ s: { kind: 'staticString', choices: ['a', 'a'] } } as unknown as Schema, { name: 'c13' })).toThrow(/must be distinct/)
   })
 
   test('an unknown token kind is rejected (define.ts:78-79)', () => {
-    expect(() => defineComponent({ x: { kind: 'mystery' } } as unknown as Schema)).toThrow(/unknown token kind/)
+    expect(() => defineComponent({ x: { kind: 'mystery' } } as unknown as Schema, { name: 'c14' })).toThrow(/unknown token kind/)
   })
 
   test('options validation: storage enum + non-negative integer maxHistory (define.ts:83-88)', () => {
@@ -63,12 +54,12 @@ describe('defineComponent — fail-fast validation (define.ts §2)', () => {
     expect(() => defineComponent({ x: 'f32' }, { maxHistory: -1 })).toThrow(/maxHistory must be a non-negative integer/)
     expect(() => defineComponent({ x: 'f32' }, { maxHistory: 2.5 })).toThrow(/maxHistory must be a non-negative integer/)
     // Valid options resolve.
-    const C = defineComponent({ x: 'f32' }, { storage: 'sparse', maxHistory: 4 })
+    const C = defineComponent({ x: 'f32' }, { name: 'cValid', storage: 'sparse', maxHistory: 4 })
     expect(C.options).toEqual({ storage: 'sparse', maxHistory: 4 })
   })
 
   test('registerComponentId throws on a second registration (define.ts:166-168)', () => {
-    const C = defineComponent({ x: 'f32' }) as ComponentDef<Schema>
+    const C = defineComponent({ x: 'f32' }, { name: 'c15' }) as ComponentDef<Schema>
     registerComponentId(C, 1 as never)
     expect(() => registerComponentId(C, 2 as never)).toThrow(/already registered to a world/)
   })
@@ -132,7 +123,7 @@ describe('resolveDescriptor — width selection + user-default branches (descrip
 
 describe('makeAccessorFactory — guards + vec setter + whole-instance rebind (accessor.ts §8.2)', () => {
   test('the factory rejects a column array whose length != the plan length (accessor.ts:121-123)', () => {
-    const C = defineComponent({ x: 'f32', y: 'f32' }) as ComponentDef<Schema>
+    const C = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c16' }) as ComponentDef<Schema>
     registerComponentId(C, 1 as never)
     const factory = makeAccessorFactory(C)
     // Two column-backed fields are planned; pass zero columns.
@@ -143,7 +134,7 @@ describe('makeAccessorFactory — guards + vec setter + whole-instance rebind (a
     const buffers = newBuffers()
     const calls: number[] = []
     const trackingWorld: AccessorWorld = { trackWrite: (i) => calls.push(i), handleIndex: (h) => h as number }
-    const Vel = defineComponent({ v: vec('f32', 3) }) as ComponentDef<Schema>
+    const Vel = defineComponent({ v: vec('f32', 3) }, { name: 'c17' }) as ComponentDef<Schema>
     new ComponentRegistry().register([Vel])
     const set = buildColumnSet({ buffers, archetypeId: 0, def: Vel, world: trackingWorld, initialCapacity: 4 })
     const a = set.accessor as unknown as { __idx: number; __eid: number; v: { x: number; y: number; z: number } }
@@ -159,7 +150,7 @@ describe('makeAccessorFactory — guards + vec setter + whole-instance rebind (a
     // SINGLE column-backed field: __rebind's loop re-points that field's view onto the new backing.
     // (For a multi-field component a whole-instance __rebind would alias both onto byteOffset 0 — the
     // documented reason the buffers layer drives per-field __rebindField instead. Here one field is safe.)
-    const One = defineComponent({ a: 'u32' }) as ComponentDef<Schema>
+    const One = defineComponent({ a: 'u32' }, { name: 'c18' }) as ComponentDef<Schema>
     new ComponentRegistry().register([One])
     const set = buildColumnSet({ buffers, archetypeId: 0, def: One, world: stubWorld(), initialCapacity: 4 })
     const view = set.accessor as unknown as { __idx: number; a: number }
@@ -194,7 +185,7 @@ describe('buildColumnSet — unregistered-component guard (column-set.ts §8.1)'
   test('an unregistered def (id < 0) is rejected before any column allocation (column-set.ts:37-39)', () => {
     const buffers = newBuffers()
     // A def that was never registered to a world still carries UNREGISTERED (-1).
-    const C = defineComponent({ x: 'f32' }) as ComponentDef<Schema>
+    const C = defineComponent({ x: 'f32' }, { name: 'c19' }) as ComponentDef<Schema>
     expect(() => buildColumnSet({ buffers, archetypeId: 0, def: C, world: stubWorld(), initialCapacity: 4 })).toThrow(
       /has no id \(register it with a world first\)/,
     )

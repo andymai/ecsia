@@ -3,16 +3,10 @@
 // the edge cache can be observed in isolation.
 
 import { describe, expect, test } from 'vitest'
-import {
-  ArchetypeStore,
-  Bitmask,
-  Buffers,
-  ComponentRegistry,
-  canonicalize,
-  defineComponent,
-  probeCapabilities,
-} from '@ecsia/core'
-import type { ComponentId, RecordSurface, Signature } from '@ecsia/core'
+import { defineComponent } from '@ecsia/core'
+import { ArchetypeStore, Bitmask, Buffers, ComponentRegistry, canonicalize, probeCapabilities } from '../src/internal.js'
+import type { ComponentId } from '@ecsia/core'
+import type { RecordSurface, Signature } from '../src/internal.js'
 
 const newBuffers = (): Buffers => new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 16 })
 
@@ -25,12 +19,12 @@ describe('Bitmask BM-1: every access asserts world.phase === serial', () => {
     // serial: fine.
     bm.bitmaskApplyDelta(0, empty, withC)
     expect(bm.bitmaskHas(0, 1 as ComponentId)).toBe(true)
-    // wave: every read/write throws (Must-Fix #1).
+    // wave: every read/write throws (serial-phase-only access guard).
     phase = 'wave'
-    expect(() => bm.bitmaskHas(0, 1 as ComponentId)).toThrow(/serial-only/)
-    expect(() => bm.bitmaskApplyDelta(0, empty, withC)).toThrow(/serial-only/)
-    expect(() => bm.entityShapeWords(0)).toThrow(/serial-only/)
-    expect(() => bm.bitmaskClear(0)).toThrow(/serial-only/)
+    expect(() => bm.bitmaskHas(0, 1 as ComponentId)).toThrow(/serial-phase only/)
+    expect(() => bm.bitmaskApplyDelta(0, empty, withC)).toThrow(/serial-phase only/)
+    expect(() => bm.entityShapeWords(0)).toThrow(/serial-phase only/)
+    expect(() => bm.bitmaskClear(0)).toThrow(/serial-phase only/)
   })
 
   test('coherence: applyDelta sets added bits, clears removed bits', () => {
@@ -53,7 +47,7 @@ function makeStore(componentCount: number, maxHotArchetypes = 1024): {
   const buffers = newBuffers()
   const registry = new ComponentRegistry()
   // Register `componentCount` real one-field components so defOf resolves their columns.
-  const defs = Array.from({ length: componentCount }, (_, i) => defineComponent({ ['f' + i]: 'i32' as const }))
+  const defs = Array.from({ length: componentCount }, (_, i) => defineComponent({ ['f' + i]: 'i32' as const }, { name: 'f' + i }))
   registry.register(defs)
   const recordArch = new Map<number, number>()
   const recordRow = new Map<number, number>()

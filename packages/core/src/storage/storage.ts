@@ -244,7 +244,10 @@ export class Storage {
 
   #requireId(def: ComponentDef<Schema>): ComponentId {
     const id = this.#cfg.registry.idOf(def)
-    if (id === undefined) throw new Error(`component '${def.name}' is not registered with this world`)
+    if (id === undefined)
+      throw new Error(
+        `component '${def.name}' is not registered with this world — register it in createWorld({ components: [...] })`,
+      )
     return id
   }
 }

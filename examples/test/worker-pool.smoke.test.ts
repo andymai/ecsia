@@ -39,8 +39,8 @@ function seed(threaded: boolean, workers: number, n: number) {
   const handles: EntityHandle[] = []
   for (let i = 0; i < n; i++) {
     const h = world.spawnWith(Health, Mana)
-    ;(world.entity(h).write(Health) as { hp: number }).hp = i
-    ;(world.entity(h).write(Mana) as { mp: number }).mp = 100 + i
+    world.entity(h).write(Health).hp = i
+    world.entity(h).write(Mana).mp = 100 + i
     handles.push(h)
   }
   return { world, Health, Mana, handles }
@@ -58,7 +58,7 @@ describe('M12 worker example genuinely runs threaded on a REAL WorkerPool (execu
       read: [],
       write: [ref.Health],
       run({ query }) {
-        for (const e of query(write(ref.Health)) as Iterable<{ health: { hp: number } }>) e.health.hp += 1
+        for (const e of query(write(ref.Health))) e.health.hp += 1
       },
     })
     const Channel = defineSystem({
@@ -66,7 +66,7 @@ describe('M12 worker example genuinely runs threaded on a REAL WorkerPool (execu
       read: [],
       write: [ref.Mana],
       run({ query }) {
-        for (const e of query(write(ref.Mana)) as Iterable<{ mana: { mp: number } }>) e.mana.mp -= 1
+        for (const e of query(write(ref.Mana))) e.mana.mp -= 1
       },
     })
     const refSched = createScheduler(ref.world, [Regen, Channel])
@@ -75,14 +75,14 @@ describe('M12 worker example genuinely runs threaded on a REAL WorkerPool (execu
     const thr = seed(true, 2, N)
     const RegenT = defineSystem({ name: 'Regen', read: [], write: [thr.Health], run() {} })
     const ChannelT = defineSystem({ name: 'Channel', read: [], write: [thr.Mana], run() {} })
-    const thrSched = createScheduler(thr.world, [RegenT, ChannelT], { workerCount: 2 })
+    const thrSched = createScheduler(thr.world, [RegenT, ChannelT], { workers: 2 })
     const systems: PoolSystem[] = [
       { id: 0 as never, name: 'Regen', matchComponents: [thr.Health], kernel: () => {}, maxSpawnsPerWave: 0 },
       { id: 1 as never, name: 'Channel', matchComponents: [thr.Mana], kernel: () => {}, maxSpawnsPerWave: 0 },
     ]
     pool = new WorkerPool({
       world: thr.world as never,
-      workerCount: 2,
+      workers: 2,
       kernelModule: KERNEL_MODULE,
       workerEntryUrl: WORKER_ENTRY,
       systems,
@@ -97,11 +97,11 @@ describe('M12 worker example genuinely runs threaded on a REAL WorkerPool (execu
     // The pool returned to the serial phase, and every entity's columns equal the single-thread run.
     expect(thr.world.phase).toBe('serial')
     for (let i = 0; i < N; i++) {
-      expect((thr.world.entity(thr.handles[i]!).read(thr.Health) as { hp: number }).hp).toBe(
-        (ref.world.entity(ref.handles[i]!).read(ref.Health) as { hp: number }).hp,
+      expect(thr.world.entity(thr.handles[i]!).read(thr.Health).hp).toBe(
+        ref.world.entity(ref.handles[i]!).read(ref.Health).hp,
       )
-      expect((thr.world.entity(thr.handles[i]!).read(thr.Mana) as { mp: number }).mp).toBe(
-        (ref.world.entity(ref.handles[i]!).read(ref.Mana) as { mp: number }).mp,
+      expect(thr.world.entity(thr.handles[i]!).read(thr.Mana).mp).toBe(
+        ref.world.entity(ref.handles[i]!).read(ref.Mana).mp,
       )
     }
   })

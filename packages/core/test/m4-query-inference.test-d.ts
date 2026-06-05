@@ -10,23 +10,9 @@
 // builder now emits. The arity cap + LooseQueryElement degradation + the read/write/optional fold
 // are the other load-bearing M4 obligations.
 
-import type {
-  ComponentDef,
-  EntityHandle,
-  LooseQueryElement,
-  Query,
-  QueryElement,
-  ReadOf,
-  WriteOf,
-  Has,
-  HasWrite,
-  ReadTerm,
-  WriteTerm,
-  WithTerm,
-  OptionalTerm,
-  WorldQuery,
-} from '@ecsia/core'
-import { read, write, With, Without, optional, defineComponent } from '@ecsia/core'
+import type { ComponentDef, EntityHandle, Query, QueryElement, ReadOf, WriteOf, Has, HasWrite } from '@ecsia/core'
+import type { LooseQueryElement, ReadTerm, WriteTerm, HasTerm, OptionalTerm, WorldQuery } from '../src/internal.js'
+import { read, write, has, without, optional, defineComponent } from '@ecsia/core'
 
 // Hand-typed defs with LITERAL names so CompKey yields distinct element keys.
 declare const Position: ComponentDef<{ x: 'f32'; y: 'f32' }> & { name: 'position' }
@@ -34,11 +20,11 @@ declare const Velocity: ComponentDef<{ x: 'f32'; y: 'f32' }> & { name: 'velocity
 declare const Health: ComponentDef<{ current: 'i32' }> & { name: 'health' }
 declare const Alive: ComponentDef<Record<never, never>> & { name: 'alive' }
 
-// §5.3 the fold: read → Readonly prop; write → mutable prop; With → no prop; optional → | undefined.
+// §5.3 the fold: read → Readonly prop; write → mutable prop; has → no prop; optional → | undefined.
 type Terms = [
   ReadTerm<typeof Position>,
   WriteTerm<typeof Velocity>,
-  WithTerm<typeof Alive>,
+  HasTerm<typeof Alive>,
   OptionalTerm<typeof Health>,
 ]
 declare const e: QueryElement<Terms> & { handle: EntityHandle }
@@ -49,7 +35,7 @@ export const _handle: EntityHandle = e.handle
 // @ts-expect-error read term yields a Readonly view; assignment is a compile error
 e.position.x = 5
 export const _opt: ReadOf<typeof Health> | undefined = e.health // optional → ReadOf | undefined
-// @ts-expect-error 'alive' does not exist on the element (With is membership-only)
+// @ts-expect-error 'alive' does not exist on the element (has is membership-only)
 e.alive
 
 // individual contributions are well-typed.
@@ -59,8 +45,8 @@ export const _wo: WriteOf<typeof Velocity> = { x: 0, y: 0 }
 // the runtime constructors stay value-level callable (terms drive matching regardless of arity).
 const _t1 = read(Position)
 const _t2 = write(Velocity)
-const _t3 = With(Alive)
-const _t4 = Without(Health)
+const _t3 = has(Alive)
+const _t4 = without(Health)
 const _t5 = optional(Health)
 void [_t1, _t2, _t3, _t4, _t5]
 
@@ -92,9 +78,9 @@ const q8 = w.query(
   read(realPos),
   read(realPos),
   read(realPos),
-  With(realPos),
-  With(realPos),
-  Without(realPos),
+  has(realPos),
+  has(realPos),
+  without(realPos),
   optional(realPos),
 )
 q8.each((el) => {

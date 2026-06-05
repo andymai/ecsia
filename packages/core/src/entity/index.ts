@@ -1,4 +1,4 @@
-export { makeHandle, handleIndex, handleGeneration, makeHandleLayout, NO_ENTITY } from './codec.js'
+export { makeHandle, handleIndex, handleGeneration, makeHandleLayout, NO_ENTITY, NULL_ENTITY, isNoEntity } from './codec.js'
 export type { EntityHandle, EntityIndex, EntityGeneration, HandleLayout } from './codec.js'
 
 export { EntityIndex as EntityIndexAllocator, CapacityExceeded } from './index-allocator.js'

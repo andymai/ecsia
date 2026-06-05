@@ -4,7 +4,8 @@
 // Every assertion pins a concrete observable outcome so a regression in the branch would fail.
 
 import { describe, expect, test } from 'vitest'
-import { Buffers, allocU32, makeColumnLayout } from '@ecsia/core'
+import { makeColumnLayout } from '@ecsia/core'
+import { Buffers, allocU32 } from '../src/internal.js'
 import type { ColumnKey, RegionKey, RuntimeCapabilities } from '@ecsia/core'
 
 const k = (s: string): ColumnKey => s as ColumnKey

@@ -30,5 +30,3 @@ export {
   SNAPSHOT_MAGIC,
   DeltaOp,
 } from './format.js'
-
-export const SERIALIZATION_PACKAGE = 'serialization' as const

@@ -195,7 +195,7 @@ async function runThreaded(opts: {
   })
 
   const defs: readonly SystemDef[] = [UpdateA, UpdateB]
-  const scheduler = createScheduler(world, defs, { workerCount: 2 })
+  const scheduler = createScheduler(world, defs, { workers: 2 })
   const runByName = new Map<string, SystemDef['run']>()
   for (const d of defs) runByName.set(d.name, d.run)
   const dispatcher: RoundDispatcher = {

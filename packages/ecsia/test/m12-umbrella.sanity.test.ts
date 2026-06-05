@@ -27,8 +27,8 @@ import {
   // query DSL
   read,
   write,
-  With,
-  Without,
+  has,
+  without,
   optional,
   MAX_QUERY_ARITY,
   // reactivity
@@ -43,10 +43,10 @@ import {
   createSnapshotDeserializer,
   createDeltaSerializer,
   applyDelta,
-  // convenience wiring + package marker
-  snapshot,
-  relationsOf,
-  ECSIA_PACKAGE,
+  // null-handle sentinel + predicate
+  NO_ENTITY,
+  NULL_ENTITY,
+  isNoEntity,
 } from '@ecsia/ecsia'
 // Type-only surface (public-api.md §10): if any of these is not re-exported, this import fails to compile.
 import type {
@@ -91,8 +91,8 @@ describe('M12 umbrella — the documented public surface is importable from @ecs
       object,
       read,
       write,
-      With,
-      Without,
+      has,
+      without,
       optional,
       onAdd,
       onRemove,
@@ -102,8 +102,6 @@ describe('M12 umbrella — the documented public surface is importable from @ecs
       createSnapshotDeserializer,
       createDeltaSerializer,
       applyDelta,
-      snapshot,
-      relationsOf,
     ]
     for (const f of fns) expect(typeof f).toBe('function')
     // Constructors / classes.
@@ -114,7 +112,10 @@ describe('M12 umbrella — the documented public surface is importable from @ecs
     expect(typeof MAX_QUERY_ARITY).toBe('number')
     expect(MAX_QUERY_ARITY).toBe(8) // public-api.md §4.4 / PA-6
     expect(Wildcard).toBeDefined()
-    expect(ECSIA_PACKAGE).toBe('ecsia')
+    // null-handle sentinel + predicate are reachable from the umbrella (no @ecsia/core reach-in needed)
+    expect(NO_ENTITY).toBe(0xffffffff)
+    expect(NULL_ENTITY).toBe(NO_ENTITY)
+    expect(isNoEntity(NO_ENTITY)).toBe(true)
   })
 
   test('the namespace import exposes the same surface (no missing re-export)', () => {
@@ -170,8 +171,8 @@ describe('M12 umbrella — the documented public surface is importable from @ecs
     // Relation resolves through the umbrella's relations runtime.
     expect(rel.hasPair(child, ChildOf, parent)).toBe(true)
 
-    // Serialization round-trips through the umbrella's copy path (snapshot convenience + deserializer).
-    const bytes = snapshot(world)
+    // Serialization round-trips through the umbrella's copy path (createSnapshotSerializer + deserializer).
+    const bytes = createSnapshotSerializer(world).snapshot()
     expect(bytes.byteLength).toBeGreaterThan(0)
     const Position2 = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
     const Velocity2 = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })

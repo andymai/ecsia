@@ -6,8 +6,9 @@
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, object } from '@ecsia/core'
-import { buildPlan, concurrencyCompatible, defineSystem, lowerSystems } from '@ecsia/scheduler'
-import type { DAG, ScheduleWave } from '@ecsia/scheduler'
+import { defineSystem } from '@ecsia/scheduler'
+import { buildPlan, concurrencyCompatible, lowerSystems } from '../src/internal.js'
+import type { DAG, ScheduleWave } from '../src/internal.js'
 import type { ComponentDef, Schema, SystemId } from '@ecsia/schema'
 
 /** A linear DAG over `n` nodes with NO edges (all in one wave). */

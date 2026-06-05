@@ -4,8 +4,9 @@
 // scheduler.md §6.2, SCH-4.
 
 import { describe, expect, test, vi } from 'vitest'
-import { runUpdate, runUpdateThreaded } from '@ecsia/scheduler'
-import type { ExecutorEnv, RoundDispatcher, SchedulePlan, ScheduleWave, SystemBox } from '@ecsia/scheduler'
+import { runUpdate, runUpdateThreaded } from '../src/internal.js'
+import type { RoundDispatcher } from '@ecsia/scheduler'
+import type { ExecutorEnv, SchedulePlan, ScheduleWave, SystemBox } from '../src/internal.js'
 
 interface FakeWorld {
   phase: string
@@ -41,7 +42,7 @@ function envOf(world: FakeWorld, cadence: 'frame-end' | 'per-system', systems: S
 }
 
 function emptyPlan(): SchedulePlan {
-  return { waves: [], systems: [], accessStrideWords: 1, workerCount: 0 } as unknown as SchedulePlan
+  return { waves: [], systems: [], accessStrideWords: 1, workers: 0 } as unknown as SchedulePlan
 }
 
 describe('update.ts: runUpdate phase guards (lines 12-13/24-25, branches 11/23)', () => {
@@ -127,7 +128,7 @@ describe('update-threaded.ts: runUpdateThreaded phase guards + per-system drain 
       rounds: [[{ systemId: 0 as never, workerIndex: 0 }]],
       perWorkerSpawnHint: new Uint32Array(1),
     }
-    const plan = { waves: [wave], systems: [], accessStrideWords: 1, workerCount: 1 } as unknown as SchedulePlan
+    const plan = { waves: [wave], systems: [], accessStrideWords: 1, workers: 1 } as unknown as SchedulePlan
     const pool = stubPool()
     await runUpdateThreaded(envOf(world, 'per-system'), plan, pool, 0.5)
     // The worker batch was dispatched to the stub pool.
@@ -152,7 +153,7 @@ describe('update-threaded.ts: runUpdateThreaded phase guards + per-system drain 
       rounds: [[{ systemId: 0 as never, workerIndex: -1 }]],
       perWorkerSpawnHint: new Uint32Array(0),
     }
-    const plan = { waves: [wave], systems: [sb], accessStrideWords: 1, workerCount: 0 } as unknown as SchedulePlan
+    const plan = { waves: [wave], systems: [sb], accessStrideWords: 1, workers: 0 } as unknown as SchedulePlan
     const pool = stubPool()
     await runUpdateThreaded(envOf(world, 'frame-end', [sb]), plan, pool, 0)
     expect(ran).toEqual([1]) // main-thread system body executed

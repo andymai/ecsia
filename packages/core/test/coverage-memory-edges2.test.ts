@@ -6,19 +6,8 @@
 // runtime (resizable {Shared}ArrayBuffer + plain-AB resize() are all present) — noted, not gamed.
 
 import { describe, expect, test } from 'vitest'
-import {
-  Buffers,
-  fieldToColumnLayout,
-  makeColumnLayout,
-  probeCapabilities,
-  resolveDescriptor,
-  rowSlice,
-  sharedBacking,
-  snapshotInto,
-  staticString,
-  tokenToColumnLayout,
-  vec,
-} from '@ecsia/core'
+import { makeColumnLayout, staticString, vec } from '@ecsia/core'
+import { Buffers, fieldToColumnLayout, probeCapabilities, resolveDescriptor, rowSlice, sharedBacking, snapshotInto, tokenToColumnLayout } from '../src/internal.js'
 import type { ColumnKey, FieldToken, RegionKey, RuntimeCapabilities } from '@ecsia/core'
 
 const k = (s: string): ColumnKey => s as ColumnKey

@@ -6,7 +6,6 @@
 
 import { createWorld, defineComponent, createRelations } from '@ecsia/ecsia'
 import type { EntityHandle } from '@ecsia/ecsia'
-import { wr, rd } from './_helpers.js'
 
 export interface SceneNodeSpec {
   readonly local: { x: number; y: number }
@@ -53,11 +52,9 @@ export function main(opts: SceneGraphOptions = {}): SceneGraphResult {
 
   const handles: EntityHandle[] = []
   for (const spec of specs) {
-    const h = world.spawnWith(LocalTransform, WorldTransform)
-    const lt = wr(world, h, LocalTransform)
-    lt.x = spec.local.x
-    lt.y = spec.local.y
-    handles.push(h)
+    // Value-carrying spawn: initialize LocalTransform inline; WorldTransform stays membership-only (it
+    // is computed by the propagation pass below).
+    handles.push(world.spawnWith([LocalTransform, { x: spec.local.x, y: spec.local.y }], WorldTransform))
   }
   for (let i = 0; i < specs.length; i++) {
     const parent = specs[i]!.parent
@@ -67,7 +64,7 @@ export function main(opts: SceneGraphOptions = {}): SceneGraphResult {
   // Propagate transforms in depth order: a node's world transform needs its parent's already computed,
   // so we sort by depthOf (root depth 0) before composing. depthOf walks the exclusive parent chain.
   const order = handles
-    .map((h, i) => ({ h, i, depth: rel.depthOf(ChildOf, h) }))
+    .map((h, i) => ({ h, i, depth: rel.depthOf(h, ChildOf) }))
     .sort((a, b) => a.depth - b.depth)
 
   let maxDepth = 0
@@ -75,9 +72,10 @@ export function main(opts: SceneGraphOptions = {}): SceneGraphResult {
     if (depth > maxDepth) maxDepth = depth
 
     // The EntityRef + its accessors are pooled per-world (public-api.md §4.1): a later world.entity()
-    // call rebinds the SAME singleton to a new row. So resolve every input to PLAIN NUMBERS before
-    // binding the child's write view — never hold two live accessors across a world.entity() call.
-    const lt = rd(world, h, LocalTransform)
+    // call rebinds the SAME singleton to a new row, and the stale-ref guard now THROWS if you read a
+    // ref after it rebound. So resolve every input to PLAIN NUMBERS before binding the next view —
+    // never hold two live accessors across a world.entity() call.
+    const lt = world.entity(h).read(LocalTransform)
     const lx = lt.x
     const ly = lt.y
 
@@ -89,19 +87,19 @@ export function main(opts: SceneGraphOptions = {}): SceneGraphResult {
     let baseX = 0
     let baseY = 0
     if (parentHandle !== undefined) {
-      const pw = rd(world, parentHandle, WorldTransform)
+      const pw = world.entity(parentHandle).read(WorldTransform)
       baseX = pw.x
       baseY = pw.y
     }
 
-    const wt = wr(world, h, WorldTransform)
+    const wt = world.entity(h).write(WorldTransform)
     wt.x = baseX + lx
     wt.y = baseY + ly
   }
 
   const nodes: SceneNodeResult[] = handles.map((h) => {
-    const wt = rd(world, h, WorldTransform)
-    return { handle: h as number, depth: rel.depthOf(ChildOf, h), world: { x: wt.x, y: wt.y } }
+    const wt = world.entity(h).read(WorldTransform)
+    return { handle: h as number, depth: rel.depthOf(h, ChildOf), world: { x: wt.x, y: wt.y } }
   })
 
   return { nodes, maxDepth }

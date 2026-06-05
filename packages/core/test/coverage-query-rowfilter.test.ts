@@ -5,31 +5,10 @@
 // with hand-built CompiledQuery objects carrying rowFilters / residualWith.
 
 import { describe, expect, test } from 'vitest'
-import {
-  ArchetypeStore,
-  Bitmask,
-  Buffers,
-  ComponentRegistry,
-  LiveQuery,
-  QueryEngine,
-  SparseSetU32,
-  canonicalize,
-  defineComponent,
-  encodeEid,
-  probeCapabilities,
-  sigHas,
-} from '@ecsia/core'
-import type {
-  Archetype,
-  CompiledQuery,
-  ComponentId,
-  EntityHandle,
-  LiveQueryDeps,
-  QueryEngineDeps,
-  RecordSurface,
-  RegionKey,
-  Signature,
-} from '@ecsia/core'
+import { defineComponent, encodeEid } from '@ecsia/core'
+import { ArchetypeStore, Bitmask, Buffers, ComponentRegistry, LiveQuery, QueryEngine, SparseSetU32, canonicalize, probeCapabilities, sigHas } from '../src/internal.js'
+import type { ComponentId, EntityHandle, RegionKey } from '@ecsia/core'
+import type { Archetype, CompiledQuery, LiveQueryDeps, QueryEngineDeps, RecordSurface, Signature } from '../src/internal.js'
 
 const newBuffers = (): Buffers => new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 16 })
 
@@ -316,7 +295,7 @@ describe('QueryEngine row-filter precision in current (seed + maintain via resol
 
 describe('QueryEngine residual (out-of-stride) sigHas matching', () => {
   // Force EVERY component id into the RESIDUAL range by giving the engine's compile context a
-  // fixedBitCount of 0. Then compileQuery puts the With term into residualWith, and the engine's
+  // fixedBitCount of 0. Then compileQuery puts the has term into residualWith, and the engine's
   // #archetypeMatches / #matchesEntityNow exercise their residual sigHas loops end-to-end.
   function residualHarness(): Harness {
     const h = harness(2)
@@ -324,9 +303,9 @@ describe('QueryEngine residual (out-of-stride) sigHas matching', () => {
     return h
   }
 
-  const term = (h: Harness, id: number): unknown => ({ __term: 'with', c: h.registry.defOf(id as ComponentId) })
+  const term = (h: Harness, id: number): unknown => ({ __term: 'has', c: h.registry.defOf(id as ComponentId) })
 
-  test('a residual With term seeds only signature-holders into current', () => {
+  test('a residual has term seeds only signature-holders into current', () => {
     const h = residualHarness()
     const R = 1 as ComponentId
     const sig = canonicalize([R]) as Signature

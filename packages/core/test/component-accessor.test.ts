@@ -1,24 +1,15 @@
 import { describe, expect, test } from 'vitest'
-import {
-  Buffers,
-  ComponentRegistry,
-  buildColumnSet,
-  bindAccessorRow,
-  defineComponent,
-  defineTag,
-  probeCapabilities,
-  vec,
-  staticString,
-  createWorld,
-} from '@ecsia/core'
-import type { AccessorWorld, ComponentDef, Schema } from '@ecsia/core'
+import { buildColumnSet, bindAccessorRow, defineComponent, defineTag, vec, staticString, createWorld } from '@ecsia/core'
+import { Buffers, ComponentRegistry, probeCapabilities } from '../src/internal.js'
+import type { ComponentDef, Schema } from '@ecsia/core'
+import type { AccessorWorld } from '../src/internal.js'
 
 const newBuffers = (): Buffers =>
   new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 20 })
 
 describe('defineComponent runtime (component-schema.md §2, §3)', () => {
   test('resolves descriptors + column layouts in declaration order', () => {
-    const Position = defineComponent({ x: 'f32', y: 'f32' })
+    const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c1' })
     expect(Position.fields.map((f) => f.name)).toEqual(['x', 'y'])
     const rt = Position as unknown as { columnLayouts: { element: string; stride: number }[] }
     expect(rt.columnLayouts).toEqual([
@@ -28,14 +19,14 @@ describe('defineComponent runtime (component-schema.md §2, §3)', () => {
   })
 
   test('eid field default is the null sentinel and needs explicit init (C-2)', () => {
-    const Ref = defineComponent({ target: 'eid' })
+    const Ref = defineComponent({ target: 'eid' }, { name: 'c2' })
     const f = Ref.fields[0]!
     expect(f.default).toBe(-1)
     expect(f.needsExplicitInit).toBe(true)
   })
 
   test('object<T> field contributes no column and marks restrictedToMainThread', () => {
-    const C = defineComponent({ mesh: { kind: 'object' as const } })
+    const C = defineComponent({ mesh: { kind: 'object' as const } }, { name: 'c3' })
     const rt = C as unknown as { columnLayouts: unknown[]; restrictedToMainThread: boolean }
     expect(rt.columnLayouts).toEqual([])
     expect(rt.restrictedToMainThread).toBe(true)
@@ -48,9 +39,9 @@ describe('defineComponent runtime (component-schema.md §2, §3)', () => {
   })
 
   test('defineComponent validates fail-fast', () => {
-    expect(() => defineComponent({ __x: 'f32' } as unknown as Schema)).toThrow()
-    expect(() => defineComponent({ v: vec('eid' as never, 2) })).toThrow()
-    expect(() => defineComponent({ s: staticString() })).toThrow()
+    expect(() => defineComponent({ __x: 'f32' } as unknown as Schema, { name: 'c4' })).toThrow()
+    expect(() => defineComponent({ v: vec('eid' as never, 2) }, { name: 'c5' })).toThrow()
+    expect(() => defineComponent({ s: staticString() }, { name: 'c6' })).toThrow()
   })
 })
 
@@ -68,7 +59,7 @@ describe('accessor factory closure (component-schema.md §8.2; type-system.md §
   test('read decodes the column slot at __idx; write encodes + tracks', () => {
     const buffers = newBuffers()
     const world = stubWorld()
-    const Position = defineComponent({ x: 'f32', y: 'f32' }) as ComponentDef<Schema>
+    const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c7' }) as ComponentDef<Schema>
     new ComponentRegistry(buffers, world).register([Position])
 
     const set = buildColumnSet({ buffers, archetypeId: 0, def: Position, world, initialCapacity: 8 })
@@ -86,7 +77,7 @@ describe('accessor factory closure (component-schema.md §8.2; type-system.md §
   test('ONE hidden class per (archetype, component): same accessor singleton across resolves', () => {
     const buffers = newBuffers()
     const world = stubWorld()
-    const C = defineComponent({ v: 'i32' }) as ComponentDef<Schema>
+    const C = defineComponent({ v: 'i32' }, { name: 'c8' }) as ComponentDef<Schema>
     new ComponentRegistry(buffers, world).register([C])
     const set = buildColumnSet({ buffers, archetypeId: 0, def: C, world, initialCapacity: 4 })
     const a1 = bindAccessorRow(set, 0, 1 as never)
@@ -97,7 +88,7 @@ describe('accessor factory closure (component-schema.md §8.2; type-system.md §
   test('eid accessor reads back null for the sentinel and a handle otherwise', () => {
     const buffers = newBuffers()
     const world = stubWorld()
-    const Ref = defineComponent({ target: 'eid' }) as ComponentDef<Schema>
+    const Ref = defineComponent({ target: 'eid' }, { name: 'c9' }) as ComponentDef<Schema>
     new ComponentRegistry(buffers, world).register([Ref])
     const set = buildColumnSet({ buffers, archetypeId: 0, def: Ref, world, initialCapacity: 4 })
     const a = bindAccessorRow(set, 0, 0 as never) as unknown as { target: number | null }
@@ -109,7 +100,7 @@ describe('accessor factory closure (component-schema.md §8.2; type-system.md §
   test('vec field exposes named axes and indexed access; writes track field-granular', () => {
     const buffers = newBuffers()
     const world = stubWorld()
-    const Vel = defineComponent({ v: vec('f32', 3) }) as ComponentDef<Schema>
+    const Vel = defineComponent({ v: vec('f32', 3) }, { name: 'c10' }) as ComponentDef<Schema>
     new ComponentRegistry(buffers, world).register([Vel])
     const set = buildColumnSet({ buffers, archetypeId: 0, def: Vel, world, initialCapacity: 4 })
     const a = bindAccessorRow(set, 1, 7 as never) as unknown as { v: { x: number; y: number; z: number; length: number; [i: number]: number } }
@@ -124,7 +115,7 @@ describe('accessor factory closure (component-schema.md §8.2; type-system.md §
   test('accessor survives a column grow: row read past old capacity is correct (M2 exit)', () => {
     const buffers = newBuffers()
     const world = stubWorld()
-    const Position = defineComponent({ x: 'f32' }) as ComponentDef<Schema>
+    const Position = defineComponent({ x: 'f32' }, { name: 'c11' }) as ComponentDef<Schema>
     new ComponentRegistry(buffers, world).register([Position])
     const set = buildColumnSet({ buffers, archetypeId: 0, def: Position, world, initialCapacity: 4 })
     const a = bindAccessorRow(set, 0, 0 as never) as unknown as { x: number }
@@ -138,7 +129,7 @@ describe('accessor factory closure (component-schema.md §8.2; type-system.md §
 
 describe('entity.read / entity.write split (Must-Fix #2)', () => {
   test('write mutates, read reflects the same slot via the singleton', () => {
-    const Position = defineComponent({ x: 'f32', y: 'f32' })
+    const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c12' })
     const w = createWorld({ components: [Position] })
 
     // M3: the entity must hold Position before read/write; spawnWith lands it there in one migration.

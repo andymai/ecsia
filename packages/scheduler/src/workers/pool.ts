@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 import type { World, ComponentId } from '@ecsia/core'
 import { handleIndex } from '@ecsia/core'
 import type { ComponentDef, Schema, SystemId } from '@ecsia/schema'
-import { With } from '@ecsia/schema'
+import { has } from '@ecsia/schema'
 import { makeCommandBuffer, resetBuffer, flushAll, buildFieldCodec } from '../commands/index.js'
 import type { CommandBuffer, WorldApply, ComponentFieldCodec } from '../commands/index.js'
 import { makeWaveCounter, makeWaveSync, workerHead, waveErrored } from './wave-sync.js'
@@ -51,7 +51,7 @@ interface WorkerSlot {
 
 export interface PoolConfig {
   readonly world: World
-  readonly workerCount: number
+  readonly workers: number
   /** Module URL the workers import for their kernels (the dispatch mechanism). */
   readonly kernelModule: string
   readonly systems: readonly PoolSystem[]
@@ -123,7 +123,7 @@ export class WorkerPool {
       }
     }
 
-    this.#waveCounter = makeWaveCounter(cfg.workerCount)
+    this.#waveCounter = makeWaveCounter(cfg.workers)
     const tier = selectWaitTier({
       waitAsync: false, // Node main thread blocks directly (tier 2); browser-main would set this true
       waitBlocking: typeof Atomics.wait === 'function',
@@ -137,7 +137,7 @@ export class WorkerPool {
     const here = fileURLToPath(import.meta.url)
     const entryUrl = cfg.workerEntryUrl ?? here.replace(/pool\.(js|ts)$/, 'worker-entry.$1')
 
-    for (let i = 0; i < cfg.workerCount; i++) {
+    for (let i = 0; i < cfg.workers; i++) {
       const command = makeCommandBuffer(i, cfg.commandWords ?? 1 << 14, true)
       const reservation = makeReservationSab(reservationCap)
       const workSab = new SharedArrayBuffer((WORK_HEADER_WORDS + maxBatch) * 4)
@@ -284,7 +284,7 @@ export class WorkerPool {
 
   #matchedIndices(sys: PoolSystem): Int32Array {
     if (sys.matchComponents.length === 0) return new Int32Array(0)
-    const terms = sys.matchComponents.map((c) => With(c))
+    const terms = sys.matchComponents.map((c) => has(c))
     const q = (this.#world.query as unknown as (...t: unknown[]) => { current: Iterable<number> })(...terms)
     const out: number[] = []
     for (const idx of q.current) out.push(idx)

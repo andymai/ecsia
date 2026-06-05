@@ -4,8 +4,9 @@
 // clear via both the symmetric-difference removal path and bitmaskClear.
 
 import { describe, expect, test } from 'vitest'
-import { Bitmask, Buffers, canonicalize, probeCapabilities } from '@ecsia/core'
-import type { ComponentId, Signature } from '@ecsia/core'
+import { Bitmask, Buffers, canonicalize, probeCapabilities } from '../src/internal.js'
+import type { ComponentId } from '@ecsia/core'
+import type { Signature } from '../src/internal.js'
 
 const newBuffers = (): Buffers => new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 16 })
 

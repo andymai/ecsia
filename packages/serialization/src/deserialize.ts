@@ -50,7 +50,7 @@ export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
 
   function load(bytes: Uint8Array, mode: 'replace' | 'merge' = 'replace'): DeserializeResult {
     if (world.phase !== 'serial') {
-      throw new Error('load() must run at a serial flush point (serialization.md §11 S-11)')
+      throw new Error('load() must run while the world is in its serial phase (outside scheduler.update / worker waves)')
     }
     const cur = new ReadCursor(bytes)
 
@@ -62,11 +62,14 @@ export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
       throw new Error(`serialization: unsupported format version ${version}`)
     }
     const endian = cur.u8()
-    if (endian !== 1) throw new Error('serialization: big-endian image unsupported (§9.4)')
+    if (endian !== 1) throw new Error('serialization: big-endian image unsupported (the wire format is little-endian)')
     const flags = cur.u8()
     const schemaHash = cur.u32()
     if (schemaHash !== s.schemaHash()) {
-      throw new Error('serialization: schemaHash mismatch — refusing to load (§5.2 / §11 S-10)')
+      throw new Error(
+        'serialization: schemaHash mismatch — refusing to load. The snapshot was produced by a different ' +
+          'component schema; load it into a world built with the same components.',
+      )
     }
     const tick = cur.u32()
     const aliveCount = cur.u32()
@@ -93,7 +96,10 @@ export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
       if (local === undefined) throw new Error(`serialization: component '${name}' not registered on receiver`)
       const localFields = s.fieldsOf(local)
       if (localFields !== undefined && localFields.length !== fieldCount) {
-        throw new Error(`serialization: component '${name}' field-count mismatch (§5.2)`)
+        throw new Error(
+          `serialization: component '${name}' field-count mismatch — the receiver's '${name}' has a different ` +
+            `field layout than the snapshot's. Register matching component schemas on both sides.`,
+        )
       }
       producerCidToLocal.set(id, local)
     }

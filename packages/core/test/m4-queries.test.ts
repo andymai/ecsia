@@ -1,7 +1,7 @@
 // M4 query subsystem invariant suite (queries.md §13). Driven through the real createWorld surface
 // so the archetypeCreated hook + single-entity maintenance are exercised end to end.
 //
-//   Q-H1   hash dedup: same terms (any order, read/write) share ONE LiveQuery; With(A) vs read(A)
+//   Q-H1   hash dedup: same terms (any order, read/write) share ONE LiveQuery; has(A) vs read(A)
 //          share matching but distinct value bindings.
 //   Q-M1   per-archetype matching: iteration walks matchingArchetypes; late queries seed, new
 //          archetypes join via the archetypeCreated hook.
@@ -12,7 +12,7 @@
 //   iteration correctness: each yields exactly the matching entities; value props read/write.
 
 import { describe, expect, test } from 'vitest'
-import { createWorld, defineComponent, defineTag, read, write, With, Without, optional } from '@ecsia/core'
+import { createWorld, defineComponent, defineTag, read, write, has, without, optional } from '@ecsia/core'
 import type { ComponentDef, EntityHandle, Schema } from '@ecsia/core'
 
 // A component def's id is mutated once at world registration, so each world needs FRESH defs.
@@ -44,9 +44,9 @@ describe('Q-H1 canonical-hash dedup', () => {
     expect(world.query(read(Position))).toBe(world.query(write(Position)))
   })
 
-  test('With(A) and read(A) share matching but are distinct LiveQueries (value binding)', () => {
+  test('has(A) and read(A) share matching but are distinct LiveQueries (value binding)', () => {
     const { world, Position } = makeKit()
-    const withQ = world.query(With(Position))
+    const withQ = world.query(has(Position))
     const readQ = world.query(read(Position))
     expect(withQ).not.toBe(readQ)
     world.spawnWith(Position)
@@ -78,12 +78,12 @@ describe('iteration correctness + per-archetype matching (Q-M1)', () => {
     expect(world.entity(e0).read(Velocity).x).toBe(1)
   })
 
-  test('Without excludes; optional yields the value or undefined', () => {
+  test('without excludes; optional yields the value or undefined', () => {
     const { world, Position, Velocity, Health } = makeKit()
-    const q = world.query(read(Position), Without(Health), optional(Velocity))
+    const q = world.query(read(Position), without(Health), optional(Velocity))
     const a = world.spawnWith(Position)
     const b = world.spawnWith(Position, Velocity)
-    world.spawnWith(Position, Health) // excluded by Without
+    world.spawnWith(Position, Health) // excluded by without
     expect(q.count).toBe(2)
 
     const velByHandle = new Map<number, unknown>()
@@ -135,7 +135,7 @@ describe('Q-M2 incremental maintenance', () => {
 
   test('a constraint-less query matches live entities and drops despawned ones', () => {
     const { world, Position } = makeKit()
-    const q = world.query(With(Position))
+    const q = world.query(has(Position))
     const e = world.spawnWith(Position)
     expect(q.count).toBe(1)
     world.despawn(e)

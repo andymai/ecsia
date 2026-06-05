@@ -8,7 +8,7 @@
 //   I*   (entity/handle integrity) — every handle the model believes alive is `isAlive`; every despawned
 //        handle is dead; a handle is never simultaneously alive-and-dead; `entity(h)` resolves a live ref.
 //   BM-2 (bitmask coherence)       — `world.has(h, C)` agrees with the model's component set for the
-//        entity AND with membership in `world.query(With(C))` (the per-archetype iteration path) — the
+//        entity AND with membership in `world.query(has(C))` (the per-archetype iteration path) — the
 //        point-test bitmask and the archetype signature can never disagree.
 //   P1/P4 (relation presence / no-dangling) — `hasPair`/`subjectsOf`/`targetsOf` agree with the model;
 //        despawning a subject OR target leaves NO live pair referencing the dead entity (cascade).
@@ -28,7 +28,7 @@ import {
   defineTag,
   read,
   write,
-  With,
+  has,
   createRelations,
   createSnapshotSerializer,
   createSnapshotDeserializer,
@@ -209,7 +209,7 @@ function checkIntegrityAndBitmask(kit: Kit, model: Model, handles: (EntityHandle
       if (h !== undefined && e.alive && e.comps.has(name)) want.add((h as number) >>> 0)
     }
     const gotQuery = new Set<number>()
-    world.query(With(def)).each((el) => gotQuery.add(((el as { handle: EntityHandle }).handle as number) >>> 0))
+    world.query(has(def)).each((el) => gotQuery.add(((el as { handle: EntityHandle }).handle as number) >>> 0))
     expect([...gotQuery].sort((a, b) => a - b)).toEqual([...want].sort((a, b) => a - b))
   }
 }

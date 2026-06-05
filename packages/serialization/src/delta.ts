@@ -59,7 +59,7 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
 
   function write(): void {
     if (world.phase !== 'serial') {
-      throw new Error('delta() must run at a serial flush point (§6.3 / §11 S-11)')
+      throw new Error('delta() must run while the world is in its serial phase (outside scheduler.update / worker waves)')
     }
     const target = world.currentTick()
     cur.reset()
@@ -150,7 +150,7 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
 // new handles passes a real Map). §6.4.
 export function applyDelta(world: World, bytes: Uint8Array, remap: ReadonlyMap<EntityHandle, EntityHandle>): number {
   if (world.phase !== 'serial') {
-    throw new Error('applyDelta must run at a serial flush point (§6.4 / §11 S-11)')
+    throw new Error('applyDelta must run while the world is in its serial phase (outside scheduler.update / worker waves)')
   }
   const s = world.__serialize
   const work = new Map(remap)

@@ -5,8 +5,9 @@
 // Driven by constructing Reactivity directly with synthetic deps so each branch is reached in isolation.
 
 import { describe, expect, test } from 'vitest'
-import { Buffers, Reactivity, ShapeKind, probeCapabilities } from '@ecsia/core'
-import type { ReactivityDeps } from '@ecsia/core'
+import { ShapeKind } from '@ecsia/core'
+import { Buffers, Reactivity, probeCapabilities } from '../src/internal.js'
+import type { ReactivityDeps } from '../src/internal.js'
 import type { ComponentDef, ComponentId, EntityHandle, Schema } from '@ecsia/core'
 import type { LiveQuery } from '../src/query/index.js'
 import type { EntityRef } from '../src/entity/index.js'
