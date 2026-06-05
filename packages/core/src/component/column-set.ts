@@ -1,10 +1,10 @@
-// The (archetype, component) ColumnSet allocation + accessor instantiation (component-schema.md
-// §8.1, §8.2). This is the M2 binding seam: it allocates one column per column-backed field
+// The (archetype, component) ColumnSet allocation + accessor instantiation.
+// This is the binding seam: it allocates one column per column-backed field
 // through Buffers.column, instantiates the component's accessor singleton over those columns, and
 // registers the singleton as a ViewHolder for the fallback grow path.
 //
-// ARCHETYPE-BINDING SEAM (M3): storage owns producing this from a real archetype's row store. For
-// M2 the caller passes any archetypeId (e.g. a single test/empty archetype) and the columns are
+// ARCHETYPE-BINDING SEAM: storage owns producing this from a real archetype's row store. For
+// the caller passes any archetypeId (e.g. a single test/empty archetype) and the columns are
 // allocated directly so the read/write paths are exercisable now.
 
 import type { ComponentDef, ComponentId, EntityHandle, FieldDescriptor, Schema } from '@ecsia/schema'
@@ -59,7 +59,7 @@ export function buildColumnSet(params: BuildColumnSetParams): ColumnSet {
   const binding: AccessorBinding = { world, componentId }
   accessor.__binding = binding
 
-  // Register one ViewHolder PER column so a fallback grow re-binds exactly that field's view (§7.5).
+  // Register one ViewHolder PER column so a fallback grow re-binds exactly that field's view.
   // Each column owns a separate backing; a whole-instance rebind would alias every field onto the
   // single grown backing. `columns` is in accessor field-order, so the index is the rebind target.
   for (let i = 0; i < columns.length; i++) {
@@ -74,7 +74,7 @@ export function buildColumnSet(params: BuildColumnSetParams): ColumnSet {
   return { archetypeId, componentId, columns, accessor }
 }
 
-// Point a column set's accessor singleton at a (row, entity). M3's query/iteration loop pokes
+// Point a column set's accessor singleton at a (row, entity). 's query/iteration loop pokes
 // __idx; the entity read/write path pokes both before handing the view out.
 export function bindAccessorRow(set: ColumnSet, row: number, eid: EntityHandle): AccessorInstanceBase {
   const a = set.accessor

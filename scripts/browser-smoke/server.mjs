@@ -1,8 +1,8 @@
 // Tiny zero-dependency static server for the ecsia browser smoke lane.
 //
 // DEFAULT mode sends the cross-origin-isolation headers a SharedArrayBuffer page needs:
-//   Cross-Origin-Opener-Policy: same-origin
-//   Cross-Origin-Embedder-Policy: require-corp
+// Cross-Origin-Opener-Policy: same-origin
+// Cross-Origin-Embedder-Policy: require-corp
 // Under these headers a Chromium tab reports `crossOriginIsolated === true`, so the capability probe
 // selects the SAB path and `new SharedArrayBuffer(...)` is allowed.
 //
@@ -11,7 +11,7 @@
 // runs BOTH server variants against the SAME bundle to prove both branches.
 //
 // Usage:
-//   node server.mjs [--port 8080] [--no-isolation] [--root <dir>]
+// node server.mjs [--port 8080] [--no-isolation] [--root <dir>]
 // The server serves this directory (scripts/browser-smoke) plus the built bundle at /dist/.
 
 import { createServer } from 'node:http'

@@ -1,15 +1,15 @@
-// The two reactivity rings (reactivity.md §3, §4): the write log (field-mutation journal) and the
+// The two reactivity rings: the write log (field-mutation journal) and the
 // shape log (structural-change journal). Both are plain SAB|AB rings with a 4-word Atomics-capable
-// header, a per-consumer LogPointer cursor protocol (§3.4), per-worker write corrals merged
-// serially (§9.1-9.2), and a recoverable main-thread spill on overflow (§8 — NO hard throw).
+// header, a per-consumer LogPointer cursor protocol, per-worker write corrals merged
+// serially, and a recoverable main-thread spill on overflow.
 //
 // Single-threaded executor: there is one logical "worker" (the main thread). The corral machinery
-// is allocated and merged trivially so the M7 multi-worker merge slots in unchanged.
+// is allocated and merged trivially so the multi-worker merge slots in unchanged.
 
 import type { Buffers, Region, RegionKey } from '../memory/index.js'
 import { isSharedBacking } from '../memory/buffers.js'
 
-/** ShapeKind ordinals — SHARED across command Op / serialization DeltaOp / reactivity (world.md §9.4). */
+/** ShapeKind ordinals — SHARED across command Op / serialization DeltaOp / reactivity. */
 export enum ShapeKind {
   Create = 0,
   Destroy = 1,
@@ -20,21 +20,21 @@ export enum ShapeKind {
   SetPayload = 6,
 }
 
-/** A consumer scans only entries appended since its last read (§3.4). One per Changed filter / observer. */
+/** A consumer scans only entries appended since its last read. One per Changed filter / observer. */
 export interface LogPointer {
   readonly log: 'write' | 'shape'
   /** Last ring slot (in WORDS) this consumer has read up to, exclusive. */
   cursor: number
-  /** Ring generation observed at last read (§3.2). */
+  /** Ring generation observed at last read. */
   generation: number
-  /** Spill entries (in WORDS) consumed so far (§3.4 step 5). */
+  /** Spill entries (in WORDS) consumed so far. */
   spillCursor: number
 }
 
-/** Sentinel handed to a visit callback when the ring wrapped past a consumer's cursor (§3.6). */
+/** Sentinel handed to a visit callback when the ring wrapped past a consumer's cursor. */
 export const OVERFLOW_SENTINEL = -1
 
-// Header word offsets (§3.2). The header is an Int32Array of length 4.
+// Header word offsets. The header is an Int32Array of length 4.
 const H_HEAD = 0 // next ring slot to write (monotonic within frame, in WORDS)
 const H_GENERATION = 1 // ring-rollover counter (the only atomically-read word)
 const H_SPILL_COUNT = 2 // entries currently in spill (in WORDS)
@@ -45,7 +45,7 @@ interface ResizeController {
 }
 
 /**
- * One log ring. Generic over entry word-count (1 or 2 for write; 2 or 3 for shape — §3.5). The ring
+ * One log ring. Generic over entry word-count (1 or 2 for write; 2 or 3 for shape — ). The ring
  * length is interpreted in WORDS; `entryWords` is the stride of one logical entry.
  */
 export class LogRing {
@@ -58,9 +58,9 @@ export class LogRing {
   #ringRegion: Region<Uint32Array>
   ring: Uint32Array
   readonly header: Int32Array
-  /** Main-thread spill (§8.1): a growable JS array, NOT ring-bounded. Drained after the ring (§3.4). */
+  /** Main-thread spill: a growable JS array, NOT ring-bounded. Drained after the ring. */
   readonly spill: number[] = []
-  /** Words appended this frame across ring + spill (peak tracking, §8.2). */
+  /** Words appended this frame across ring + spill (peak tracking). */
   #framePushCount = 0
   readonly #resize: ResizeController = { pendingResize: 0 }
   readonly #shrinkRings: boolean
@@ -81,7 +81,7 @@ export class LogRing {
     this.#maxLength = capacityWords
     this.#ringKey = `${params.keyPrefix}.ring` as RegionKey
     this.#headerKey = `${params.keyPrefix}.header` as RegionKey
-    // A generous reservation so the §8.3 next-frame grow has address space without a fallback copy.
+    // A generous reservation so the
     this.#ringRegion = params.buffers.region(this.#ringKey, 'u32', capacityWords, {
       maxLength: capacityWords * 16,
     }) as Region<Uint32Array>
@@ -95,12 +95,12 @@ export class LogRing {
     return this.ring.length
   }
 
-  /** Append one already-packed entry (1..3 words). Main thread only. Spills on overflow (§3.3 / §8). */
+  /** Append one already-packed entry (1..3 words). Main thread only. Spills on overflow. */
   push(words: readonly number[]): void {
     const h = this.header
     let head = h[H_HEAD] as number
     if (head + this.entryWords > this.ring.length) {
-      // Ring full this frame → spill (§8), never throw.
+      // Ring full this frame → spill, never throw.
       for (let i = 0; i < this.entryWords; i++) this.spill.push(words[i] as number)
       h[H_SPILL_COUNT] = (h[H_SPILL_COUNT] as number) + this.entryWords
       this.#framePushCount += this.entryWords
@@ -114,7 +114,7 @@ export class LogRing {
     if (this.#framePushCount > (h[H_PEAK] as number)) h[H_PEAK] = this.#framePushCount
   }
 
-  /** Append a raw word directly (the corral-merge fast path, §9.2). Routes to ring or spill. */
+  /** Append a raw word directly (the corral-merge fast path). Routes to ring or spill. */
   pushWord(word: number): void {
     const h = this.header
     const head = h[H_HEAD] as number
@@ -129,7 +129,7 @@ export class LogRing {
     if (this.#framePushCount > (h[H_PEAK] as number)) h[H_PEAK] = this.#framePushCount
   }
 
-  /** A fresh pointer positioned at the CURRENT head (a late subscriber sees only forward events, §13.5). */
+  /** A fresh pointer positioned at the CURRENT head (a late subscriber sees only forward events). */
   makePointer(): LogPointer {
     return {
       log: this.kind,
@@ -139,7 +139,7 @@ export class LogRing {
     }
   }
 
-  /** §3.4 fast-out: does this consumer have anything new to read? */
+  /**: does this consumer have anything new to read? */
   hasUpdatesSince(ptr: LogPointer): boolean {
     const h = this.header
     return (
@@ -150,9 +150,9 @@ export class LogRing {
   }
 
   /**
-   * §3.4 CONSUME: visit each entry (as a contiguous word-window into ring or spill) appended since
+   *: visit each entry (as a contiguous word-window into ring or spill) appended since
    * `ptr`. `visit` receives the BASE offset and a source array. On a generation mismatch it receives
-   * the OVERFLOW_SENTINEL once and the pointer is conservatively advanced (§3.6).
+   * the OVERFLOW_SENTINEL once and the pointer is conservatively advanced.
    */
   consume(
     ptr: LogPointer,
@@ -160,7 +160,7 @@ export class LogRing {
     headLimit?: number,
   ): void {
     const h = this.header
-    // The ONE atomic read per consumer per frame (§3.2). Plain load in single-thread; Atomics on SAB.
+    // The ONE atomic read per consumer per frame. Plain load in single-thread; Atomics on SAB.
     const curGen = Atomics.load(h, H_GENERATION)
     const ringHead = h[H_HEAD] as number
     const spillHead = h[H_SPILL_COUNT] as number
@@ -171,7 +171,7 @@ export class LogRing {
       ptr.spillCursor = spillHead
       return
     }
-    // `headLimit` (reactivity.md §7.4) bounds the ring scan to a head snapshotted at drain entry, so
+    // `headLimit` bounds the ring scan to a head snapshotted at drain entry, so
     // entries appended DURING this drain (observer-issued writes) are deferred to the next drain — no
     // intra-drain write-cascade. The spill is likewise pinned to its snapshot, carried via spillCursor
     // semantics (a snapshot below the limit leaves later spill entries unread until the next pass).
@@ -190,7 +190,7 @@ export class LogRing {
     ptr.spillCursor = spillHead
   }
 
-  /** §8.2 step 1-2: record this frame's peak and schedule a next-frame resize if it spilled. */
+  /**: record this frame's peak and schedule a next-frame resize if it spilled. */
   observePeak(): void {
     const h = this.header
     const peak = Math.max(h[H_PEAK] as number, (h[H_HEAD] as number) + (h[H_SPILL_COUNT] as number))
@@ -207,8 +207,8 @@ export class LogRing {
   }
 
   /**
-   * §3.7 / §8.2 frame-boundary reset. `minConsumerCursor` is the smallest cursor over all consumers
-   * (so the ring is not recycled past a lagging pointer). Applies a pending resize first (§8.3).
+   * / `minConsumerCursor` is the smallest cursor over all consumers
+   * (so the ring is not recycled past a lagging pointer). Applies a pending resize first.
    */
   frameReset(minConsumerCursor: number): void {
     const h = this.header
@@ -216,13 +216,13 @@ export class LogRing {
       this.#applyResize(this.#resize.pendingResize)
       this.#resize.pendingResize = 0
     }
-    // Spill is drained by every consumer (CONSUME §3.4) before reset; clear it now (§8.2 step 4).
+    // Spill is drained by every consumer (CONSUME ) before reset; clear it now.
     this.spill.length = 0
     h[H_SPILL_COUNT] = 0
     h[H_PEAK] = 0
     this.#framePushCount = 0
     if (minConsumerCursor >= (h[H_HEAD] as number)) {
-      // All consumers caught up: recycle the ring from slot 0 with no wrap, no generation bump (§3.7).
+      // All consumers caught up: recycle the ring from slot 0 with no wrap, no generation bump.
       h[H_HEAD] = 0
     }
     // else: leave entries in place; a lagging consumer reads them before the next reset recycles.
@@ -260,7 +260,7 @@ export class LogRing {
 }
 
 /**
- * A per-worker write-log staging arena (§9.1): a plain ArrayBuffer-backed Uint32Array the worker
+ * A per-worker write-log staging arena: a plain ArrayBuffer-backed Uint32Array the worker
  * pushes into with no atomics, grown by allocate-copy on its own thread. In single-thread mode there
  * is exactly one corral (the main "worker"); it is merged trivially every wave.
  */
@@ -276,7 +276,7 @@ export class WriteCorral {
     return this.#data
   }
 
-  /** O(1) push (§9.1); grows by allocate-copy if full — never throws, never touches a shared ring. */
+  /** O(1) push; grows by allocate-copy if full — never throws, never touches a shared ring. */
   push(word: number): void {
     if (this.count >= this.#data.length) {
       const grown = new Uint32Array(this.#data.length * 2)

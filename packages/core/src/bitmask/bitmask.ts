@@ -1,12 +1,12 @@
-// The per-entity bitmask membership index (archetype-storage.md §6). MAIN-THREAD / SERIAL-ONLY:
-// every read and write asserts world.phase === 'serial' (Invariant BM-1 / Must-Fix #1). It is the
+// The per-entity bitmask membership index. MAIN-THREAD / SERIAL-ONLY:
+// every read and write asserts world.phase === 'serial' (Invariant). It is the
 // O(1) entity.has(C) point-test substrate and the single-entity incremental query matcher — NOT
-// the iteration path (that is per-archetype, §8). Coherence with the archetype tables is one-way:
-// bitmaskApplyDelta refreshes it immediately after each serial migration commit (§6.3).
+// the iteration path (that is per-archetype). Coherence with the archetype tables is one-way:
+// bitmaskApplyDelta refreshes it immediately after each serial migration commit.
 //
 // Layout: bitmask.words is a u32 region of length capacity*stride, addressed by ENTITY INDEX (low
 // handle bits, stable across swap-pop). stride = ceil(N/32) where N = registered component-type
-// count (CANON C4). Pair ids beyond the fixed stride live in a lazily-grown sparse vector.
+// count ( C4). Pair ids beyond the fixed stride live in a lazily-grown sparse vector.
 
 import type { ComponentId } from '@ecsia/schema'
 import type { Buffers, Region, RegionKey } from '../memory/index.js'
@@ -22,14 +22,14 @@ export class Bitmask {
   readonly #region: Region<Uint32Array>
   #words: Uint32Array
   readonly #stride: number
-  /** Fixed bit count covered by the dense words; ids at/above this use the sparse vector (§6.1). */
+  /** Fixed bit count covered by the dense words; ids at/above this use the sparse vector. */
   readonly #fixedBitCount: number
   readonly #phase: PhaseGate
-  /** Out-of-stride pair bits, lazily grown per entity index (unbounded pair-id space, §6.1). */
+  /** Out-of-stride pair bits, lazily grown per entity index (unbounded pair-id space). */
   readonly #sparse = new Map<number, Set<number>>()
 
   constructor(buffers: Buffers, componentCount: number, maxEntities: number, phase: PhaseGate) {
-    // stride = ceil(N/32) exactly per §6.1 (CANON C4). N (registered component count) is always >= 1
+    // stride = ceil(N/32) exactly per ( C4). N (registered component count) is always >= 1
     // (FIRST_USER_COMPONENT_ID), so this is >= 1 without a max(1,...) floor; ids beyond fixedBitCount
     // fall through to the sparse vector. The backing region reserves at least one word so a
     // degenerate N=0 world still has a valid (length-tracking) allocation.
@@ -56,7 +56,7 @@ export class Bitmask {
     }
   }
 
-  /** O(1) membership point test for a single entity index (§6.2). */
+  /** O(1) membership point test for a single entity index. */
   bitmaskHas(index: number, c: ComponentId): boolean {
     this.#assertSerial()
     const cid = c as number
@@ -64,7 +64,7 @@ export class Bitmask {
     return ((this.#words[index * this.#stride + (cid >>> 5)] as number) & (1 << (cid & 31))) !== 0
   }
 
-  /** Coherence with the table: set added bits, clear removed bits, after a serial migration (§6.3). */
+  /** Coherence with the table: set added bits, clear removed bits, after a serial migration. */
   bitmaskApplyDelta(index: number, fromSig: Signature, toSig: Signature): void {
     this.#assertSerial()
     const base = index * this.#stride
@@ -87,7 +87,7 @@ export class Bitmask {
     }
   }
 
-  /** Clear all of an entity's membership words on despawn (§6.5). O(stride). */
+  /** Clear all of an entity's membership words on despawn. O(stride). */
   bitmaskClear(index: number): void {
     this.#assertSerial()
     const base = index * this.#stride
@@ -95,7 +95,7 @@ export class Bitmask {
     this.#sparse.delete(index)
   }
 
-  /** Zero-copy view of one entity's fixed-stride shape words (for the single-entity matcher §6.6). */
+  /** Zero-copy view of one entity's fixed-stride shape words (for the single-entity matcher ). */
   entityShapeWords(index: number): Uint32Array {
     this.#assertSerial()
     return this.#words.subarray(index * this.#stride, index * this.#stride + this.#stride)

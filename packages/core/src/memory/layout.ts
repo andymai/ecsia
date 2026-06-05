@@ -1,7 +1,7 @@
-// Physical column layout per field type (memory-buffers.md §3). Owns the ElementKind tag, the
-// ColumnLayout shape, the field-token → ColumnLayout table (eid → i32 with -1 sentinel C-2;
+// Physical column layout per field type. Owns the ElementKind tag, the
+// ColumnLayout shape, the field-token → ColumnLayout table (eid → i32 with -1 sentinel;
 // staticString → smallest uint; vecN → stride n; object<T> → no column), and the normative eid
-// encode/decode (§3.4).
+// encode/decode.
 
 import type { EntityHandle, FieldDescriptor, FieldToken, StaticStringToken, VecToken } from '@ecsia/schema'
 
@@ -50,7 +50,7 @@ export interface ColumnLayout {
   readonly elementBytes: number
   readonly rowBytes: number
   /**
-   * The non-zero fill applied to fresh AND grown rows. `-1` for eid columns (C-2: a fresh eid row
+   * The non-zero fill applied to fresh AND grown rows. `-1` for eid columns (a fresh eid row
    * is the null sentinel, never 0 which is a valid entity index). 0 for every other kind (the
    * runtime zero-inits the buffer), unless a user default makes it non-zero-equivalent.
    */
@@ -68,7 +68,7 @@ export function makeColumnLayout(element: ElementKind, stride: number, fillOnIni
   }
 }
 
-// --- §3.4 eid encode/decode (NORMATIVE) ------------------------------------
+// --- /decode (NORMATIVE) ------------------------------------
 // The full u32 handle bit-pattern is stored via Int32Array; -1 is the null sentinel.
 
 export const EID_NULL = -1
@@ -81,7 +81,7 @@ export function decodeEid(stored: number): EntityHandle | null {
   return stored === EID_NULL ? null : ((stored >>> 0) as EntityHandle)
 }
 
-// --- §3.5 staticString width selection -------------------------------------
+// ---
 
 export function stringIndexElement(choicesLength: number): ElementKind {
   if (choicesLength <= 256) return 'u8'
@@ -89,7 +89,7 @@ export function stringIndexElement(choicesLength: number): ElementKind {
   return 'u32'
 }
 
-// --- §3.2 the field-token → ElementKind table ------------------------------
+// --- → ElementKind table ------------------------------
 
 const SCALAR_ELEMENT: Record<string, ElementKind> = {
   bool: 'u8',
@@ -116,14 +116,14 @@ function isObjectToken(t: FieldToken): boolean {
 }
 
 /**
- * Project a field token to its ColumnLayout, or `null` for object tokens (§3.8 — no column, no
+ * Project a field token to its ColumnLayout, or `null` for object tokens (no
  * buffer). `fillOnInit` is taken from the descriptor when the field needs an explicit init (eid,
  * or a user-overridden non-zero default); otherwise 0.
  */
 export function tokenToColumnLayout(token: FieldToken, fillOnInit = 0): ColumnLayout | null {
   if (typeof token === 'string') {
     if (isObjectToken(token)) return null
-    // The 'string' rich token projects to no column, like object<T> (rich-fields.md §3).
+    // The 'string' rich token projects to no column, like object<T>.
     if (token === 'string') return null
     const element = SCALAR_ELEMENT[token]
     if (element === undefined) throw new Error(`unknown scalar token: ${token}`)

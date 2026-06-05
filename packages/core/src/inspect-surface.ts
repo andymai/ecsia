@@ -1,10 +1,10 @@
-// The read-only introspection seam @ecsia/devtools (P5) reads through, exposed on World as `__inspect`.
+// The read-only introspection seam @ecsia/devtools reads through, exposed on World as `__inspect`.
 // Keeps the dependency direction acyclic: devtools imports @ecsia/core for this surface; core NEVER
 // imports devtools. Everything here is serial / main-thread, read-only, and side-effect-free — a pure
 // view over already-live state.
 //
 // WHY a NEW seam (not `__serialize`): the existing SerializationSurface deliberately exposes ONLY the
-// data a snapshot needs — its `archetypes()` skips COLD and EMPTY archetypes (world.ts §4.3), and there
+// data a snapshot needs — its `archetypes()` skips COLD and EMPTY archetypes (world.ts ), and there
 // is no live-query enumeration anywhere on the public/`__` surface (the QueryEngine's `liveQueries`
 // getter is class-private to core). Those two data are genuinely unreachable for an inspector that wants
 // the FULL archetype census (with the hot/cold flag) and the active query set. Everything else the
@@ -19,7 +19,7 @@ export interface InspectArchetype {
   /** The sorted canonical signature (ComponentIds, including tag/pair/presence ids). */
   readonly signature: readonly ComponentId[]
   readonly count: number
-  /** false = hot (column-backed tables); true = cold (lazily-materialized, archetype-storage §10). */
+  /** false = hot (column-backed tables); true = cold (lazily-materialized, archetype-storage ). */
   readonly cold: boolean
 }
 

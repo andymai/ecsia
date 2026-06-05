@@ -2,14 +2,14 @@ import { Worker } from 'node:worker_threads'
 import { expect, test } from 'vitest'
 
 // becsy never tested its SAB paths (becsy/src/dispatcher.ts:130-132); ecsia validates the
-// resizable-SAB + worker round-trip from M0 (build-plan.md M0 exit criteria).
+// resizable-SAB + worker round-trip from ( exit criteria).
 test('resizable SharedArrayBuffer grows and round-trips across a worker boundary', async () => {
   const sab = new SharedArrayBuffer(8, { maxByteLength: 16 })
   const main = new Int32Array(sab)
   Atomics.store(main, 0, 41)
 
   sab.grow(16)
-  const grown = new Int32Array(sab) // re-wrap after growth (memory-buffers.md view-invalidation)
+  const grown = new Int32Array(sab) // re-wrap after growth ( view-invalidation)
   expect(sab.byteLength).toBe(16)
 
   const workerSrc = `

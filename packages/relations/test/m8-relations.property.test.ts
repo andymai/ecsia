@@ -1,20 +1,20 @@
-// M8 relations — PROPERTY suite (fast-check). Each property is genuinely DISCRIMINATING: it asserts
+// relations — PROPERTY suite (fast-check). Each property is genuinely DISCRIMINATING: it asserts
 // an invariant against an INDEPENDENT model (a plain Map/Set oracle), not the implementation's own
 // helpers, so it would fail if the invariant it guards were broken.
 //
-//   P1 PRESENCE: after any random pair add/remove sequence, an entity's signature carries presenceId(R)
-//      IFF it currently holds >= 1 R-pair (presence bit tracks the pair count crossing 0<->1).
-//   P2 PAIR STABILITY: mintPair(R, targetIndex) is idempotent AND the id is STABLE across a target
-//      generation bump (despawn+respawn the target into the SAME slot ⇒ the SAME pair component id).
-//   P4 NO DANGLING PAIR: after any random despawn-with-cascade sequence, no LIVE pair references a dead
-//      target (relies on identity-invalidated-LAST: preDespawn removes pairs before the gen bump).
-//   P5 CASCADE TERMINATION: iterative BFS visits each entity once and TERMINATES on a CYCLIC relation
-//      graph (no recursion blowup, no infinite loop) — build a cycle and assert it completes.
-//   P6 WILDCARD O(1): Pair(R, Wildcard) match cost is O(archetypes), INDEPENDENT of the number of
-//      distinct targets T — vary T (10 vs 1000) and assert the matched-archetype count is flat.
-//   T1 (deferred benches): structural assertions standing in for the unwritten churn/fragmentation
-//      benches — exclusive re-parent stays in ONE archetype; non-exclusive blow-up stays under
-//      maxHotArchetypes with a hot+cold transparent wildcard query.
+// PRESENCE: after any random pair add/remove sequence, an entity's signature carries presenceId(R)
+// IFF it currently holds >= 1 R-pair (presence bit tracks the pair count crossing 0<->1).
+// PAIR STABILITY: mintPair(R, targetIndex) is idempotent AND the id is STABLE across a target
+// generation bump (despawn+respawn the target into the SAME slot ⇒ the SAME pair component id).
+// NO DANGLING PAIR: after any random despawn-with-cascade sequence, no LIVE pair references a dead
+// target (relies on identity-invalidated-LAST: preDespawn removes pairs before the gen bump).
+// CASCADE TERMINATION: iterative BFS visits each entity once and TERMINATES on a CYCLIC relation
+// graph (no recursion blowup, no infinite loop) — build a cycle and assert it completes.
+// WILDCARD O(1): Pair(R, Wildcard) match cost is O(archetypes), INDEPENDENT of the number of
+// distinct targets T — vary T (10 vs 1000) and assert the matched-archetype count is flat.
+// T1 (deferred benches): structural assertions standing in for the unwritten churn/fragmentation
+// benches — exclusive re-parent stays in ONE archetype; non-exclusive blow-up stays under
+// maxHotArchetypes with a hot+cold transparent wildcard query.
 
 import { describe, it, expect } from 'vitest'
 import fc from 'fast-check'
@@ -25,7 +25,7 @@ import { createRelations, Wildcard } from '../src/index.js'
 const idx = (world: World, h: EntityHandle): number => handleIndex(h, world.handleLayout) as number
 
 // --------------------------------------------------------------------------------------------------
-describe('P1 — presence bit tracks the pair count crossing 0<->1 (relations.md §3.2)', () => {
+describe(' — presence bit tracks the pair count crossing 0<->1 ', () => {
   it('hasRelation(s, R) === (s holds >=1 R-pair) after ANY random add/remove sequence (non-exclusive)', () => {
     fc.assert(
       fc.property(
@@ -65,7 +65,7 @@ describe('P1 — presence bit tracks the pair count crossing 0<->1 (relations.md
               set?.delete(op.t)
               if (set !== undefined && set.size === 0) model.delete(si)
             }
-            // P1 holds after EVERY op, not just at the end.
+            // holds after EVERY op, not just at the end.
             for (let k = 0; k < subjects.length; k++) {
               const holdsAny = (model.get(k)?.size ?? 0) > 0
               expect(rel.hasRelation(subjects[k]!, Likes)).toBe(holdsAny)
@@ -109,7 +109,7 @@ describe('P1 — presence bit tracks the pair count crossing 0<->1 (relations.md
 })
 
 // --------------------------------------------------------------------------------------------------
-describe('P2 — pair id is idempotent AND stable across a target generation bump (§2.1)', () => {
+describe(' — pair id is idempotent AND stable across a target generation bump ', () => {
   it('mintPair(R, t) is idempotent: re-adding the same pair never changes membership/back-ref', () => {
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 20 }), (repeats) => {
@@ -126,7 +126,7 @@ describe('P2 — pair id is idempotent AND stable across a target generation bum
     )
   })
 
-  it('the pair id is STABLE across a target despawn+respawn into the SAME slot (index-keyed, §2.1)', () => {
+  it('the pair id is STABLE across a target despawn+respawn into the SAME slot (index-keyed)', () => {
     // A pair is keyed by the target INDEX (low handle bits), not the full handle, so a despawn+respawn
     // that recycles the same slot must yield the IDENTICAL pair component id. We observe the id through
     // its only public projection: whether a query compiled for Pair(R, target-by-INDEX) matches.
@@ -150,7 +150,7 @@ describe('P2 — pair id is idempotent AND stable across a target generation bum
         // index, bumped generation). Spawn `extra` decoys first only if they would NOT take the slot;
         // here we want the recycled slot, so respawn immediately.
         world.despawn(target)
-        expect(rel.hasPair(subject1, Likes, target)).toBe(false) // dangling pair removed (P4)
+        expect(rel.hasPair(subject1, Likes, target)).toBe(false) // dangling pair removed
 
         const respawned = world.spawn()
         expect(idx(world, respawned)).toBe(targetIndex) // same slot recycled (LIFO free list)
@@ -174,7 +174,7 @@ describe('P2 — pair id is idempotent AND stable across a target generation bum
 })
 
 // --------------------------------------------------------------------------------------------------
-describe('P4 — no live pair references a dead target after random despawn-with-cascade (§7.1)', () => {
+describe(' — no live pair references a dead target after random despawn-with-cascade ', () => {
   it('after a fuzzed despawn sequence, every surviving subject holds pairs ONLY to live targets', () => {
     fc.assert(
       fc.property(
@@ -245,7 +245,7 @@ describe('P4 — no live pair references a dead target after random despawn-with
 })
 
 // --------------------------------------------------------------------------------------------------
-describe('P5 — cascade is iterative BFS: terminates & visits each entity once, even on CYCLES (§7.2)', () => {
+describe(' — cascade is iterative BFS: terminates & visits each entity once, even on CYCLES ', () => {
   it('a WIDE deleteSubject fan-out despawns in flat breadth (the BFS queue, not the stack)', { timeout: 30_000 }, () => {
     // The per-invocation cascade IS a flat queue across breadth: a root with a huge sibling fan-out
     // drains in one onPreDespawn loop, NOT one stack frame per child. 50k siblings would overflow a
@@ -261,8 +261,8 @@ describe('P5 — cascade is iterative BFS: terminates & visits each entity once,
     expect(world.handleStats().aliveCount).toBe(0) // every sibling reached & removed once
   })
 
-  it('a DEEP (100k) deleteSubject chain despawns without recursion (§7.2: recursion-free cascade)', { timeout: 30_000 }, () => {
-    // §7.2/P5: a deep deleteSubject chain must despawn WITHOUT recursion. The cascade hoists a single
+  it('a DEEP (100k) deleteSubject chain despawns without recursion (recursion-free cascade)', { timeout: 30_000 }, () => {
+    // /: a deep deleteSubject chain must despawn WITHOUT recursion. The cascade hoists a single
     // shared frontier queue; the re-entrant onPreDespawn that host.despawn fires per victim appends to
     // that queue and unwinds one frame, so the native stack stays CONSTANT regardless of chain depth. A
     // recursion-per-level design would RangeError here (~3-4k deep); 100k links proves it is iterative.
@@ -309,7 +309,7 @@ describe('P5 — cascade is iterative BFS: terminates & visits each entity once,
 })
 
 // --------------------------------------------------------------------------------------------------
-describe('P6 — Pair(R, Wildcard) match cost is O(archetypes), INDEPENDENT of distinct targets T (§8.1)', () => {
+describe(' — Pair(R, Wildcard) match cost is O(archetypes), INDEPENDENT of distinct targets T ', () => {
   // The discriminator: an EXCLUSIVE relation stores the target as a column value, so ALL subjects with
   // the same component set share ONE archetype regardless of how many distinct targets exist. The
   // wildcard query's matched-archetype count (its whole match cost) is therefore FLAT as T varies
@@ -393,7 +393,7 @@ describe('T1 (perf benches DEFERRED) — structural stand-ins for churn & fragme
     // A non-exclusive relation mints a distinct pair archetype per distinct target — exactly the
     // fragmentation the cold-archetype fallback caps. With a SMALL maxHotArchetypes, the surplus pair
     // archetypes demote to cold, yet a Pair(R, Wildcard) query still counts EVERY holder (hot + cold
-    // transparently, §8.4). This stands in for the deferred fragmentation bench.
+    // transparently). This stands in for the deferred fragmentation bench.
     const MAX_HOT = 8
     const T = 64 // far more distinct targets than the hot cap → forces cold demotion
     const world = createWorld({ maxEntities: 1 << 14, maxHotArchetypes: MAX_HOT })
@@ -408,7 +408,7 @@ describe('T1 (perf benches DEFERRED) — structural stand-ins for churn & fragme
     const wild = world.query(rel.Pair(Likes, Wildcard) as never)
     expect(wild.count).toBe(T)
 
-    // hasRelation works identically for cold-resident subjects (the bitmask is index-addressed, §8.4).
+    // hasRelation works identically for cold-resident subjects (the bitmask is index-addressed).
     let holding = 0
     for (const s of subjects) if (rel.hasRelation(s, Likes)) holding++
     expect(holding).toBe(T)

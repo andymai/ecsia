@@ -1,4 +1,4 @@
-// @ecsia/devtools — the inspection + scheduling explanation + watch toolkit (P5). An OPT-IN package: it
+// @ecsia/devtools — the inspection + scheduling explanation + watch toolkit. An OPT-IN package: it
 // is deliberately NOT re-exported from the ecsia umbrella, and NOTHING in the framework imports
 // it. It sits at the TOP of the dependency graph (like the umbrella): it depends on @ecsia/core +
 // @ecsia/schema (the world surfaces) and @ecsia/scheduler (the plan introspection types), and the arrow

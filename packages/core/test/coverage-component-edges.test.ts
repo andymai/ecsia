@@ -16,7 +16,7 @@ function stubWorld(): AccessorWorld {
   return { tracking: { active: true }, trackWrite: () => {}, handleIndex: (h) => h as number }
 }
 
-describe('defineComponent — fail-fast validation (define.ts §2)', () => {
+describe('defineComponent — fail-fast validation (define.ts )', () => {
   test('schema must be a plain object (define.ts:42)', () => {
     expect(() => defineComponent(null as unknown as Schema, { name: 'c1' })).toThrow(/schema must be a plain object/)
     expect(() => defineComponent([] as unknown as Schema, { name: 'c2' })).toThrow(/schema must be a plain object/)
@@ -65,7 +65,7 @@ describe('defineComponent — fail-fast validation (define.ts §2)', () => {
   })
 })
 
-describe('resolveDescriptor — width selection + user-default branches (descriptors.ts §3)', () => {
+describe('resolveDescriptor — width selection + user-default branches (descriptors.ts )', () => {
   test('unknown scalar token throws (descriptors.ts:45)', () => {
     expect(() => resolveDescriptor('x', 'nope' as unknown as FieldToken)).toThrow(/unknown scalar token/)
   })
@@ -121,7 +121,7 @@ describe('resolveDescriptor — width selection + user-default branches (descrip
   })
 })
 
-describe('makeAccessorFactory — guards + vec setter + whole-instance rebind (accessor.ts §8.2)', () => {
+describe('makeAccessorFactory — guards + vec setter + whole-instance rebind (accessor.ts )', () => {
   test('the factory rejects a column array whose length != the plan length (accessor.ts:121-123)', () => {
     const C = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c16' }) as ComponentDef<Schema>
     registerComponentId(C, 1 as never)
@@ -181,7 +181,7 @@ describe('makeAccessorFactory — guards + vec setter + whole-instance rebind (a
   })
 })
 
-describe('buildColumnSet — unregistered-component guard (column-set.ts §8.1)', () => {
+describe('buildColumnSet — unregistered-component guard (column-set.ts )', () => {
   test('an unregistered def (id < 0) is rejected before any column allocation (column-set.ts:37-39)', () => {
     const buffers = newBuffers()
     // A def that was never registered to a world still carries UNREGISTERED (-1).

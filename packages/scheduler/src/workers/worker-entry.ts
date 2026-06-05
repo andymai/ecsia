@@ -1,17 +1,17 @@
-// The worker thread body (scheduler.md §7.2, §7.6). Bootstraps the zero-copy world view from the SAB
+// The worker thread body. Bootstraps the zero-copy world view from the SAB
 // manifest in workerData, imports the user's kernel module (the dispatch mechanism: kernels are
-// functions, resolved by importing the same source on the worker side — serialization.md §3.3), then
+// functions, resolved by importing the same source on the worker side — ), then
 // runs a blocking dispatch loop driven entirely by Atomics (no per-wave postMessage on the hot path):
 //
-//   1. Atomics.wait on the wake word for the next dispatch generation (tier-2 blocking wait, OFF the
-//      main thread, so the Node main thread may itself block on the wave fence without deadlock).
-//   2. Read the work descriptor (systemId, dt, matched entity indices) from the shared work SAB.
-//   3. Run the system kernel over the indices — field writes to disjoint shared columns, structural
-//      ops deferred to THIS worker's SAB command buffer.
-//   4. Store the buffer head into the shared heads SAB, then Atomics.sub-decrement the wave counter
-//      (the last decrementer notifies the main thread).
+// 1. Atomics.wait on the wake word for the next dispatch generation (tier-2 blocking wait, OFF the
+// main thread, so the Node main thread may itself block on the wave fence without deadlock).
+// 2. Read the work descriptor (systemId, dt, matched entity indices) from the shared work SAB.
+// 3. Run the system kernel over the indices — field writes to disjoint shared columns, structural
+// ops deferred to THIS worker's SAB command buffer.
+// 4. Store the buffer head into the shared heads SAB, then Atomics.sub-decrement the wave counter
+// (the last decrementer notifies the main thread).
 //
-// The worker NEVER mutates shared structure mid-wave and NEVER reads the bitmask (Must-Fix #1).
+// The worker NEVER mutates shared structure mid-wave and NEVER reads the bitmask.
 
 import { parentPort, workerData } from 'node:worker_threads'
 import { makeEncoder, buildFieldCodec } from '../commands/index.js'
@@ -33,7 +33,7 @@ interface KernelModule {
 }
 
 const WAKE = 0
-/** Work descriptor SAB layout: [0]=systemId [1]=count [2]=dtBits(f32) [3..]=entity indices (bytes 12+). */
+/** Work descriptor SAB layout: [0]=systemId [1]=count [2]=dtBits(f32) [3..]=entity indices (bytes 12). */
 const WORK_INDICES_BYTE_OFFSET = 12
 
 async function main(): Promise<void> {
@@ -44,8 +44,8 @@ async function main(): Promise<void> {
   // module's own order — so the worker runs the system the pool dispatched, by name.
   const names = boot.systemNames
 
-  // Align each worker-side ComponentDef id to the main thread's dense assignment (serialization.md
-  // §3.3 step 3) so column keys and command-buffer componentIds match byte-for-byte. The kernel
+  // Align each worker-side ComponentDef id to the main thread's dense assignment
+  // so column keys and command-buffer componentIds match byte-for-byte. The kernel
   // module's defineComponent calls leave id UNREGISTERED; the manifest carries the authoritative ids.
   for (const c of boot.components) {
     const def = defByName.get(c.name) as unknown as { id: number } | undefined
@@ -89,7 +89,7 @@ async function main(): Promise<void> {
       return { id, codec: codecOf(def) }
     },
     relationCodec() {
-      // relations.md §5.6 M8 deferral: relation payload schemas are not yet replicated into the worker
+      // Relation payload schemas are not yet replicated into the worker
       // boot manifest, so no payload codec is available here → setRelation emits payloadWordCount=0. The
       // pair add itself still flows (subject, relationId, target); only the payload leg is deferred.
       return undefined
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
   })
 
   // OP_CREATE on the worker takes its handle from the SAB reservation cursor (Atomics.sub take path).
-  // On exhaustion takeReserved returns NO_ENTITY (0xffffffff): per command-buffer.md §6.4 we must emit
+  // On exhaustion takeReserved returns NO_ENTITY (0xffffffff): per
   // NOTHING and return NO_ENTITY — NOT route a NO_ENTITY handle through baseCreate (which would append a
   // spurious OP_CREATE 0xffffffff that the apply path would try to spawn → record-table corruption).
   const baseCreate = encoder.create
@@ -120,12 +120,12 @@ async function main(): Promise<void> {
   const wake = new Int32Array(boot.wakeSab)
   const work = new Int32Array(boot.workSab)
   const workF32 = new Float32Array(boot.workSab)
-  const heads = new Int32Array(boot.waveSab) // word 4+ : per-worker head (after the 4 counter words)
+  const heads = new Int32Array(boot.waveSab) // word 4+: per-worker head (after the 4 counter words)
   const waveCounter: WaveCounter = { sab: boot.waveSab, view: new Int32Array(boot.waveSab) }
   const notice = new Int32Array(boot.noticeSab) // [0] = main thread's published re-backing generation
   const HEAD_WORD = 4 + boot.workerIndex
 
-  // Pending `columns-added` broadcasts (serialization.md §3.4). The dispatch loop blocks on Atomics, so
+  // Pending `columns-added` broadcasts. The dispatch loop blocks on Atomics, so
   // a posted message only drains when the loop yields to the event loop; on a NOTICE round the loop
   // `await`s here so the queued broadcast is delivered before we re-wrap.
   const noticeQueue: ColumnsAddedMessage[] = []
@@ -156,7 +156,7 @@ async function main(): Promise<void> {
     lastWake = signal
     if (signal < 0) return // shutdown sentinel
 
-    // NOTICE round (serialization.md §3.4): a column re-backed on the main thread. Drain the queued
+    // NOTICE round: a column re-backed on the main thread. Drain the queued
     // `columns-added` broadcast(s) up to the published generation, re-wrap the new SABs, then ACK by
     // completing the wave fence. No system runs this wave; the next dispatch proceeds only after this.
     const publishedGen = Atomics.load(notice, 0)

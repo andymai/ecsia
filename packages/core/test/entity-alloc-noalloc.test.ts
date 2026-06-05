@@ -4,7 +4,7 @@ import type { EntityHandle } from '@ecsia/core'
 import { EntityIndex } from '../src/entity/index-allocator.js'
 
 // Stands in for the deferred cross-library bench (build-plan harness). The spec promises
-// allocEntity / freeEntity are O(1) with ZERO per-op heap allocation (entity-model.md §10).
+// allocEntity / freeEntity are O(1) with ZERO per-op heap allocation.
 // We cannot count allocations directly in portable JS, so we use process heap sampling: run a
 // large alloc/free loop and assert retained heap does not grow with iteration count. A
 // per-op allocation would leave megabytes of garbage proportional to the loop length even
@@ -52,7 +52,7 @@ describe('zero-per-op heap allocation for alloc/free (bench stand-in)', () => {
     if (hasGc) {
       // With explicit GC available the steady-state churn must retain essentially nothing.
       // Generous slack for sampling noise / unrelated allocations: 4 MiB over 2M ops
-      // (a real per-op allocation of even one tiny object would be tens of MiB+).
+      // (a real per-op allocation of even one tiny object would be tens of MiB).
       expect(grewBytes).toBeLessThan(4 * 1024 * 1024)
     } else {
       // Without --expose-gc heapUsed includes uncollected garbage; assert it is not pathological

@@ -1,5 +1,5 @@
-// Conflict DAG construction (scheduler.md §4.4): adjacency from the resolved max-weight edges, DFS
-// three-color cycle detection with NAMED-CHAIN reporting + a suggested break edge (§4.5), and
+// Conflict DAG construction: adjacency from the resolved max-weight edges, DFS
+// three-color cycle detection with NAMED-CHAIN reporting + a suggested break edge, and
 // DFS-based transitive reduction so the topological layering produces the widest possible waves.
 
 import type { SystemId } from '@ecsia/schema'
@@ -40,8 +40,8 @@ function edgeCause(edges: readonly Edge[], from: SystemId, to: SystemId): string
 }
 
 /**
- * §4.4: a single DFS finds ANY cycle; the gray-stack gives the full chain. Throws CycleError with the
- * named chain and a suggested `inAnyOrderWith` break edge (§4.5). Fail-fast at createWorld, never at
+ *: a single DFS finds ANY cycle; the gray-stack gives the full chain. Throws CycleError with the
+ * named chain and a suggested `inAnyOrderWith` break edge. Fail-fast at createWorld, never at
  * frame time.
  */
 function detectCycle(systems: readonly SystemBox[], succ: readonly SystemId[][], edges: readonly Edge[]): void {
@@ -90,7 +90,7 @@ function reportChain(systems: readonly SystemBox[], edges: readonly Edge[], cycl
   return lines.join('\n')
 }
 
-/** §4.4: remove edge A→C if a path A→B→C exists (B ≠ C). DFS reachability excluding the direct edge. */
+/**: remove edge A→C if a path A→B→C exists (B ≠ C). DFS reachability excluding the direct edge. */
 function transitiveReduction(succ: readonly SystemId[][]): SystemId[][] {
   const n = succ.length
   const reduced: SystemId[][] = Array.from({ length: n }, () => [])
@@ -124,7 +124,7 @@ function transitiveReduction(succ: readonly SystemId[][]): SystemId[][] {
   return reduced
 }
 
-/** Build the transitively-reduced DAG, failing fast on any cycle (§4.4). */
+/** Build the transitively-reduced DAG, failing fast on any cycle. */
 export function buildDAG(systems: readonly SystemBox[], edges: readonly Edge[]): DAG {
   const n = systems.length
   const succ = adjacency(n, edges)

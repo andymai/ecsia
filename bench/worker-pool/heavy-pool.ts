@@ -26,7 +26,7 @@ import type { EntityHandle, PoolSystem, SystemDef, World } from 'ecsia'
 import type { SystemId } from '@ecsia/schema'
 
 // Mirror the kernel module's constants + inner loop EXACTLY (serial-equivalence by construction). The
-// .mjs lives next to the m7 fixture so a raw worker can resolve @ecsia/core; we re-declare the math here
+// mjs lives next to the m7 fixture so a raw worker can resolve @ecsia/core; we re-declare the math here
 // for the single-thread twin (importing the .mjs from TS is fine but re-stating keeps this file the
 // single source the typechecker sees).
 const GROUP_COUNT = 8
@@ -39,7 +39,7 @@ const DAMP = 0.015
 // INITIAL_ROWS(64) × GROWTH_RESERVE_FACTOR(16) = 1024 rows of resizable-SAB address space. Crossing
 // 1024 rows forces a reallocation+rebind onto a NEW SAB; the worker pool now drains that re-backing
 // notice at the wave fence and re-wraps every worker's column view before the next dispatch (the
-// memory-buffers §7.6 / serialization §3.4 protocol), so growing past the reservation stays
+// memory-buffers / serialization ), so growing past the reservation stays
 // byte-for-byte serial-equivalent. The boundary is covered directly by
 // packages/scheduler/test/worker-growth-boundary.test.ts (1024 in-place grow + 1025/1040 re-backing).
 // No per-column cap: perGroup is free to cross 1024; the smoke still asserts threaded === serial.

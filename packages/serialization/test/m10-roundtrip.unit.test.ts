@@ -1,4 +1,4 @@
-// M10 UNIT round-trips (serialization.md §4–§7). Targeted, non-property checks for the exact
+// UNIT round-trips. Targeted, non-property checks for the exact
 // behaviours the task enumerates: a BIT-EXACT snapshot round-trip (re-serialize the loaded world and
 // compare bytes), a multi-tick DELTA applied to a stale copy, a late-joiner reconstruction from the
 // observer-log stream INCLUDING initial values on ComponentAdd, and eid + relation-target remap.
@@ -27,12 +27,12 @@ function defs() {
   }
 }
 
-describe('M10 UNIT — snapshot round-trip is BIT-EXACT on values', () => {
+describe(' UNIT — snapshot round-trip is BIT-EXACT on values', () => {
   it('every f32 value survives the round-trip with EXACT bit equality (no precision drift)', () => {
     const D = defs()
     const src = createWorld({ components: [D.Position, D.Velocity, D.Target, D.Tag] as readonly ComponentDef<Schema>[] })
-    // Values chosen to be exactly representable in f32 so === holds (the SoA copy is a raw byte memcpy,
-    // §4.3 — no re-quantization). 0.5, 0.25, -3, 9 are all exact in f32.
+    // Values chosen to be exactly representable in f32 so === holds (the SoA copy is a raw byte
+    // memcpy — no re-quantization). 0.5, 0.25, -3, 9 are all exact in f32.
     const e1 = src.spawnWith(D.Position, D.Velocity)
     ;(src.entity(e1).write(D.Position) as { x: number; y: number }).x = 1.5
     ;(src.entity(e1).write(D.Position) as { x: number; y: number }).y = 2.25
@@ -55,14 +55,14 @@ describe('M10 UNIT — snapshot round-trip is BIT-EXACT on values', () => {
     expect((dst.entity(n2).read(R.Position) as { x: number }).x).toBe(9)
     expect(dst.has(n2, R.Tag)).toBe(true)
 
-    // The producer's OWN re-serialization is byte-stable (canonical determinism, §4.4) — distinct from
+    // The producer's OWN re-serialization is byte-stable (canonical determinism) — distinct from
     // a cross-world image (handles differ); here we compare the SAME world serialized twice.
     const ser = createSnapshotSerializer(src)
     expect(Buffer.from(ser.snapshotCopy())).toEqual(Buffer.from(ser.snapshotCopy()))
   })
 })
 
-describe('M10 UNIT — multi-tick delta applied to a stale copy reconstructs the live world', () => {
+describe(' UNIT — multi-tick delta applied to a stale copy reconstructs the live world', () => {
   it('a delta since tick T, applied to a snapshot-bootstrapped mirror, matches the producer', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const src = createWorld({ components: [P as ComponentDef<Schema>] })
@@ -99,7 +99,7 @@ describe('M10 UNIT — multi-tick delta applied to a stale copy reconstructs the
   })
 })
 
-describe('M10 UNIT — late joiner reconstructs full state from the observer-log stream', () => {
+describe(' UNIT — late joiner reconstructs full state from the observer-log stream', () => {
   it('ComponentAdd records carry INITIAL VALUES, and replay rebuilds entities + eid refs', () => {
     const Pos = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
     const Tgt = defineComponent({ who: 'eid' }, { name: 'target' })
@@ -114,7 +114,7 @@ describe('M10 UNIT — late joiner reconstructs full state from the observer-log
     const stream = encodeStructuralOps(src)
 
     // The observer-log decoder exposes ComponentAdd records WITH field values (rejecting bitECS's
-    // value-less add) — a late joiner reads full state from the stream alone (§7.2 / S-7).
+    // value-less add) — a late joiner reads full state from the stream alone.
     const records = [...createObserverLog(src).drain(stream)]
     const adds = records.filter((r) => r.op === DeltaOp.ComponentAdd)
     expect(adds.length).toBeGreaterThan(0)
@@ -141,7 +141,7 @@ describe('M10 UNIT — late joiner reconstructs full state from the observer-log
   })
 })
 
-describe('M10 UNIT — eid + relation-target remap correctness', () => {
+describe(' UNIT — eid + relation-target remap correctness', () => {
   it('snapshot remaps a self-referential eid and an exclusive relation target onto receiver handles', () => {
     const Pos = defineComponent({ x: 'f32' }, { name: 'position' })
     const Tgt = defineComponent({ who: 'eid' }, { name: 'target' })

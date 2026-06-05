@@ -32,7 +32,7 @@ describe('REAL worker-pool heavy bench reproduces the single-thread result on OS
   )
 
   // ABOVE the 1024-row per-column reservation: each group now holds 1100 rows, so every column re-backs
-  // onto a new SAB and the wave-fence re-backing protocol (memory-buffers §7.6) must keep the threaded
+  // onto a new SAB and the wave-fence re-backing protocol (memory-buffers ) must keep the threaded
   // run byte-identical to single-thread. Bounded per the resource budget (perGroup ≤ 2048, frames ≤ 6,
   // workers ≤ 4). The boundary itself is unit-covered by scheduler/test/worker-growth-boundary.test.ts.
   test(

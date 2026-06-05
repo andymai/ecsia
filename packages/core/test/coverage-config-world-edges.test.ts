@@ -14,7 +14,7 @@ import {
 } from '@ecsia/core'
 import type { ComponentDef, EntityHandle, Schema } from '@ecsia/core'
 
-describe('config — option-validation throws (config.ts §7)', () => {
+describe('config — option-validation throws (config.ts )', () => {
   test('maxHotArchetypes must be a positive integer (config.ts:102-104)', () => {
     expect(() => resolveOptions({ maxHotArchetypes: 0 })).toThrow(/maxHotArchetypes must be a positive integer/)
     expect(() => resolveOptions({ maxHotArchetypes: -4 })).toThrow(ConfigError)

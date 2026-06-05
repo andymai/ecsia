@@ -1,5 +1,5 @@
-// Deferred observers (reactivity.md §7). onAdd/onRemove/onChange register a handler in a
-// (kind, componentId) dispatch table. They fire ONLY from observerDrain at a serial slot (R-3) —
+// Deferred observers. onAdd/onRemove/onChange register a handler in a
+// (kind, componentId) dispatch table. They fire ONLY from observerDrain at a serial slot —
 // NEVER synchronously from a setter or a migration. The drain walks the shape log (add/remove) and
 // the write log (change) once, looking up the bucket per entry (no per-event Array.from/reduce).
 
@@ -74,12 +74,12 @@ export class ObserverRegistry {
     return this.#count > 0
   }
 
-  /** True iff any `change`-kind observer is registered — gates the write-log push fast-out (§3.3). */
+  /** True iff any `change`-kind observer is registered — gates the write-log push fast-out. */
   get hasChangeObservers(): boolean {
     return this.#changeCount > 0
   }
 
-  /** True iff any observer subscribes to `kind` events on `componentId` — gates deferred-row reclaim (§7.4). */
+  /** True iff any observer subscribes to `kind` events on `componentId` — gates deferred-row reclaim. */
   hasKindFor(kind: ObserverKind, componentId: number): boolean {
     const bucket = this.#table.get(`${kind}:${componentId}`)
     return bucket !== undefined && bucket.length > 0
@@ -115,7 +115,7 @@ export class ObserverRegistry {
     }
   }
 
-  /** Fire a structural (add/remove) event for one (index, componentId). §7.3 structural drain body. */
+  /** Fire a structural (add/remove) event for one (index, componentId). */
   dispatchStructural(kind: 'add' | 'remove', index: number, componentId: number): void {
     const bucket = this.#table.get(`${kind}:${componentId}`)
     if (bucket === undefined) return
@@ -131,7 +131,7 @@ export class ObserverRegistry {
     }
   }
 
-  /** Fire a change event for one (index, componentId), deduped per frame. §7.3 change drain body. */
+  /** Fire a change event for one (index, componentId), deduped per frame. */
   dispatchChange(index: number, componentId: number): void {
     const bucket = this.#table.get(`change:${componentId}`)
     if (bucket === undefined) return
@@ -144,7 +144,7 @@ export class ObserverRegistry {
     }
   }
 
-  /** §3.6 conservative path: an overflow forces every change observer to assume worst-case. */
+  /**: an overflow forces every change observer to assume worst-case. */
   fireAllChangeConservatively(current: Iterable<number>): void {
     const tick = this.#deps.tick()
     for (const [key, bucket] of this.#table) {

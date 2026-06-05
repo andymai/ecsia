@@ -1,4 +1,4 @@
-// HTML renderer (P5 §4): a PURE function over the data layer → a self-contained static HTML string with
+// HTML renderer: a PURE function over the data layer → a self-contained static HTML string with
 // inline CSS and NO scripts (viewable by opening the file / writing it to a response body). No world
 // access, no side effects.
 

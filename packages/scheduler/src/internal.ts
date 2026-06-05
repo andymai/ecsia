@@ -1,7 +1,7 @@
 // @ecsia/scheduler — INTERNAL surface. NOT part of the published package (`package.json#exports` only
 // maps `.` → index.ts). These are builders/primitives consumed by this package's own tests via a
 // RELATIVE import (`../src/internal.js`); they are deliberately kept OFF the public `index.ts` so the
-// published surface stays curated (P0.5 surface diet). No sibling package imports `@ecsia/scheduler`,
+// published surface stays curated. No sibling package imports `@ecsia/scheduler`,
 // so nothing here is cross-package — it is test-reachable internals only.
 
 export { lowerSystems, aggregateAccess, DEFAULT_MAX_SPAWNS_PER_WAVE } from './planner/index.js'

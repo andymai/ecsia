@@ -1,27 +1,27 @@
-// Per-worker command buffer (command-buffer.md §3): a plain (or SAB-backed) Uint32Array a worker
+// Per-worker command buffer: a plain (or SAB-backed) Uint32Array a worker
 // appends structural-intent records into mid-wave and the main thread replays at the serial flush.
 //
-// Backing choice (command-buffer.md §3.1): the buffer is written ONLY by its owning worker and read
+// Backing choice: the buffer is written ONLY by its owning worker and read
 // ONLY by the main thread AFTER the wave fence — no concurrent access ever — so no atomics are needed
 // on it. In the SAB/Atomics runtime we back it with a *fixed-size* SharedArrayBuffer so the main
 // thread reads the worker's records in place (no per-flush transfer); growth past that cap spills to
-// a plain-AB overflow (§3.3 doubling) which the worker reports back via its `head`. In the
+// a plain-AB overflow which the worker reports back via its `head`. In the
 // postMessage fallback the backing is a plain ArrayBuffer transferred at flush. Either way the apply
-// path (apply.ts) reads `{ words, head }` byte-for-byte identically (CB-1).
+// path (apply.ts) reads `{ words, head }` byte-for-byte identically.
 
 import type { EntityHandle, EntityReservation } from '@ecsia/core'
 
-/** A per-worker reservation block consumed by OP_CREATE (entity-model.md §5.1). */
+/** A per-worker reservation block consumed by OP_CREATE. */
 export interface BufferReservation {
   readonly handles: readonly EntityHandle[]
 }
 
 export interface CommandBuffer {
-  /** Worker index this buffer belongs to (0..workers-1). Fixes merge order (§7.2). */
+  /** Worker index this buffer belongs to (0..workers-1). Fixes merge order. */
   readonly workerIndex: number
-  /** u32 words. SAB-backed in the threaded path, plain AB in the fallback (§3.1). */
+  /** u32 words. SAB-backed in the threaded path, plain AB in the fallback. */
   words: Uint32Array
-  /** Write head: index of the next free u32 slot. Reset to 0 each wave (§3.4). */
+  /** Write head: index of the next free u32 slot. Reset to 0 each wave. */
   head: number
   /** Count of records appended this wave (diagnostics / merge bound). */
   recordCount: number
@@ -29,9 +29,9 @@ export interface CommandBuffer {
   reservation: BufferReservation
   /** Cursor into `reservation.handles`: next unused reserved handle. */
   reservationCursor: number
-  /** Count of OP_CREATE records actually applied (set by the apply path for returnUnused, §6.3). */
+  /** Count of OP_CREATE records actually applied (set by the apply path for returnUnused). */
   appliedCreateCount: number
-  /** The EntityReservation block reserved for this buffer's wave (main-thread bookkeeping for §6.3). */
+  /** The EntityReservation block reserved for this buffer's wave (main-thread bookkeeping for ). */
   lastReservation?: EntityReservation
   /**
    * When true the backing is a FIXED-SIZE SharedArrayBuffer that MUST NOT be reassigned mid-wave: the
@@ -65,7 +65,7 @@ export function makeCommandBuffer(workerIndex: number, initialWords: number, sha
   }
 }
 
-/** command-buffer.md §3.4: head→0, retain backing. Steady-state encoding is allocation-free. */
+/**: head→0, retain backing. Steady-state encoding is allocation-free. */
 export function resetBuffer(cb: CommandBuffer): void {
   cb.head = 0
   cb.recordCount = 0
@@ -76,7 +76,7 @@ export function resetBuffer(cb: CommandBuffer): void {
 }
 
 /**
- * command-buffer.md §3.3: ensure room for `need` more words. Returns true iff the caller may now write
+ *: ensure room for `need` more words. Returns true iff the caller may now write
  * `need` words at `cb.head`.
  *
  * Plain-AB (growable) buffers double on overflow and always return true — the no-sab

@@ -1,13 +1,13 @@
-// M9 — deferred observers under the (serial-slot) drain (reactivity.md §7, §7.4). The headline R-3
+// — deferred observers under the (serial-slot) drain. The headline
 // correctness goal: an observer handler MAY create/destroy/add/remove entities, but those structural
 // ops STAGE to a main-thread command buffer and apply at the NEXT serial flush — NEVER mid-drain. So
 // no observer ever sees a partially-applied wave, the drain iterates a FROZEN log snapshot, and a
 // spawn inside an onChange handler is observed by onAdd NEXT drain (deterministically), never
 // re-entrantly this drain.
 //
-//   §7.4   structural ops inside observers stage to the command buffer, apply next flush.
-//   R-3    no observer fires synchronously; the drain never re-enters unsafely.
-//   R-9    onChange fires once per coalesced net change.
+// apply next flush.
+// no observer fires synchronously; the drain never re-enters unsafely.
+// onChange fires once per coalesced net change.
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, onAdd, onRemove, onChange } from '@ecsia/core'
@@ -24,7 +24,7 @@ function makeKit(opts?: Parameters<typeof createWorld>[0]): {
   return { world: createWorld({ ...opts, components }), Position, Velocity }
 }
 
-describe('§7.4 — a spawn inside an observer is STAGED, applied next flush, observed by onAdd NEXT drain', () => {
+describe(', applied next flush, observed by onAdd NEXT drain', () => {
   test('an onChange handler that spawns: the new entity is NOT live mid-drain; onAdd fires next drain', () => {
     const { world, Position, Velocity } = makeKit()
     const spawned: EntityHandle[] = []
@@ -46,7 +46,7 @@ describe('§7.4 — a spawn inside an observer is STAGED, applied next flush, ob
     world.frameReset()
     ;(world.entity(e).write(Position) as { x: number }).x = 7
 
-    // Drain 1: the onChange fires, stages a spawn+add. onAdd must NOT fire this drain (R-3).
+    // Drain 1: the onChange fires, stages a spawn+add. onAdd must NOT fire this drain.
     world.observerDrain()
     expect(spawned.length).toBe(1)
     expect(liveDuringHandler).toBe(1) // the reserved handle is usable inside the handler
@@ -84,7 +84,7 @@ describe('§7.4 — a spawn inside an observer is STAGED, applied next flush, ob
   })
 })
 
-describe('R-3 — no observer observes a partially-applied wave (safe despawn inside onRemove)', () => {
+describe(' — no observer observes a partially-applied wave (safe despawn inside onRemove)', () => {
   test('an onRemove handler that despawns a sibling does not corrupt later observers in the same drain', () => {
     const { world, Position } = makeKit()
     // Three entities; despawning a triggers onRemove(a). Inside that handler we despawn c. The drain
@@ -123,7 +123,7 @@ describe('R-3 — no observer observes a partially-applied wave (safe despawn in
   })
 })
 
-describe('R-3 — the drain never re-enters itself', () => {
+describe(' — the drain never re-enters itself', () => {
   test('a nested observerDrain() call during a handler is a no-op (re-entrancy guard)', () => {
     const { world, Position } = makeKit()
     let fires = 0
@@ -140,7 +140,7 @@ describe('R-3 — the drain never re-enters itself', () => {
   })
 })
 
-describe('§7.1 — bundled initial values are readable in the onAdd handler', () => {
+describe('', () => {
   test('an onAdd handler reads the just-added component values via ref.read(C)', () => {
     const { world, Position, Velocity } = makeKit()
     let seenX = -1
@@ -156,9 +156,9 @@ describe('§7.1 — bundled initial values are readable in the onAdd handler', (
   })
 })
 
-describe('§7.4 — the write log is a FROZEN snapshot: an observer-issued write is deferred to the NEXT drain', () => {
+describe(': an observer-issued write is deferred to the NEXT drain', () => {
   // The shape log is consumed before the write log in one drain. A structural (onAdd) handler that
-  // calls entity.write(C) appends a write-log entry; the spec's frozen-snapshot wording (§7.4) means
+  // calls entity.write(C) appends a write-log entry; the spec's frozen-snapshot wording means
   // that write must NOT be observed by an onChange handler in the SAME drain (no intra-drain
   // write-cascade). It fires on the NEXT drain. This pins the chosen semantic (review issue #2).
   test('an onAdd handler that writes a component does NOT trigger onChange this drain; it fires next drain', () => {
@@ -190,7 +190,7 @@ describe('§7.4 — the write log is a FROZEN snapshot: an observer-issued write
   })
 })
 
-describe('R-9 — onChange fires once per coalesced net change', () => {
+describe(' — onChange fires once per coalesced net change', () => {
   test('N writes to the same component in one frame fire onChange exactly once', () => {
     const { world, Position } = makeKit()
     let changes = 0

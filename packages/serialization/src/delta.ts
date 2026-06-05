@@ -1,12 +1,12 @@
-// The version-stamp-driven delta serializer (serialization.md §6). Carries an INTERLEAVED structural
-// section (§6.2 SECTION S) followed by the changed-value section (SECTION V). VALUE changes are driven
-// PURELY by the per-row changeVersion (reactivity.md §6.3) — NO shadow map. STRUCTURAL changes
+// The version-stamp-driven delta serializer. Carries an INTERLEAVED structural
+// section followed by the changed-value section (SECTION V). VALUE changes are driven
+// PURELY by the per-row changeVersion — NO shadow map. STRUCTURAL changes
 // (Create/Destroy/ComponentAdd/ComponentRemove/AddPair/RemovePair) since T come from the persistent
-// structural journal (the since-T structural source, §6.4) — NOT from the per-frame shape-log ring,
-// which is recycled (reactivity.md §3.7/§13.3). Constructing the serializer registers BOTH stamping
+// structural journal (the since-T structural source) — NOT from the per-frame shape-log ring,
+// which is recycled. Constructing the serializer registers BOTH stamping
 // consumers: changeVersion (for values) and the structural journal (for structure).
 //
-// Row identity across the boundary (§6.4): the receiver does NOT trust producer row indices. Each
+// Row identity across the boundary: the receiver does NOT trust producer row indices. Each
 // changed row carries its entity HANDLE; the receiver resolves the local entity via the remap table
 // (the bootstrap snapshot's PASS 1 + the structural section this delta applies first), then writes the
 // values into that entity's columns. applyDelta therefore applies the structural ops AND the values, so
@@ -34,18 +34,18 @@ import { encodeRichValue, richKindOrdinal, type OnUnserializable } from './rich.
 
 export interface DeltaOptions {
   readonly initialOutputBytes?: number
-  /** Interleave the since-T STRUCTURAL section before the value section (default TRUE, §6.2 / §6.4). */
+  /** Interleave the since-T STRUCTURAL section before the value section (default TRUE). */
   readonly includeStructural?: boolean
-  /** Policy for a rich value JSON cannot encode (rich-fields.md §7.4). Default: SKIP + dev-warn. */
+  /** Policy for a rich value JSON cannot encode. Default: SKIP + dev-warn. */
   readonly onUnserializable?: OnUnserializable
   /**
-   * Opt-in numeric epsilon tolerance (rich-fields.md §9). When set, the serializer allocates ITS OWN
+   * Opt-in numeric epsilon tolerance. When set, the serializer allocates ITS OWN
    * shadow of the numeric columns it serializes (core stays shadow-free — RF-SHADOW-FREE); a changed ROW
    * whose every changed NUMERIC field is within `epsilon` of the shadow is DROPPED from SECTION V. The
    * shadow updates to the emitted values on each emit. Rich fields (SECTION R) and structural ops are NOT
    * epsilon-filtered. Default undefined (no shadow, core-pure row selection unchanged).
    *
-   * MEMORY COST (honest, §9.3): the shadow is a Float64Array of Σ (rows × numericColumnElements) over the
+   * MEMORY COST (honest): the shadow is a Float64Array of Σ (rows × numericColumnElements) over the
    * archetypes this serializer touches — it DOUBLES (in f64 width) their numeric SoA footprint, owned by
    * this serializer instance for its lifetime. Opt-in precisely because the cost is real.
    */
@@ -54,11 +54,11 @@ export interface DeltaOptions {
 
 /**
  * A reusable since-T delta serializer (v2 wire). Changed rich fields ride SECTION R, selected by the SAME
- * whole-entity changeVersion stamp as the numeric value section (rich-fields.md §7.3) — including a row
+ * whole-entity changeVersion stamp as the numeric value section — including a row
  * changed ONLY in a rich field. `epsilon` (opt-in) drops sub-tolerance NUMERIC rows; rich values are
  * never epsilon-filtered.
  *
- * LIMITATION — RF-NOREMAP (rich-fields.md §7.5): an `EntityHandle` stored INSIDE an `object<T>` rich
+ * LIMITATION — RF-NOREMAP: an `EntityHandle` stored INSIDE an `object<T>` rich
  * field is NOT remapped on apply (it is opaque JSON). Use an `eid` column or a stable application id for
  * a reference that must survive the wire. See {@link applyDelta}.
  */
@@ -69,8 +69,8 @@ export interface DeltaSerializer {
   readonly sinceTick: number
 }
 
-// §6.2 header: MAGIC u32, VERSION u16, ENDIAN u8, flags u8, baselineTick u32, targetTick u32,
-// structuralSectionOffset u32, valueSectionOffset u32, richSectionOffset u32 (v2; rich-fields.md §7.3).
+// MAGIC u32, VERSION u16, ENDIAN u8, flags u8, baselineTick u32, targetTick u32,
+// structuralSectionOffset u32, valueSectionOffset u32, richSectionOffset u32 (v2).
 const DELTA_HEADER_BYTES = 28
 
 export function createDeltaSerializer(world: World, sinceTick: number, opts: DeltaOptions = {}): DeltaSerializer {
@@ -82,11 +82,11 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
   // Float64Array of the last-EMITTED numeric values, sized lazily as archetypes are encountered. Only
   // allocated when epsilon is set; core never sees it.
   const shadow = new Map<number, Map<number, Float64Array>>()
-  // Constructing a delta serializer registers the changeVersion stamping consumer (reactivity.md §6.1):
+  // Constructing a delta serializer registers the changeVersion stamping consumer:
   // touching changedSince once turns on stamping so subsequent writes stamp the per-row version.
   world.changedSince(0 as EntityHandle, 0)
   // …and (when carrying structure) the persistent structural journal — the since-T STRUCTURAL source
-  // that survives the per-frame shape-log recycle (§6.4). Both are the delta's two stamping seams.
+  // that survives the per-frame shape-log recycle. Both are the delta's two stamping seams.
   if (includeStructural) s.enableStructuralJournal()
   const cur = new WriteCursor(opts.initialOutputBytes ?? 16 * 1024)
   let baseline = sinceTick
@@ -99,8 +99,8 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
     cur.reset()
 
     // --- HEADER (28 bytes in v2; section offsets + flags back-patched) ---
-    // v2 grows the header from 24→28 bytes with a back-patched `richSectionOffset` word (rich-fields.md
-    // §7.3 / G-5) so applyDelta can seek SECTION R directly instead of drifting past SECTION V.
+    // v2 grows the header from 24→28 bytes with a back-patched `richSectionOffset` word so
+    // applyDelta can seek SECTION R directly instead of drifting past SECTION V.
     cur.u32(SNAPSHOT_MAGIC)
     cur.u16(SERIALIZATION_FORMAT_VERSION)
     cur.u8(1) // ENDIAN
@@ -115,24 +115,24 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
     const richOffAt = cur.pos
     cur.u32(0) // richSectionOffset (v2; 0 when no RICH section)
 
-    // --- SECTION S: STRUCTURAL OPS since baseline (§6.2 / §6.4) ---
+    // --- SECTION S: STRUCTURAL OPS since baseline ---
     let flags = FLAG_IS_DELTA
     if (includeStructural) {
       cur.patchU32(structOffAt, cur.pos)
       const drained = s.drainStructuralSince(baseline)
       // A gap means `baseline` predates the bounded journal's live window: the structural section cannot
       // be reconstructed precisely. The delta still emits values; the receiver must resync from a fresh
-      // snapshot (the no-partial-apply delta-gap rule, §6.4). We flag it via an empty structural section.
+      // snapshot (the no-partial-apply delta-gap rule). We flag it via an empty structural section.
       if (!drained.gap && drained.records.length > 0) {
         writeDeltaStructuralSection(cur, world, drained.records)
         flags |= FLAG_HAS_STRUCTURAL
       }
     }
 
-    // --- SECTION V: CHANGED VALUES, version-stamp driven (§6.3) ---
+    // --- SECTION V: CHANGED VALUES, version-stamp driven ---
     cur.patchU32(valueOffAt, cur.pos)
     const archs = s.archetypes()
-    // The FULL changeVersion-selected row set per archetype (the same scan SECTION R rides, §7.3). Epsilon
+    // The FULL changeVersion-selected row set per archetype (the same scan SECTION R rides). Epsilon
     // filters SECTION V's subset below but NEVER SECTION R, so this is computed once and reused.
     const changedRowsByArch = new Map<number, number[]>()
     const archCountAt = cur.pos
@@ -142,7 +142,7 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
       const allRows: number[] = [...world.changedRows(a.id, baseline)]
       if (allRows.length === 0) continue
       changedRowsByArch.set(a.id, allRows)
-      // Epsilon (RF-SHADOW-FREE, §9.2): keep a row only if SOME numeric lane exceeds tolerance vs the
+      // Epsilon (RF-SHADOW-FREE): keep a row only if SOME numeric lane exceeds tolerance vs the
       // serializer-owned shadow; else drop it from SECTION V (its changeVersion stamp stays > baseline so
       // it is re-considered next delta). The shadow updates to the EMITTED values after selection.
       const rows = epsilon !== undefined ? filterByEpsilon(a, allRows, shadow, epsilon) : allRows
@@ -150,7 +150,7 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
       changedArchetypeCount += 1
       cur.u32(a.id)
       cur.u32(rows.length)
-      // Per changed row: the FULL entity handle (the boundary-stable row identity, §6.4).
+      // Per changed row: the FULL entity handle (the boundary-stable row identity).
       for (const r of rows) cur.u32(a.rows[r] as number)
       cur.u16(a.components.length)
       for (const comp of a.components) {
@@ -160,7 +160,7 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
           const col = comp.columns[ci]
           if (col === undefined) continue
           const stride = col.layout.stride
-          // §6.2 wire: u8 element ordinal + u8 stride, then per CHANGED row the stride elements at the
+          // U8 element ordinal + u8 stride, then per CHANGED row the stride elements at the
           // column's NATIVE element width (a raw byte copy — no f64 widening, no per-row allocation).
           cur.u8(elementOrdinal(col.layout.element))
           cur.u8(stride)
@@ -171,12 +171,12 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
     }
     cur.patchU32(archCountAt, changedArchetypeCount)
 
-    // --- SECTION R: CHANGED RICH VALUES (after SECTION V, §7.3) — version-gated, FLAG_HAS_RICH ---
+    // --- SECTION R: CHANGED RICH VALUES (after SECTION V) — version-gated, FLAG_HAS_RICH ---
     // Rides the SAME changeVersion selection as SECTION V (the unfiltered set — epsilon never applies to
     // rich values). Per archetype, emit the changed rows' rich values per (component, field), with a
     // present/absent flag per row (the changeVersion stamp is whole-entity, so a row changed only in its
     // numeric field carries present=0 for an unchanged rich field — the SAME over-send the numeric delta
-    // already does, §7.3). Sparse: an archetype with no rich fields, or no changed rows, contributes 0.
+    // already does). Sparse: an archetype with no rich fields, or no changed rows, contributes 0.
     const richFields = s.richFields()
     let richWrote = false
     if (richFields.length > 0) {
@@ -265,7 +265,7 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
   }
 }
 
-// Epsilon row filter (rich-fields.md §9.2). For each candidate row, compare every numeric lane of every
+// Epsilon row filter. For each candidate row, compare every numeric lane of every
 // column against the serializer-owned shadow; keep the row iff SOME lane differs by more than `epsilon`.
 // The shadow is updated to the current values ONLY for kept (emitted) rows, so a sub-epsilon change
 // accumulates against the last EMITTED baseline and is emitted once it crosses tolerance. A row never
@@ -346,14 +346,14 @@ function filterByEpsilon(
 // section CREATES entities since T must extend the table so the value section (and subsequent deltas)
 // resolve those new entities — so we work on a MUTABLE copy and copy newly-minted handles BACK into the
 // caller's table when it is mutable (the snapshot result exposes a ReadonlyMap; a caller that wants the
-// new handles passes a real Map). §6.4.
+// new handles passes a real Map).
 //
-// Apply order (rich-fields.md §7.3, load-bearing): SECTION S structural ops FIRST (so the value/rich
+// Apply order (load-bearing): SECTION S structural ops FIRST (so the value/rich
 // handles resolve to live receiver entities, and `work` gains the newly-created handles), THEN SECTION V
 // numeric values, THEN SECTION R rich values — so a rich value for an entity created by THIS delta lands
 // on the already-spawned receiver. eid/pair remap is unaffected by the rich section.
 //
-// LIMITATION — RF-NOREMAP (rich-fields.md §7.5): an `EntityHandle` inside an `object<T>` is applied as a
+// LIMITATION — RF-NOREMAP: an `EntityHandle` inside an `object<T>` is applied as a
 // raw producer number, NOT remapped. Use an `eid` column or a stable application id instead.
 export function applyDelta(world: World, bytes: Uint8Array, remap: ReadonlyMap<EntityHandle, EntityHandle>): number {
   if (world.phase !== 'serial') {
@@ -376,7 +376,7 @@ export function applyDelta(world: World, bytes: Uint8Array, remap: ReadonlyMap<E
   const richOff = version >= RICH_FORMAT_VERSION ? cur.u32() : 0
 
   // --- SECTION S: apply structural ops FIRST (creates/destroys/adds/removes), so the value section's
-  //     handles resolve to live receiver entities (§6.4 ordering). ---
+  // handles resolve to live receiver entities. ---
   if ((flags & FLAG_HAS_STRUCTURAL) !== 0 && structOff < valueOff) {
     applyStructuralOps(world, bytes.subarray(structOff, valueOff), work)
   }
@@ -412,9 +412,9 @@ export function applyDelta(world: World, bytes: Uint8Array, remap: ReadonlyMap<E
     }
   }
 
-  // --- SECTION R: apply changed rich values AFTER SECTION V (rich-fields.md §7.3) — same post-structural
-  //     `work` remap, so a rich value for an entity CREATED by this delta lands on the spawned receiver.
-  //     Version-gated + FLAG_HAS_RICH; seeked via richOff (no cursor drift past SECTION V). ---
+  // --- SECTION R: apply changed rich values AFTER SECTION V — same post-structural
+  // `work` remap, so a rich value for an entity CREATED by this delta lands on the spawned receiver.
+  // Version-gated + FLAG_HAS_RICH; seeked via richOff (no cursor drift past SECTION V). ---
   if (version >= RICH_FORMAT_VERSION && (flags & FLAG_HAS_RICH) !== 0 && richOff !== 0) {
     cur.seek(richOff)
     const richArchetypeCount = cur.u32()
@@ -432,7 +432,7 @@ export function applyDelta(world: World, bytes: Uint8Array, remap: ReadonlyMap<E
           const present = cur.u8()
           if (present === 0) continue // unchanged/default this row — receiver keeps its current value
           const json = readJsonBytes(cur)
-          // RF-ROUNDTRIP / G-11: a rich value for an unremapped producer entity is DROPPED, not misapplied.
+          // RF-ROUNDTRIP /: a rich value for an unremapped producer entity is DROPPED, not misapplied.
           const local = work.get(handles[r] as number as EntityHandle)
           if (local === undefined) continue
           s.setRichValue(local, producerCid as ComponentId, fieldIndex, JSON.parse(json) as unknown)

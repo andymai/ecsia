@@ -1,10 +1,10 @@
-// P0.5 Wave-1: user-facing throw messages must not leak internal ticket refs ('Must-Fix #1', 'PA-2',
+// User-facing throw messages must not leak internal ticket refs ('', '',
 // spec section numbers) and should be actionable. This locks in the scrubbed messages.
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, defineTag } from '@ecsia/core'
 
-describe('P0.5 scrubbed, actionable error messages', () => {
+describe('scrubbed, actionable error messages', () => {
   test('unregistered-component error hints at createWorld({ components })', () => {
     const Registered = defineComponent({ x: 'f32' }, { name: 'registered' })
     const Unregistered = defineComponent({ y: 'f32' }, { name: 'unregistered' })

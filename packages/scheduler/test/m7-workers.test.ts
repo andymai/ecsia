@@ -1,4 +1,4 @@
-// M7 smoke: a 2-worker DISJOINT-WRITE wave runs over the shared SAB buffer set and is
+// smoke: a 2-worker DISJOINT-WRITE wave runs over the shared SAB buffer set and is
 // SERIAL-EQUIVALENT to the single-threaded result. Exercises: one-time SAB column transfer, the
 // Atomics wave fence, the reservation Atomics.sub take path layout, per-worker command buffers, and
 // the deterministic worker-index merge.
@@ -46,7 +46,7 @@ afterEach(async () => {
   pool = undefined
 })
 
-describe('M7 worker pool — 2-worker disjoint-write wave (serial-equivalent)', () => {
+describe(' worker pool — 2-worker disjoint-write wave (serial-equivalent)', () => {
   test('two disjoint-write systems run concurrently on two workers and match the serial result', async () => {
     const { world, Health, Mana, handles } = makeWorld()
 
@@ -85,7 +85,7 @@ describe('M7 worker pool — 2-worker disjoint-write wave (serial-equivalent)', 
       1,
     )
 
-    // world.phase must be back to 'serial' after the flush slot (SCH-4 / PHASE-2).
+    // world.phase must be back to 'serial' after the flush slot (PHASE-2).
     expect(world.phase).toBe('serial')
 
     // Serial-equivalent expectation: Health += 1, Mana -= 1 for every entity (the kernels' effect).
@@ -134,7 +134,7 @@ describe('M7 worker pool — 2-worker disjoint-write wave (serial-equivalent)', 
   test('reservation exhaustion mid-wave caps spawns with NO spurious OP_CREATE and no corruption (issue #2)', async () => {
     // The spawner matches 64 Health entities but maxSpawnsPerWave is UNDER-SIZED (16). The worker's
     // takeReserved() returns NO_ENTITY after 16 takes; the worker-entry create override must then emit
-    // NOTHING (command-buffer.md §6.4) — NOT a spurious OP_CREATE 0xffffffff that the apply path would
+    // NOTHING — NOT a spurious OP_CREATE 0xffffffff that the apply path would
     // try to spawnReserved(NO_ENTITY) → record-table corruption. So the wave spawns EXACTLY 16 children,
     // never crashes, and the world stays consistent.
     const { world, Health, Mana, handles } = makeWorld()

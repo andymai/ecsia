@@ -1,22 +1,22 @@
-// M12 cross-package integration fuzz — the milestone headline (build-plan.md M12; public-api.md §11).
+// cross-package integration fuzz — the milestone headline.
 //
 // A single random op-sequence is driven THROUGH THE ecsia UMBRELLA API only (no reaching into a
 // sub-package), so this test is also the proof that the umbrella's re-exports compose into a working
 // whole. The model is a self-checking oracle: alongside the real world we maintain a plain-JS shadow of
 // the intended state, and after every applied op we assert the live world still satisfies ALL of:
 //
-//   I*   (entity/handle integrity) — every handle the model believes alive is `isAlive`; every despawned
-//        handle is dead; a handle is never simultaneously alive-and-dead; `entity(h)` resolves a live ref.
-//   BM-2 (bitmask coherence)       — `world.has(h, C)` agrees with the model's component set for the
-//        entity AND with membership in `world.query(has(C))` (the per-archetype iteration path) — the
-//        point-test bitmask and the archetype signature can never disagree.
-//   P1/P4 (relation presence / no-dangling) — `hasPair`/`subjectsOf`/`targetsOf` agree with the model;
-//        despawning a subject OR target leaves NO live pair referencing the dead entity (cascade).
-//   R-2  (reactivity agreement)    — the `.changed` FILTER (write-log driven) and the `changedSince`
-//        PREDICATE (changeVersion driven) report the SAME set of entities written this frame, via two
-//        disjoint mechanisms reached entirely through the umbrella.
-//   SER  (serialize↔deserialize identity) — at checkpoints, snapshotCopy → load into a fresh world
-//        reproduces the live component values, membership, and relations bit-faithfully (eids remapped).
+// I* (entity/handle integrity) — every handle the model believes alive is `isAlive`; every despawned
+// handle is dead; a handle is never simultaneously alive-and-dead; `entity(h)` resolves a live ref.
+// (bitmask coherence) — `world.has(h, C)` agrees with the model's component set for the
+// entity AND with membership in `world.query(has(C))` (the per-archetype iteration path) — the
+// point-test bitmask and the archetype signature can never disagree.
+// / (relation presence / no-dangling) — `hasPair`/`subjectsOf`/`targetsOf` agree with the model;
+// despawning a subject OR target leaves NO live pair referencing the dead entity (cascade).
+// (reactivity agreement) — the `.changed` FILTER (write-log driven) and the `changedSince`
+// PREDICATE (changeVersion driven) report the SAME set of entities written this frame, via two
+// disjoint mechanisms reached entirely through the umbrella.
+// SER (serialize↔deserialize identity) — at checkpoints, snapshotCopy → load into a fresh world
+// reproduces the live component values, membership, and relations bit-faithfully (eids remapped).
 //
 // Everything below imports from 'ecsia' — that is the integration surface under test.
 
@@ -87,7 +87,7 @@ interface ModelEntity {
   pos: { x: number; y: number }
   vel: { dx: number; dy: number }
   hp: number
-  /** Position fields written THIS FRAME (for the R-2 changed agreement). */
+  /** Position fields written THIS FRAME (for the changed agreement). */
   changedThisFrame: boolean
 }
 interface ModelPair {
@@ -122,7 +122,7 @@ class Model {
     const e = this.ents[idx]
     if (e === undefined || !e.alive) return
     e.alive = false
-    // Cascade: drop every pair where this entity is subject OR target (P4 no-dangling).
+    // Cascade: drop every pair where this entity is subject OR target ( no-dangling).
     this.pairs = this.pairs.filter((p) => p.subject !== idx && p.target !== idx)
   }
   addPairExclusiveAware(p: ModelPair): void {
@@ -193,12 +193,12 @@ function checkIntegrityAndBitmask(kit: Kit, model: Model, handles: (EntityHandle
     if (!e.alive) continue
     // entity(h) resolves a live ref (I*).
     expect(world.entity(h).__handle >>> 0).toBe((h as number) >>> 0)
-    // BM-2: the point-test bitmask agrees with the model's component set.
+    // The point-test bitmask agrees with the model's component set.
     for (const name of COMP_NAMES) {
       expect(world.has(h, defByName(D, name))).toBe(e.comps.has(name))
     }
   }
-  // BM-2 (second leg): for each component, the archetype-iteration query set === the bitmask set ===
+  // (second leg): for each component, the archetype-iteration query set === the bitmask set ===
   // the model set. This is the one that catches a bitmask/signature divergence.
   for (const name of COMP_NAMES) {
     const def = defByName(D, name)
@@ -220,7 +220,7 @@ function checkRelations(kit: Kit, model: Model, handles: (EntityHandle | undefin
     (name === 'ChildOf' ? ChildOf : Likes) as RelationDef<Schema | void>
   const h = (idx: number): EntityHandle => handles[idx] as EntityHandle
 
-  // P1: every model pair is present in the world; P4: no pair references a dead entity.
+  // Every model pair is present in the world;: no pair references a dead entity.
   for (const p of model.pairs) {
     expect(model.ents[p.subject]!.alive).toBe(true)
     expect(model.ents[p.target]!.alive).toBe(true)
@@ -233,7 +233,7 @@ function checkRelations(kit: Kit, model: Model, handles: (EntityHandle | undefin
     expect([...rel.subjectsOf(ChildOf as RelationDef<Schema | void>, h(i))]).toEqual([])
     expect([...rel.subjectsOf(Likes as RelationDef<Schema | void>, h(i))]).toEqual([])
   }
-  // subjectsOf agreement for live targets (relation presence, P1).
+  // subjectsOf agreement for live targets (relation presence).
   const liveTargets = new Set(model.pairs.map((p) => p.target))
   for (const tIdx of liveTargets) {
     for (const name of ['ChildOf', 'Likes'] as const) {
@@ -289,7 +289,7 @@ function checkSerializeRoundTrip(kit: Kit, model: Model, handles: (EntityHandle 
   }
 }
 
-// R-2: across one frame of writes, the .changed FILTER and the changedSince PREDICATE name the SAME set.
+// Across one frame of writes, the .changed FILTER and the changedSince PREDICATE name the SAME set.
 function checkReactivityAgreement(): void {
   const kit = makeKit()
   const { world, D } = kit
@@ -399,15 +399,15 @@ function applyOp(kit: Kit, model: Model, handles: (EntityHandle | undefined)[], 
 // ---------------------------------------------------------------------------
 // The properties.
 // ---------------------------------------------------------------------------
-// PINNED SEED (public-api.md §11 / review): the fuzz must gate the API freeze deterministically — a
-// suite that passes-or-fails on a random fast-check seed cannot. With the relations P4 aliasing bug
+// PINNED SEED (review): the fuzz must gate the API freeze deterministically — a
+// suite that passes-or-fails on a random fast-check seed cannot. With the relations aliasing bug
 // fixed (subjectsOf/hasPair/getPair/targetsOf guard endpoint liveness before stripping the generation),
 // this seed explores the generation-recycling op-shapes that previously surfaced the bug ~1-in-6 runs,
 // now GREEN every run. Keep numRuns high; do NOT lower it to mask a flake.
 const FUZZ_SEED = 0x12c0ffee
 
-describe('M12 — cross-package integration fuzz through the ecsia umbrella', () => {
-  test('random op sequences preserve entity/bitmask/relation invariants at every step (I*, BM-2, P1/P4)', () => {
+describe(' — cross-package integration fuzz through the ecsia umbrella', () => {
+  test('random op sequences preserve entity/bitmask/relation invariants at every step (I*)', () => {
     fc.assert(
       fc.property(fc.array(opArb, { minLength: 1, maxLength: 60 }), (ops) => {
         const kit = makeKit()
@@ -437,7 +437,7 @@ describe('M12 — cross-package integration fuzz through the ecsia umbrella', ()
     )
   })
 
-  test('the .changed FILTER and changedSince PREDICATE agree on the written set (R-2), reached via the umbrella', () => {
+  test('the .changed FILTER and changedSince PREDICATE agree on the written set, reached via the umbrella', () => {
     fc.assert(
       fc.property(fc.constant(null), () => {
         checkReactivityAgreement()
@@ -459,7 +459,7 @@ describe('M12 — cross-package integration fuzz through the ecsia umbrella', ()
     }
 
     // The .changed flavor reads from a LogPointer fixed at attach time — create it BEFORE the writes so
-    // it observes this frame's writes (reactivity.md §5.1).
+    // it observes this frame's writes.
     const changedQ = world.query(read(D.Position)).changed()
     world.frameReset()
     const moveQ = world.query(read(D.Velocity), write(D.Position))

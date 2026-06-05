@@ -1,4 +1,4 @@
-// Edge-case unit coverage for the low-level wire codecs (serialization.md §4.6, §7.1, §9). These hit
+// Edge-case unit coverage for the low-level wire codecs. These hit
 // the per-tag payload encode/decode paths, the element-ordinal validators, and the ReadCursor seek /
 // atEnd accessors — the small but load-bearing primitives the higher serializers build on.
 
@@ -7,7 +7,7 @@ import { WriteCursor, ReadCursor } from '../src/cursor.js'
 import { writePairPayload, readPairPayload } from '../src/payload.js'
 import { elementOrdinal, ordinalToElement, assertPlatformLittleEndian } from '../src/format.js'
 
-describe('payload codec — every scalar tag round-trips losslessly (§4.6)', () => {
+describe('payload codec — every scalar tag round-trips losslessly ', () => {
   it('string, boolean (both polarities), and numeric (incl. negative + fractional) survive', () => {
     const w = new WriteCursor(64)
     const payload = { s: 'héllo', tTrue: true, tFalse: false, n: -3.5, z: 0 }
@@ -50,7 +50,7 @@ describe('payload codec — every scalar tag round-trips losslessly (§4.6)', ()
   })
 })
 
-describe('format — element ordinal validators reject out-of-range (§7.1)', () => {
+describe('format — element ordinal validators reject out-of-range ', () => {
   it('elementOrdinal round-trips every known kind and throws on an unknown kind', () => {
     for (const e of ['u8', 'u8c', 'i8', 'u16', 'i16', 'u32', 'i32', 'f32', 'f64'] as const) {
       expect(ordinalToElement(elementOrdinal(e))).toBe(e)
@@ -68,7 +68,7 @@ describe('format — element ordinal validators reject out-of-range (§7.1)', ()
   })
 })
 
-describe('ReadCursor — seek + atEnd accessors (§9)', () => {
+describe('ReadCursor — seek + atEnd accessors ', () => {
   it('seek repositions the cursor and atEnd reports the buffer boundary', () => {
     const w = new WriteCursor(16)
     w.u32(0xdeadbeef)

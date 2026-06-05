@@ -1,8 +1,8 @@
-// The bench runner (build-plan.md M12: "consolidated cross-library macro-benches"). Runs three
+// The bench runner ("consolidated cross-library macro-benches"). Runs three
 // buckets with tinybench and emits a JSON + console report:
-//   1. iterate-N — Position+Velocity integration: ecsia vs miniplex vs bitECS.
-//   2. relation-query — ecsia wildcard subjectsOf walk (ecsia-only differentiator).
-//   3. parallel-speedup — worker-parallel sim (in-process dispatcher) vs single-thread, wall-clock.
+// 1. iterate-N — Position+Velocity integration: ecsia vs miniplex vs bitECS.
+// 2. relation-query — ecsia wildcard subjectsOf walk (ecsia-only differentiator).
+// 3. parallel-speedup — worker-parallel sim (in-process dispatcher) vs single-thread, wall-clock.
 //
 // Runnable ON DEMAND (pnpm bench:macro), NOT in the default test run — `main()` takes options so the
 // smoke test can drive it at tiny sizes. The full suite uses larger N + more iterations.
@@ -95,7 +95,7 @@ export async function main(opts: BenchOptions = {}): Promise<BenchReport> {
   const relations = collect(relBench)
 
   // --- bucket 3: parallel-speedup (manual wall-clock; updateThreaded is async so it can't be a
-  //     tinybench sync task without a wrapper, and we want a single serial-vs-threaded ratio). ---
+  // tinybench sync task without a wrapper, and we want a single serial-vs-threaded ratio). ---
   const serialMs = await timeMs(() => workerSim({ perGroup: parPerGroup, ticks: parTicks, parallel: false, seed: 99 }))
   const threadedMs = await timeMs(() => workerSim({ perGroup: parPerGroup, ticks: parTicks, parallel: true, seed: 99 }))
   const parallel = { serialMs, threadedMs, speedup: threadedMs > 0 ? serialMs / threadedMs : 0 }

@@ -1,4 +1,4 @@
-// Edge-case coverage for the Reactivity facade (reactivity.md): the WIDE (two-word) packing/unpacking
+// Edge-case coverage for the Reactivity facade: the WIDE (two-word) packing/unpacking
 // paths, mergeCorrals / mergeWorkerWrites, field-granular stamp opt-in, the structural journal seams
 // (trackShapePair / trackShapeSetPayload / drainStructuralSince), the conservative overflow drain in
 // both drainChanged and observerDrain, the maintain-hook-null fast path, and the tick-wrap recovery.

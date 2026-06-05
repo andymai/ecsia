@@ -1,4 +1,4 @@
-// Version gating (rich-fields.md §7.2 / G-2): v1 images load in the v2 reader (range check + per-section
+// Version gating: v1 images load in the v2 reader (range check + per-section
 // gating); the v2 writer emits v2; a too-new image is rejected. v1-image-into-v1-reader and the inverse
 // (v2-into-v1) are one-way: a v1 build rejects v2 — documented, asserted here by simulating a v1 reader's
 // strict check. We synthesize a v1 image by down-converting a v2 snapshot of a rich-FREE world (the v1
@@ -14,7 +14,7 @@ import { SERIALIZATION_FORMAT_VERSION, MIN_SUPPORTED_VERSION } from '../src/form
 const asComps = (...c: ComponentDef<Schema>[]): readonly ComponentDef<Schema>[] => c as readonly ComponentDef<Schema>[]
 
 /** Down-convert a v2 (rich-free) snapshot to the v1 wire layout: drop the byte-32 richSectionOffset word,
- *  set version=1, and shift the byte-24/28 section offsets down by 4. */
+ * set version=1, and shift the byte-24/28 section offsets down by 4. */
 function toV1(v2: Uint8Array): Uint8Array {
   const src = new DataView(v2.buffer, v2.byteOffset, v2.byteLength)
   const registryOff = src.getUint32(24, true)
@@ -31,7 +31,7 @@ function toV1(v2: Uint8Array): Uint8Array {
   return out
 }
 
-describe('M10 RICH — version gating (§7.2 / G-2)', () => {
+describe(' RICH — version gating ', () => {
   it('the v2 writer stamps SERIALIZATION_FORMAT_VERSION = 2', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const src = createWorld({ components: asComps(P) })

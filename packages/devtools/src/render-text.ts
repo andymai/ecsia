@@ -1,4 +1,4 @@
-// Text renderer (P5 §4): a PURE function over the data layer → an aligned, console-friendly string. No
+// Text renderer: a PURE function over the data layer → an aligned, console-friendly string. No
 // world access, no side effects — `renderText(inspectWorld(w))` / `renderText(explainPlan(s))`.
 
 import type { WorldReport, PlanExplain } from './types.js'

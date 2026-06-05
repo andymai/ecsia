@@ -1,4 +1,4 @@
-// Guard for the M2 readonly type-level fixture (m2-readonly.test-d.ts). The fixture is type-only;
+// Guard for the readonly type-level fixture (m2-readonly.test-d.ts). The fixture is type-only;
 // vitest does not type-check it by default, so we drive tsc on it directly under the strict flags.
 //
 // DISCRIMINATION (the load-bearing requirement): a positive compile is not enough — an
@@ -52,7 +52,7 @@ function typecheck(file: string): { ok: boolean; out: string } {
   }
 }
 
-describe('M2 readonly shorthand/read is a compile error (type-system.md §4.2, Must-Fix #2)', () => {
+describe(' readonly shorthand/read is a compile error ', () => {
   test('the fixture type-checks clean: every @ts-expect-error is a real error, write paths compile', () => {
     const { ok, out } = typecheck(fixture)
     expect(ok, out).toBe(true)

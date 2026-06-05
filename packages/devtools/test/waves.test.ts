@@ -1,4 +1,4 @@
-// explainPlan (§3): the WHY of a REAL createScheduler plan. We build a plan with KNOWN conflicts —
+// explainPlan: the WHY of a REAL createScheduler plan. We build a plan with KNOWN conflicts —
 // a writer + reader of the same component (must end up wave-ordered), a write-write pair, and a
 // rich-field system (must be pinned, reason 'rich-fields') — then assert the conflict edges carry the
 // right kind + component name, the wave ordering separates the conflicting systems, and the pin reason.
@@ -133,7 +133,7 @@ describe('explainPlan — the WHY of a real schedule', () => {
   test('inAnyOrderWith collapses two writers into ONE wave but they stay in SEPARATE rounds', () => {
     const { plan, coordOf } = denyHelper()
     expect(plan.waves.length).toBe(1) // deny honored: not serialized across waves
-    // ...yet the write-write hazard keeps them in different rounds of that wave (sequential execution).
+    // yet the write-write hazard keeps them in different rounds of that wave (sequential execution).
     expect(coordOf('X')).not.toBe(coordOf('Y'))
     expect(coordOf('X').startsWith('0:')).toBe(true)
     expect(coordOf('Y').startsWith('0:')).toBe(true)

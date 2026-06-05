@@ -1,13 +1,13 @@
-// P7 benchmark report harness — the single source the performance page reads from.
+// benchmark report harness — the single source the performance page reads from.
 //
 // Runs the published numbers SEQUENTIALLY, one process, no parallelism beyond the worker-pool bench's
 // own OS threads:
-//   1. iterate comparison (tinybench): ecsia .each, ecsia eachChunk, miniplex, bitECS — reusing the
-//      builders in bench/iterate.ts verbatim (NOT reimplemented here).
-//   2. tracked-write cost: one ecsia .each run with a .changed() filter attached — the write-log cost
-//      users opt into. Built from the SAME component/integrator as the iterate row.
-//   3. worker-pool speedup: bench/worker-pool/heavy-pool.ts main() at the bounded config.
-// then writes bench/RESULTS.json (env + raw numbers) AND website/guide/_perf-tables.md (the tables the
+// 1. iterate comparison (tinybench): ecsia .each, ecsia eachChunk, miniplex, bitECS — reusing the
+// builders in bench/iterate.ts verbatim (NOT reimplemented here).
+// 2. tracked-write cost: one ecsia .each run with a .changed() filter attached — the write-log cost
+// users opt into. Built from the SAME component/integrator as the iterate row.
+// 3. worker-pool speedup: bench/worker-pool/heavy-pool.ts main() at the bounded config.
+// then writes bench/RESULTS.json (env + raw numbers) AND website/guide/_perf- (the tables the
 // VitePress page includes). Re-running regenerates both, so the page can never drift from the artifact.
 //
 // TSX-FREE / IMPORT-FROM-BUILT: the bench builders are TypeScript that import `ecsia`. We compile
@@ -27,11 +27,11 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(HERE, '..')
 
 // --- config -----------------------------------------------------------------
-// The BOUNDED production config (DESIGN §1). A tiny smoke override is provided by env so the pipeline
+// The BOUNDED production config (DESIGN ). A tiny smoke override is provided by env so the pipeline
 // can be proven once without paying the full cost — the measurement is run EXACTLY ONCE either way.
 const SMOKE = process.env['BENCH_REPORT_SMOKE'] === '1'
 const CONFIG = SMOKE
-  ? {
+? {
       iterEntities: Number(process.env['BENCH_REPORT_N'] ?? 2000),
       iterReps: 1,
       iterTimeMs: 50,
@@ -40,7 +40,7 @@ const CONFIG = SMOKE
       poolWorkers: parseWorkers(process.env['BENCH_REPORT_WORKERS'] ?? '1,2'),
       poolSeed: 1234,
     }
-  : {
+: {
       iterEntities: 50_000,
       iterReps: 3,
       iterTimeMs: 300,
@@ -83,7 +83,7 @@ async function runIterate(makeEcsiaIter, makeEcsiaCursorIter, makeMiniplexIter, 
   }
 
   const results = []
-  for (let rep = 0; rep < CONFIG.iterReps; rep++) {
+  for (let rep = 0; rep < CONFIG.iterReps; rep) {
     const bench = new Bench({ time: CONFIG.iterTimeMs })
     bench.add('ecsia .each', () => ecsia.step())
     bench.add('ecsia eachChunk', () => cursor.step())
@@ -93,7 +93,7 @@ async function runIterate(makeEcsiaIter, makeEcsiaCursorIter, makeMiniplexIter, 
     for (const t of bench.tasks) {
       const r = t.result
       const meanMs = r?.latency?.mean ?? r?.mean ?? 0
-      const hz = r?.throughput?.mean ?? (meanMs > 0 ? 1000 / meanMs : 0)
+      const hz = r?.throughput?.mean ?? (meanMs > 0? 1000 / meanMs: 0)
       results.push({ name: t.name, hz, meanMs })
     }
   }
@@ -106,7 +106,7 @@ async function runIterate(makeEcsiaIter, makeEcsiaCursorIter, makeMiniplexIter, 
   const order = ['ecsia .each', 'ecsia eachChunk', 'miniplex', 'bitECS']
   return order.map((name) => {
     const r = best.get(name)
-    return { name, hz: r.hz, meanMs: r.meanMs, nsPerEntity: r.meanMs > 0 ? (r.meanMs * 1e6) / n : 0 }
+    return { name, hz: r.hz, meanMs: r.meanMs, nsPerEntity: r.meanMs > 0? (r.meanMs * 1e6) / n: 0 }
   })
 }
 
@@ -118,7 +118,7 @@ function makeTrackedWriteCase(n) {
   const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
   const cap = nextPow2(n)
   const world = createWorld({ components: [Position, Velocity], maxEntities: cap })
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < n; i) {
     const h = world.spawnWith(Position, Velocity)
     const v = world.entity(h).write(Velocity)
     v.dx = 1
@@ -152,8 +152,8 @@ async function runTrackedWrite() {
   const t = bench.tasks[0]
   const r = t.result
   const meanMs = r?.latency?.mean ?? r?.mean ?? 0
-  const hz = r?.throughput?.mean ?? (meanMs > 0 ? 1000 / meanMs : 0)
-  return { name: 'ecsia .each + .changed()', hz, meanMs, nsPerEntity: meanMs > 0 ? (meanMs * 1e6) / n : 0 }
+  const hz = r?.throughput?.mean ?? (meanMs > 0? 1000 / meanMs: 0)
+  return { name: 'ecsia .each + .changed()', hz, meanMs, nsPerEntity: meanMs > 0? (meanMs * 1e6) / n: 0 }
 }
 
 function nextPow2(n) {
@@ -182,19 +182,19 @@ function genTables(report) {
   const bit = report.iterate.find((r) => r.name === 'bitECS')
   const bitHz = bit?.hz ?? 0
   const iterRows = report.iterate.map((r) => {
-    const ratio = bitHz > 0 && r.hz > 0 ? bitHz / r.hz : 0
-    const ratioStr = r.name === 'bitECS' ? '1.00x (baseline)' : `${ratio.toFixed(2)}x`
+    const ratio = bitHz > 0 && r.hz > 0? bitHz / r.hz: 0
+    const ratioStr = r.name === 'bitECS'? '1.00x (baseline)': `${ratio.toFixed(2)}x`
     return `| ${r.name} | ${fmtInt(r.hz)} | ${r.meanMs.toFixed(4)} | ${r.nsPerEntity.toFixed(2)} | ${ratioStr} |`
   })
 
   const tw = report.trackedWrite
-  const twBit = bitHz > 0 && tw.hz > 0 ? bitHz / tw.hz : 0
+  const twBit = bitHz > 0 && tw.hz > 0? bitHz / tw.hz: 0
   const twRow = `| ${tw.name} | ${fmtInt(tw.hz)} | ${tw.meanMs.toFixed(4)} | ${tw.nsPerEntity.toFixed(2)} | ${twBit.toFixed(2)}x |`
 
   const single = report.pool.serialMs
   const poolRows = report.pool.perWorker.map((w) => {
-    const speedup = w.ms > 0 ? single / w.ms : 0
-    const identical = w.checksum === report.pool.serialChecksum ? 'yes' : 'NO'
+    const speedup = w.ms > 0? single / w.ms: 0
+    const identical = w.checksum === report.pool.serialChecksum? 'yes': 'NO'
     return `| ${w.workers} | ${w.ms.toFixed(1)} | ${speedup.toFixed(2)}x | ${identical} |`
   })
 
@@ -202,7 +202,7 @@ function genTables(report) {
   return `<!-- GENERATED by scripts/bench-report.mjs (pnpm bench:report). DO NOT EDIT BY HAND. -->
 <!-- Regenerate with: pnpm bench:report -->
 
-**Environment.** ${e.cpuModel} (${e.cpuCores} logical cores) · Node ${e.node} · ${e.date} · commit \`${e.commit}\`${e.smoke ? ' · _smoke config (not a published number)_' : ''}
+**Environment.** ${e.cpuModel} (${e.cpuCores} logical cores) · Node ${e.node} · ${e.date} · commit \`${e.commit}\`${e.smoke? ' · _smoke config (not a published number)_': ''}
 
 ### Single-thread iteration
 
@@ -282,11 +282,11 @@ async function main() {
   }
 
   const resultsPath = resolve(ROOT, 'bench/RESULTS.json')
-  const tablesPath = resolve(ROOT, 'website/guide/_perf-tables.md')
+  const tablesPath = resolve(ROOT, 'website/guide/_perf-')
   writeFileSync(resultsPath, JSON.stringify(report, null, 2) + '\n')
   writeFileSync(tablesPath, genTables(report))
 
-  console.log(`bench:report wrote:\n  ${resultsPath}\n  ${tablesPath}`)
+  console.log(`bench:report wrote:\n ${resultsPath}\n ${tablesPath}`)
   if (SMOKE) console.log('\n(smoke config — numbers are NOT publishable)')
 }
 

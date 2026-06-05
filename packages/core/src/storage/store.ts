@@ -1,8 +1,8 @@
 // The archetype store: signature interning, the lazy edge graph, swap-pop row alloc/removal, and
-// migration (archetype-storage.md §4, §5, §10). All run serial / main-thread (Must-Fix #1). The
+// migration. All run serial / main-thread. The
 // store owns archetype identity + columns; it CALLS the entity record's commitRecord (the two-word
-// structural commit point, entity-model.md §4.2) and drives the per-entity bitmask delta after each
-// migration commit (§6.3). It never owns the handle codec or the free-list (entity module).
+// structural commit point) and drives the per-entity bitmask delta after each
+// migration commit. It never owns the handle codec or the free-list (entity module).
 
 import type { ComponentId, ComponentDef, Schema } from '@ecsia/schema'
 import type { ArchetypeId } from '@ecsia/schema'
@@ -24,16 +24,16 @@ import { makeColdStore, coldAllocRow, coldRowOf, coldReclaim } from './cold-stor
 import type { ColdStore } from './cold-store.js'
 
 // EMPTY_ARCHETYPE_ID is dense id 0: a REAL archetype (the empty signature), distinct from the
-// ARCHETYPE_NONE record sentinel (§3.1). This module is the normative definer.
+// ARCHETYPE_NONE record sentinel. This module is the normative definer.
 export const EMPTY_ARCHETYPE_ID = 0 as ArchetypeId
 export const ARCHETYPE_NONE = 0xffffffff as ArchetypeId
 
 const INITIAL_ROWS = 64
 
-// ShapeKind ordinals (reactivity.md §4.1 / world.md §9.4) used at the structural commit points.
+// ShapeKind ordinals used at the structural commit points.
 const SHAPE_ADD = 2
 
-/** The two-word record surface the store commits through (entity-model.md §4.2). */
+/** The two-word record surface the store commits through. */
 export interface RecordSurface {
   commitRecord(index: number, archetypeId: number, row: number): void
   archetypeIdOf(index: number): number
@@ -46,22 +46,22 @@ export interface StorageDeps {
   readonly bitmask: Bitmask
   readonly record: RecordSurface
   readonly maxHotArchetypes: number
-  /** Bitmask/sigWords stride = ceil(N/32) (CANON C4). */
+  /** Bitmask/sigWords stride = ceil(N/32) ( C4). */
   readonly stride: number
   /** Mint ceiling; clamps a new column's initial reservation so it never exceeds the world cap. */
   readonly maxEntities: number
-  /** Removal-reactivity hook for components in fromArch \ toArch (M5 fills the body). */
+  /** Removal-reactivity hook for components in fromArch \ toArch ( fills the body). */
   enqueueRemoveLog(index: number, c: ComponentId): void
   /**
-   * Shape-log hook (reactivity.md §4.2): emit a structural entry at the commit point. Optional so a
-   * query-less harness (M3 unit tests) constructs the store directly. M5 wires it to reactivity.
+   * Shape-log hook: emit a structural entry at the commit point. Optional so a
+   * query-less harness (unit tests) constructs the store directly; the world wires it to reactivity.
    */
   trackShape?(index: number, c: ComponentId, kind: number): void
   /**
-   * Single-entity incremental query maintenance (queries.md §6.1): called once per component in the
+   * Single-entity incremental query maintenance: called once per component in the
    * symmetric difference of a migration AFTER the bitmask delta is applied, so matchesEntityNow reads
-   * a coherent shape. Optional so a query-less harness (M3 unit tests) constructs the store directly.
-   * M5 re-routes this through reactivity's MAINTAIN_STRUCTURAL shape-log drain.
+   * a coherent shape. Optional so a query-less harness ( unit tests) constructs the store directly.
+   * re-routes this through reactivity's MAINTAIN_STRUCTURAL shape-log drain.
    */
   maintainEntity?(index: number, c: ComponentId): void
   tick(): number
@@ -76,7 +76,7 @@ export class ArchetypeStore {
   #hotCount = 0
   readonly cold: ColdStore = makeColdStore()
   readonly #initialRows: number
-  /** archetypeCreated subscribers (queries.md §5.3): tested against each new archetype once. */
+  /** archetypeCreated subscribers: tested against each new archetype once. */
   readonly #onCreated: Array<(arch: Archetype) => void> = []
 
   constructor(deps: StorageDeps) {
@@ -96,7 +96,7 @@ export class ArchetypeStore {
     return this.byId[EMPTY_ARCHETYPE_ID as number] as Archetype
   }
 
-  // --- §5.1 lookup-or-create (signature interning) ---------------------------
+  // --- (signature interning) ---------------------------
 
   getOrCreateArchetype(sig: Signature): Archetype {
     const h = sigHash(sig)
@@ -127,18 +127,18 @@ export class ArchetypeStore {
       this.#byHash.set(hash, bucket)
     }
     bucket.push(arch)
-    // queries.md §5.3: each registered query AND-tests this new archetype's sigWords once and, on
+    // Each registered query AND-tests this new archetype's sigWords once and, on
     // match, appends it to its matchingArchetypes. Emitted AFTER the archetype is fully interned.
     for (const fn of this.#onCreated) fn(arch)
     return arch
   }
 
-  /** Subscribe to archetypeCreated (queries.md §5.3 / world.md §7 step 4 hook). Serial-phase only. */
+  /** Subscribe to archetypeCreated. Serial-phase only. */
   onArchetypeCreated(fn: (arch: Archetype) => void): void {
     this.#onCreated.push(fn)
   }
 
-  // --- §5.4 lazy edge graph (both directions cached on a miss) ---------------
+  // --- (both directions cached on a miss) ---------------
 
   edgeAdd(arch: Archetype, c: ComponentId): Archetype {
     const e = arch.edges.get(c)
@@ -169,7 +169,7 @@ export class ArchetypeStore {
     e[dir] = target
   }
 
-  // --- §4 row alloc / swap-pop removal ---------------------------------------
+  // --- / swap-pop removal ---------------------------------------
 
   #ensureRowCapacity(arch: Archetype, need: number): void {
     const rowsColumn = arch.rowsColumn
@@ -185,7 +185,7 @@ export class ArchetypeStore {
     }
   }
 
-  /** Reserve a row in `arch` for `handle`; records the occupant. Caller writes column values (§4.2). */
+  /** Reserve a row in `arch` for `handle`; records the occupant. Caller writes column values. */
   allocRow(arch: Archetype, handle: number): number {
     if (arch.cold) return this.#coldAllocRow(arch, handle)
     this.#ensureRowCapacity(arch, arch.count + 1)
@@ -223,9 +223,9 @@ export class ArchetypeStore {
 
   /**
    * Swap-pop removal: move the last live row into `row`, then fix the moved sibling's record via
-   * the callback. `fixSibling` fires exactly once iff row !== count-1 (ROW-1 / I6). Serial only.
+   * the callback. `fixSibling` fires exactly once iff row !== count-1 (I6). Serial only.
    *
-   * §7.4 deferred row reclaim: when `relocateDying` is supplied (a remove-observer subscribes to a
+   *: when `relocateDying` is supplied (a remove-observer subscribes to a
    * held component), the dying entity's column data must survive intact until after observerDrain so
    * an onRemove handler can read its last value. Instead of a one-way overwrite of the dying row, we
    * SWAP it with the last live row: the sibling's data lands in `row` (record fixed), and the dying
@@ -241,7 +241,7 @@ export class ArchetypeStore {
     relocateDying?: (newRow: number) => void,
   ): void {
     if (arch.cold) {
-      // Cold "row" is the entity index (the record row word for cold entities, §10.3). Reclaim its
+      // Cold "row" is the entity index (the record row word for cold entities). Reclaim its
       // overflow rows so blocks don't leak and stale (index,componentId) mappings can't survive a
       // generational index reuse. Cold blocks are keyed per (entityIndex, componentId), so the dying
       // entity's values are addressed by its own index and survive the count decrement regardless —
@@ -273,9 +273,9 @@ export class ArchetypeStore {
     arch.count = last
   }
 
-  // --- §5.5 migration --------------------------------------------------------
+  // ---
 
-  /** Move one entity from fromArch to toArch: K-shared copy + init-added + shuffle-pop + commit (§5.5). */
+  /** Move one entity from fromArch to toArch: K-shared copy + init-added + shuffle-pop + commit. */
   migrate(handle: number, fromArch: Archetype, toArch: Archetype): number {
     const index = this.#deps.handleIndex(handle)
     const oldRow = this.#deps.record.rowOf(index)
@@ -293,10 +293,10 @@ export class ArchetypeStore {
 
     const newRow = this.allocRow(toArch, handle)
 
-    // Shared-column copy (§5.5 step 2): for every column-bearing component in the DESTINATION, copy
+    // Shared-column copy: for every column-bearing component in the DESTINATION, copy
     // its field values from the source (hot row OR cold block) or initialize if newly added. This
     // holds in all four hot/cold combinations — the column-copy is NOT skipped for cold targets,
-    // which would silently drop shared field data (MIG-1 / §5.5 no-field-drop contract).
+    // which would silently drop shared field data.
     for (let i = 0; i < toArch.signature.length; i++) {
       const c = toArch.signature[i] as number as ComponentId
       const dst = this.#fieldLocation(toArch, c, index, newRow)
@@ -338,7 +338,7 @@ export class ArchetypeStore {
     this.#deps.record.commitRecord(index, toArch.id as number, newRow)
     this.#deps.bitmask.bitmaskApplyDelta(index, fromArch.signature, toArch.signature)
 
-    // reactivity.md §4.2/§4.3: one shape-log Add per component in toArch \ fromArch (NOT per copied
+    // /: one shape-log Add per component in toArch \ fromArch (NOT per copied
     // column). Removes were emitted via enqueueRemoveLog above, before the source row was overwritten.
     const trackShape = this.#deps.trackShape
     if (trackShape !== undefined) {
@@ -348,7 +348,7 @@ export class ArchetypeStore {
       }
     }
 
-    // §6.1 single-entity incremental query maintenance: re-test this one entity against the queries
+    // Re-test this one entity against the queries
     // referencing each component in the symmetric difference (added OR removed). Runs AFTER the
     // bitmask delta so matchesEntityNow sees the coherent post-migration shape.
     const maintain = this.#deps.maintainEntity
@@ -400,15 +400,15 @@ export class ArchetypeStore {
         const base = row * col.layout.stride
         for (let a = 0; a < col.layout.stride; a++) col.view[base + a] = fill
       }
-      // else: the column's zero-init already holds the intrinsic default (DEF-1).
+      // else: the column's zero-init already holds the intrinsic default.
       layoutIndex += 1
       fieldIndex += 1
     }
   }
 
-  // --- §5.6 / §5.6a structural change entry points ---------------------------
+  // --- /
 
-  /** entity.add(C): single-id add via the cached edge (§5.4, §5.6a single-ID form). */
+  /** entity.add(C): single-id add via the cached edge. */
   migrateAdding(handle: number, c: ComponentId): number {
     const index = this.#deps.handleIndex(handle)
     const fromArch = this.byId[this.#deps.record.archetypeIdOf(index)] as Archetype
@@ -426,7 +426,7 @@ export class ArchetypeStore {
     return this.migrate(handle, fromArch, toArch)
   }
 
-  /** Multi-id atomic add — ONE target signature, one migration (relations P1 atomicity, §5.6a). */
+  /** Multi-id atomic add — ONE target signature, one migration (relations atomicity). */
   migrateAddingMany(handle: number, addIds: readonly ComponentId[]): number {
     const index = this.#deps.handleIndex(handle)
     const fromArch = this.byId[this.#deps.record.archetypeIdOf(index)] as Archetype
@@ -453,7 +453,7 @@ export class ArchetypeStore {
     return this.migrate(handle, fromArch, toArch)
   }
 
-  /** spawnWith fast path: compute the target signature up front and migrate ONCE (§5.6). */
+  /** spawnWith fast path: compute the target signature up front and migrate ONCE. */
   spawnWith(handle: number, defs: readonly ComponentDef<Schema>[]): number {
     const ids: number[] = []
     for (const d of defs) ids.push((d as ComponentRuntime<Schema>).id as number)
@@ -461,9 +461,9 @@ export class ArchetypeStore {
     return this.migrate(handle, this.emptyArchetype, toArch)
   }
 
-  // --- §10.4 explicit promotion ----------------------------------------------
+  // ---
 
-  /** Promote a cold archetype (by signature) to hot: allocate columns, migrate its rows out (§10.4). */
+  /** Promote a cold archetype (by signature) to hot: allocate columns, migrate its rows out. */
   warm(sig: Signature): void {
     const arch = this.getOrCreateArchetype(sig)
     if (!arch.cold) return
@@ -486,7 +486,7 @@ export class ArchetypeStore {
     this.#hotCount += 1
 
     // Migrate each resident out of the overflow store into a contiguous hot row, copying field
-    // values from the cold blocks, fixing its record, then reclaiming its cold rows (§10.4).
+    // values from the cold blocks, fixing its record, then reclaiming its cold rows.
     for (const entityIndex of residents) {
       const newRow = arch.count
       this.#ensureRowCapacity(arch, newRow + 1)
@@ -513,7 +513,7 @@ export class ArchetypeStore {
   }
 }
 
-/** Copy one row's stride elements from srcRow to dstRow within the SAME column (§4.4). */
+/** Copy one row's stride elements from srcRow to dstRow within the SAME column. */
 function copyRowWithinColumn(col: Column, srcRow: number, dstRow: number): void {
   const s = col.layout.stride
   const v = col.view
@@ -524,7 +524,7 @@ function copyRowWithinColumn(col: Column, srcRow: number, dstRow: number): void 
   )
 }
 
-/** Swap two rows' stride elements within the same column (§7.4 deferred reclaim). */
+/** Swap two rows' stride elements within the same column. */
 function swapRowWithinColumn(col: Column, a: number, b: number): void {
   const s = col.layout.stride
   const v = col.view as unknown as { [i: number]: number }
@@ -537,7 +537,7 @@ function swapRowWithinColumn(col: Column, a: number, b: number): void {
   }
 }
 
-/** Copy one row from a source column to a same-layout destination column (cross-archetype, §4.4). */
+/** Copy one row from a source column to a same-layout destination column (cross-archetype). */
 function copyRowAcrossColumns(src: Column, srcRow: number, dst: Column, dstRow: number): void {
   const s = src.layout.stride
   dst.view.set(

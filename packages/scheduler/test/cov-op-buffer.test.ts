@@ -1,11 +1,11 @@
 // Coverage: commands/op.ts recordLen (REMOVE=3, ADD_PAIR variable len, corrupt-opcode throw) and
-// commands/buffer.ts ensureWords growth from a zero-length view (the `newLen === 0 ? need` branch).
+// commands/buffer.ts ensureWords growth from a zero-length view (the `newLen === 0? need` branch).
 
 import { describe, expect, test } from 'vitest'
 import { recordLen, Op, makeCommandBuffer, ensureWords } from '../src/internal.js'
 import type { CommandBuffer } from '../src/internal.js'
 
-describe('op.ts: recordLen is self-describing per opcode (§4.6)', () => {
+describe('op.ts: recordLen is self-describing per opcode ', () => {
   test('fixed-arity ops report their constant length', () => {
     const w = new Uint32Array(8)
     w[0] = Op.CREATE
@@ -33,7 +33,7 @@ describe('op.ts: recordLen is self-describing per opcode (§4.6)', () => {
     w[0] = Op.ADD_PAIR
     w[4] = 3 // payloadWordCount
     expect(recordLen(w, 0)).toBe(8)
-    w[4] = 0 // deferred (M8) tag pair
+    w[4] = 0 // deferred tag pair
     expect(recordLen(w, 0)).toBe(5)
   })
 
@@ -77,7 +77,7 @@ describe('buffer.ts: ensureWords growth (branch 95)', () => {
       overflowWarned: false,
     }
     expect(ensureWords(cb, 5)).toBe(true)
-    // newLen started at 0 → the loop took the `newLen === 0 ? need` arm rather than `0 * 2` (stuck at 0).
+    // newLen started at 0 → the loop took the `newLen === 0? need` arm rather than `0 * 2` (stuck at 0).
     expect(cb.words.length).toBeGreaterThanOrEqual(5)
   })
 

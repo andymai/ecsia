@@ -6,10 +6,10 @@ import { describe, expect, test } from 'vitest'
 const here = dirname(fileURLToPath(import.meta.url))
 const fixture = resolve(here, 'm4-query-inference.test-d.ts')
 
-// Gate the query DSL inference obligations (type-system.md §5/§6, queries.md §9.1): the fixture must
+// Gate the query DSL inference obligations: the fixture must
 // type-check under the project's strict flags. Type-only — drive tsc on it directly. Every
 // @ts-expect-error is a real error (the read/write split, has/optional contributions, the arity cap).
-describe('query DSL inference contracts (type-system.md §5/§6)', () => {
+describe('query DSL inference contracts ', () => {
   test('the query inference fixture type-checks clean', () => {
     let ok = true
     let out = ''

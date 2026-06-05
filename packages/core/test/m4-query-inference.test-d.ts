@@ -1,4 +1,4 @@
-// Compile-only query DSL inference obligations (type-system.md §5/§6, queries.md §9.1). Type-checked
+// Compile-only query DSL inference obligations. Type-checked
 // standalone (see the runtime guard test that compiles this file); no assertions run.
 //
 // NOTE on component naming: the element prop name is `CompKey<C>` = the def's `name` LITERAL.
@@ -8,7 +8,7 @@
 // drives an actual `defineComponent` call and pins that contract end-to-end (value type preserved,
 // key precise, NOT any). The hand-typed literal-name defs above exercise the same machinery the
 // builder now emits. The arity cap + LooseQueryElement degradation + the read/write/optional fold
-// are the other load-bearing M4 obligations.
+// are the other load-bearing obligations.
 
 import type { ComponentDef, EntityHandle, Query, QueryElement, ReadOf, WriteOf, Has, HasWrite } from '@ecsia/core'
 import type { LooseQueryElement, ReadTerm, WriteTerm, HasTerm, OptionalTerm, WorldQuery } from '../src/internal.js'
@@ -20,7 +20,7 @@ declare const Velocity: ComponentDef<{ x: 'f32'; y: 'f32' }> & { name: 'velocity
 declare const Health: ComponentDef<{ current: 'i32' }> & { name: 'health' }
 declare const Alive: ComponentDef<Record<never, never>> & { name: 'alive' }
 
-// §5.3 the fold: read → Readonly prop; write → mutable prop; has → no prop; optional → | undefined.
+// Read → Readonly prop; write → mutable prop; has → no prop; optional → | undefined.
 type Terms = [
   ReadTerm<typeof Position>,
   WriteTerm<typeof Velocity>,
@@ -50,7 +50,7 @@ const _t4 = without(Health)
 const _t5 = optional(Health)
 void [_t1, _t2, _t3, _t4, _t5]
 
-// ── REAL-DEF NAMED KEY (name-literal capture, type-system.md §3 CompKey / §5.2) ──────────────────
+// ── REAL-DEF NAMED KEY (name-literal capture) ──────────────────
 // Drive an ACTUAL `defineComponent` call (not a hand-typed literal-name def) and assert the named
 // shorthand surface holds against real public-API output: the element key is the captured name
 // literal ('p'/'vel'), the value type is the inferred Read/Write view (not widened, not any), and a
@@ -72,7 +72,7 @@ w.query(read(realPos), write(realVel)).each((el) => {
   void _px
 })
 
-// §6 arity cap: an 8-term query is fully inferred; the element exposes `handle`.
+// An 8-term query is fully inferred; the element exposes `handle`.
 const q8 = w.query(
   read(realPos),
   read(realPos),

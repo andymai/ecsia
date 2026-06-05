@@ -107,7 +107,7 @@ function compiled(over: Partial<CompiledQuery>): CompiledQuery {
   } as CompiledQuery
 }
 
-describe('LiveQuery #passesRowFilters (exclusive specific-target column filter, §10.2a)', () => {
+describe('LiveQuery #passesRowFilters (exclusive specific-target column filter)', () => {
   test('each() yields only rows whose target column equals the filter target', () => {
     const h = harness(2)
     const R = 1 as ComponentId // presence component (its eid column carries the target)

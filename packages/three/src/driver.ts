@@ -1,4 +1,4 @@
-// Frame driver (P4 deliverable 4): a tiny loop that advances the world and renders. In a browser it
+// Frame driver ( deliverable 4): a tiny loop that advances the world and renders. In a browser it
 // runs on requestAnimationFrame; in Node/tests there is no rAF, so `tick(dt)` is driven manually. The
 // driver owns NO ECS knowledge — it just calls `update(dt)` (a scheduler's `.update` or any world-step
 // fn) then `render()`.

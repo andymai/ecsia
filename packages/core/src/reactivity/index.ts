@@ -1,8 +1,8 @@
-// @ecsia/core reactivity subsystem (reactivity.md). Owns the write log + shape log (the ring-log
+// @ecsia/core reactivity subsystem. Owns the write log + shape log (the ring-log
 // infrastructure driving the Changed query filter with no per-field atomic), the per-row
 // changeVersion stamps (the public .changed predicate + delta serializer), and the deferred
-// observers. Wired by the world: fills the M2 trackWrite stub, the M3 enqueueRemoveLog stub, and the
-// M4 LiveQuery.changed()/eachChanged() stubs.
+// observers. Wired by the world: fills the trackWrite stub, the enqueueRemoveLog stub, and the
+// LiveQuery.changed()/eachChanged() stubs.
 
 export { Reactivity } from './reactivity.js'
 export type { ReactivityDeps } from './reactivity.js'

@@ -1,5 +1,5 @@
 // Coverage: commands/fields.ts — the field-word codec for OP_ADD/OP_SET_PAYLOAD payloads
-// (command-buffer.md §4.3/§4.4). Round-trips EVERY ElementKind through encode→decode so the apply
+// Round-trips EVERY ElementKind through encode→decode so the apply
 // path stores exactly what a main-thread setter would: f64 two-word split, vec stride, and the
 // integer/bool/eid/staticString one-word widening (incl. the signed i32 reinterpret boundary).
 
@@ -61,7 +61,7 @@ describe('fields.ts codec round-trips every ElementKind (apply stores exactly th
     expect(roundTrip(C, { b: false })).toEqual({ b: false })
   })
 
-  test('eid widens a full u32 handle and maps -1 <-> null (C-2 sentinel boundary)', () => {
+  test('eid widens a full u32 handle and maps -1 <-> null ( sentinel boundary)', () => {
     const C = defineComponent({ target: 'eid' }, { name: 'cov_eid' }) as ComponentDef<Schema>
     expect(buildFieldCodec(C).totalWords).toBe(1)
     // A handle with the generation high bits set exceeds 2^31 — must survive the unsigned widen.

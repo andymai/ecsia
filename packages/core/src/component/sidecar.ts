@@ -1,4 +1,4 @@
-// The entity-index-keyed dense sidecar store for rich fields (rich-fields.md §4). One dense JS value
+// The entity-index-keyed dense sidecar store for rich fields. One dense JS value
 // array + a parallel generation-stamp array per (componentId, fieldIndex), keyed by HANDLE INDEX (NOT
 // archetype row). This is the storage for 'string' and object<T> fields.
 //
@@ -6,7 +6,7 @@
 // entity index is invariant across archetype migrations — so RF-MIGRATE (zero migration carry) is
 // structural, the same way changeVersion follows an entity across relocations. The generation stamp
 // closes RF-HYGIENE: a recycled index never leaks the prior tenant's value (a stale slot reads the
-// field default). Main-thread-only by construction (rich components are restrictedToMainThread, §6).
+// field default). Main-thread-only by construction (rich components are restrictedToMainThread).
 
 const FIELD_BITS = 8 // up to 256 fields per component; schema arity is far below.
 
@@ -28,7 +28,7 @@ interface SidecarColumn {
   readonly kind: RichKind
 }
 
-/** A deferred-clear entry for the R-8 observer window (rich-fields.md §4.3a). */
+/** A deferred-clear entry for the observer window. */
 interface PendingClear {
   readonly index: number
   /** key → the dying entity's last value, readable during observerDrain regardless of generation. */
@@ -75,7 +75,7 @@ export class SidecarStore {
 
   /**
    * Whether entity `index` has a WRITTEN value at `key` for its current generation (vs the lazy default).
-   * The serializer uses this to emit only present rich values (rich-fields.md §7.2 — default/empty slots
+   * The serializer uses this to emit only present rich values (empty slots
    * are skipped and re-defaulted on the receiver). A recycled index reads as not-present (RF-HYGIENE).
    */
   isPresent(key: SidecarKey, index: number, gen: number): boolean {
@@ -96,7 +96,7 @@ export class SidecarStore {
   }
 
   /**
-   * Observer-window read (rich-fields.md §4.3a): during an onRemove/preDespawn drain the dying entity's
+   * Observer-window read: during an onRemove/preDespawn drain the dying entity's
    * generation has already been bumped, so a normal generation-guarded read would return the default.
    * If a pending-clear entry exists for `index`, return its stashed value regardless of generation; else
    * fall back to the generation-guarded read.
@@ -108,7 +108,7 @@ export class SidecarStore {
   }
 
   /**
-   * Despawn handler (rich-fields.md §4.3 / §4.3a). When no rich-carrying held component has a
+   * Despawn handler. When no rich-carrying held component has a
    * remove-observer, clear data[index] eagerly so the JS reference is released for GC. When one does,
    * DEFER: stash the dying values so an onRemove handler can read them during the drain (RF-REMOVE-READ),
    * then flush at the post-observer point (flushPending).
@@ -141,7 +141,7 @@ export class SidecarStore {
   }
 
   /**
-   * Flush the deferred-clear window (rich-fields.md §4.3a). Called at the post-observerDrain serial slot,
+   * Flush the deferred-clear window. Called at the post-observerDrain serial slot,
    * mirroring where storage's deferred row reclaim is finalized — after onRemove handlers have read the
    * dying values, before the index is re-minted for a new tenant.
    */

@@ -1,5 +1,5 @@
 // Coverage: commands/apply.ts — the deterministic merge + validate-then-apply edge cases
-// (command-buffer.md §8/§9). Hand-built command buffers drive each branch precisely: drop-if-dead,
+// Hand-built command buffers drive each branch precisely: drop-if-dead,
 // the NO_ENTITY OP_CREATE guard, drain removes-before-adds, SET_PAYLOAD fold-vs-drain-vs-absent,
 // ADD_PAIR wired-vs-unwired, and the corrupt-opcode throw.
 
@@ -155,7 +155,7 @@ describe('apply.ts: drop-if-dead gate (validateSubject warns) across ops', () =>
     expect(world.has(e, Armor)).toBe(true) // unrelated component untouched
   })
 
-  test('a remove-then-add of distinct ids on one entity lands both (removes-before-adds, §9.3)', () => {
+  test('a remove-then-add of distinct ids on one entity lands both (removes-before-adds)', () => {
     const { world, Health, Armor, codecById } = kit()
     const e = world.spawn()
     world.add(e, Health, { hp: 7 })
@@ -227,7 +227,7 @@ describe('apply.ts: SET_PAYLOAD edge cases (lines 197-202, branches 197/201)', (
   })
 })
 
-describe('apply.ts: CREATE then ADD/SET in same flush treats the reserved handle as alive (§8.5)', () => {
+describe('apply.ts: CREATE then ADD/SET in same flush treats the reserved handle as alive ', () => {
   test('OP_CREATE makes a reserved handle alive so a following OP_ADD applies (newlyCreated whitelist)', () => {
     const { world, Health, codecById } = kit()
     const block = world.reserveEntityBlock(0, 1)
@@ -268,10 +268,10 @@ describe('apply.ts: relation ops (ADD_PAIR/REMOVE_PAIR, lines 218-227, 235-238)'
     const warns: string[] = []
     const cb = new Rec().addPair(s, 0, t).buffer()
     flushAll(worldApplyOf(world, codecById, warns, { withAddPair: true, addPairCalls: calls }), [cb])
-    expect(calls).toEqual([{ s, rid: 0, t, payload: undefined }]) // payload deferred (M8)
+    expect(calls).toEqual([{ s, rid: 0, t, payload: undefined }]) // payload deferred
   })
 
-  test('ADD_PAIR drops if the TARGET is dead (both subject and target gated, §8.3)', () => {
+  test('ADD_PAIR drops if the TARGET is dead (both subject and target gated)', () => {
     const { world, codecById } = kit()
     const s = world.spawn() as number
     const warns: string[] = []
@@ -330,7 +330,7 @@ describe('apply.ts: corrupt opcode throws (lines 241-242, branch 241)', () => {
   })
 })
 
-describe('apply.ts: deterministic merge order across workers (§7.2)', () => {
+describe('apply.ts: deterministic merge order across workers ', () => {
   test('buffers are applied in ascending workerIndex regardless of array order', () => {
     const { world, Health, codecById } = kit()
     const e = world.spawn() as number

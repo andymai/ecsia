@@ -1,4 +1,4 @@
-// @ecsia/three — the THREE.js bridge (P4). An OPT-IN package: it is deliberately NOT re-exported from
+// @ecsia/three — the THREE.js bridge. An OPT-IN package: it is deliberately NOT re-exported from
 // the ecsia umbrella. The umbrella is the renderer-agnostic core cohort; pulling `three` (a large
 // peer dependency with WebGL/DOM assumptions) into everyone's bundle would be wrong. A game that wants
 // the bridge installs `three` + `@ecsia/three` explicitly. This package depends ONLY on @ecsia/core +
@@ -7,10 +7,10 @@
 //
 // What it provides, all over the PUBLIC @ecsia/core surface (world.query/observe/entity, the query DSL,
 // onRemove, the eachChunk SoA fast path):
-//   • createThreeBindings — EntityHandle → THREE.Object3D registry; OPT-IN auto-unbind via autoUnbindOn(anchor) + sweep()
-//   • makeTransformSyncSystem — copy transform columns → bound Object3D each frame (read-only system)
-//   • makeInstancedSyncSystem — write a THREE.InstancedMesh's instanceMatrix from columns
-//   • createThreeDriver — rAF loop (browser) / manual .tick(dt) (Node), with a fixed-timestep option
+// • createThreeBindings — EntityHandle → THREE.Object3D registry; OPT-IN auto-unbind via autoUnbindOn(anchor) + sweep()
+// • makeTransformSyncSystem — copy transform columns → bound Object3D each frame (read-only system)
+// • makeInstancedSyncSystem — write a THREE.InstancedMesh's instanceMatrix from columns
+// • createThreeDriver — rAF loop (browser) / manual .tick(dt) (Node), with a fixed-timestep option
 
 export { createThreeBindings } from './bindings.js'
 export type { ThreeBindings } from './bindings.js'

@@ -1,4 +1,4 @@
-// M7 — SAB command-buffer overflow protocol (command-buffer.md §3.3/§3.5; review issue #3). A FIXED
+// — SAB command-buffer overflow protocol (review issue #3). A FIXED
 // (SAB-backed) buffer MUST NOT reassign `words` off the shared backing on overflow: the main thread
 // reads the same SAB in place, so a worker-private grow would (a) hide overflow records and (b) push
 // `head` past the SAB → NaN-opcode crash in the apply decode. Instead the worker CAPS encoding, sets

@@ -1,4 +1,4 @@
-// ecsia cross-runtime smoke (P3 runtime lane). Exercises the BUILT dist umbrella
+// ecsia cross-runtime smoke ( runtime lane). Exercises the BUILT dist umbrella
 // (packages/ecsia/dist) as plain ESM — NO test framework — so the exact same file runs identically
 // under `node`, `bun`, and `deno run --allow-read`. Every section prints a single PASS/FAIL line; the
 // process exits 0 iff every section passed, nonzero on the first assertion failure in any section.
@@ -399,7 +399,7 @@ await asyncSection('OPTIONAL worker_threads pool round-trip', async () => {
     return 'skip'
   }
 
-  // The built worker-entry + the committed M7 kernel fixture (the same real-pool path the unit suite's
+  // The built worker-entry + the committed kernel fixture (the same real-pool path the unit suite's
   // worker-pool smoke uses). Resolved relative to THIS script so it works from any cwd. node:url is
   // imported HERE (not at module top) so the core sections carry zero node: dependency and run on any
   // runtime; this section is Node-only and already gated above.

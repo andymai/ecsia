@@ -1,6 +1,6 @@
 // Coverage: executor/guards.ts — the dev-mode scoped-query access guard. Exercises every term role
 // (write/read/optional/with/without/bare/relation), the unregistered-id skip, and the two warning
-// paths (undeclared write, undeclared read) plus production pass-through. scheduler.md §6.6, Must-Fix #2.
+// paths (undeclared write, undeclared read) plus production pass-through.,.
 
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { makeScopedQuery } from '../src/internal.js'
@@ -49,7 +49,7 @@ describe('guards.ts: term-role resolution (lines 14-26, branches 13/16/19-21)', 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { world } = fakeWorld()
     const C = comp(7, 'Health')
-    // C is in the READ set but not the WRITE set → a write() term is still flagged (Must-Fix #2).
+    // C is in the READ set but not the WRITE set → a write() term is still flagged.
     const scoped = makeScopedQuery(world, box('writer', [7], []), true)
     scoped({ __term: 'write', c: C } as unknown as QueryTerm)
     expect(warnSpy).toHaveBeenCalledTimes(1)

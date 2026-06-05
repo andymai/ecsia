@@ -1,4 +1,4 @@
-// M10 HIGH gap (serialization.md §6.2/§6.4): the delta carries an INTERLEAVED structural section sourced
+// HIGH gap: the delta carries an INTERLEAVED structural section sourced
 // from the persistent since-T structural journal. A delta since T applied to a stale mirror must
 // reconstruct STRUCTURAL changes — spawn, despawn, component add/remove, relation add — not just values.
 
@@ -13,7 +13,7 @@ import {
   applyDelta,
 } from '../src/index.js'
 
-describe('M10 delta — interleaved STRUCTURAL-since-T section (§6.2 / §6.4)', () => {
+describe(' delta — interleaved STRUCTURAL-since-T section ', () => {
   it('reconstructs a SPAWN since T on the stale mirror', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const src = createWorld({ components: [P as ComponentDef<Schema>] })

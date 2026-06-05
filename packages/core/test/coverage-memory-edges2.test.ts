@@ -26,7 +26,7 @@ const caps = (backing: RuntimeCapabilities['backing']): RuntimeCapabilities =>
 
 const newBuffers = (): Buffers => new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 20 })
 
-describe('layout — tokenToColumnLayout / fieldToColumnLayout branches (memory-buffers.md §3)', () => {
+describe('layout — tokenToColumnLayout / fieldToColumnLayout branches ', () => {
   test('an unknown scalar token throws (layout.ts:127)', () => {
     expect(() => tokenToColumnLayout('nope' as unknown as FieldToken)).toThrow(/unknown scalar token/)
   })
@@ -117,7 +117,7 @@ describe('Buffers.grow — primary path (buffers.ts:290-303)', () => {
     const before = col.view
     ;(before as Uint32Array)[3] = 0xfeed
     b.grow(col, 64)
-    // Resizable in place: same backing object, view auto-widened, data preserved (the §7.2 path).
+    // Resizable in place: same backing object, view auto-widened, data preserved.
     expect(col.view).toBe(before)
     expect((col.view as Uint32Array)[3]).toBe(0xfeed)
     expect((col.view as Uint32Array).length).toBeGreaterThanOrEqual(64)

@@ -1,23 +1,23 @@
-// M10 serialization DISCRIMINATING property + structural suite (serialization.md §11 invariants).
+// serialization DISCRIMINATING property + structural suite.
 //
 // Each property is designed to FAIL if the locked design regresses — they are not tautologies over
 // the implementation. Deep comparison is done through the PUBLIC query / getPair surface only.
 //
-//   S-4  round-trip IDENTITY: deserialize(serialize(world)) ≡ world over the entity SET, component
-//        VALUES, and RELATIONS — for random worlds, compared via world.query(...).each + getPair.
-//   S-3  delta SOUNDNESS: applying a delta over a random tick range equals REPLAYING the writes; and
-//        the delta path allocates NO shadow memory (it is version-stamp driven — instrumented by
-//        asserting the changed-row set the serializer emits === world.changedRows, never a value diff).
-//   S-5  remap TOTALITY: every eid / pair-target field survives a deserialize into a world with a
-//        DISJOINT id space (the destination is pre-populated with unrelated live entities so the id
-//        spaces genuinely differ) — no dangling reference, no aliasing onto a live unrelated entity.
-//   structural  delta SIZE scales with CHANGED-field count, not entity count: writing W of N entities
-//        yields a delta whose payload length depends on W, not N (the no-100MB-static-buffer / "delta
-//        scales with changed-field count" discipline, §9 / §6.2).
+// round-trip IDENTITY: deserialize(serialize(world)) ≡ world over the entity SET, component
+// VALUES, and RELATIONS — for random worlds, compared via world.query(...).each + getPair.
+// delta SOUNDNESS: applying a delta over a random tick range equals REPLAYING the writes; and
+// the delta path allocates NO shadow memory (it is version-stamp driven — instrumented by
+// asserting the changed-row set the serializer emits === world.changedRows, never a value diff).
+// remap TOTALITY: every eid / pair-target field survives a deserialize into a world with a
+// DISJOINT id space (the destination is pre-populated with unrelated live entities so the id
+// spaces genuinely differ) — no dangling reference, no aliasing onto a live unrelated entity.
+// structural delta SIZE scales with CHANGED-field count, not entity count: writing W of N entities
+// yields a delta whose payload length depends on W, not N (the no-100MB-static-buffer / "delta
+// scales with changed-field count" discipline).
 //
 // DEFERRED (no bench harness this milestone): the snapshot/delta THROUGHPUT bench (wall-clock
 // bytes/sec, allocation profiling over many ticks). Its STRUCTURAL surrogate — that delta payload
-// length tracks the changed-row count rather than the entity count — is asserted below (S-3 size).
+// length tracks the changed-row count rather than the entity count — is asserted below ( size).
 
 import fc from 'fast-check'
 import { describe, expect, test } from 'vitest'
@@ -145,7 +145,7 @@ function canonicalize(world: World, D: Defs, allHandles: EntityHandle[], tokenOf
     }
     if (world.has(h, D.Target)) {
       components.push('target')
-      // eid fields decode to a handle number or `null` (NO_ENTITY) — never a raw -1 (decodeEid, §3.4).
+      // eid fields decode to a handle number or `null` (NO_ENTITY) — never a raw -1 (decodeEid).
       const who = (world.entity(h).read(D.Target) as { who: number | null }).who
       row.targetToken = who === null ? -1 : tokenOf.get((who as number) >>> 0) ?? -2 // -2 = unresolvable
     }
@@ -162,10 +162,10 @@ function digest(r: CanonRow): string {
 }
 
 // ---------------------------------------------------------------------------
-// S-4 — round-trip IDENTITY over entity SET, component VALUES, and RELATIONS.
+// — round-trip IDENTITY over entity SET, component VALUES, and RELATIONS.
 // ---------------------------------------------------------------------------
 
-describe('S-4 — deserialize(serialize(world)) ≡ world (set, values, relations) for random worlds', () => {
+describe(' — deserialize(serialize(world)) ≡ world (set, values, relations) for random worlds', () => {
   test('component round-trip is bit-faithful through the public query surface', () => {
     fc.assert(
       fc.property(worldArb, (specs) => {
@@ -264,10 +264,10 @@ describe('S-4 — deserialize(serialize(world)) ≡ world (set, values, relation
 })
 
 // ---------------------------------------------------------------------------
-// S-3 — delta SOUNDNESS: apply(delta) === replay(writes); version-stamp driven, no shadow memory.
+// — delta SOUNDNESS: apply(delta) === replay(writes); version-stamp driven, no shadow memory.
 // ---------------------------------------------------------------------------
 
-describe('S-3 — delta over a random tick range equals replaying the writes; no shadow buffer', () => {
+describe(' — delta over a random tick range equals replaying the writes; no shadow buffer', () => {
   test('applying a delta reconstructs the live world from a stale receiver copy', () => {
     fc.assert(
       fc.property(
@@ -367,7 +367,7 @@ describe('S-3 — delta over a random tick range equals replaying the writes; no
 })
 
 // Decode a delta image's value section and return the set of entity handles whose rows it carries.
-// (Independent of the serializer internals — re-parses the wire per §6.2: a 24-byte header carrying the
+// (Independent of the serializer internals — re-parses the wire per: a 24-byte header carrying the
 // structural + value section offsets, then a value section in NATIVE element-width per field.)
 const ELEMENT_BYTES: Record<number, number> = { 0: 1, 1: 1, 2: 1, 3: 2, 4: 2, 5: 4, 6: 4, 7: 4, 8: 8 }
 function decodeDeltaHandles(bytes: Uint8Array): Set<number> {
@@ -397,7 +397,7 @@ function decodeDeltaHandles(bytes: Uint8Array): Set<number> {
         off += 1
         const stride = dv.getUint8(off)
         off += 1
-        off += rowCount * stride * (ELEMENT_BYTES[element] as number) // native element width per changed row (§6.2)
+        off += rowCount * stride * (ELEMENT_BYTES[element] as number) // native element width per changed row
       }
     }
   }
@@ -405,10 +405,10 @@ function decodeDeltaHandles(bytes: Uint8Array): Set<number> {
 }
 
 // ---------------------------------------------------------------------------
-// S-5 — remap TOTALITY against a DISJOINT id space.
+// — remap TOTALITY against a DISJOINT id space.
 // ---------------------------------------------------------------------------
 
-describe('S-5 — every eid / pair-target survives a load into a world with a DISJOINT id space', () => {
+describe(' — every eid / pair-target survives a load into a world with a DISJOINT id space', () => {
   test('no dangling reference and no aliasing onto a pre-existing unrelated live entity', () => {
     fc.assert(
       fc.property(
@@ -445,7 +445,7 @@ describe('S-5 — every eid / pair-target survives a load into a world with a DI
           }
 
           // (b) every eid ref on a loaded entity points at a remapped handle (never a producer handle,
-          //     never a pre-existing unrelated entity), or is the NO_ENTITY sentinel.
+          // never a pre-existing unrelated entity), or is the NO_ENTITY sentinel.
           for (let i = 0; i < specs.length; i++) {
             const spec = specs[i] as EntitySpec
             if (!spec.hasTarget) continue
@@ -478,7 +478,7 @@ describe('S-5 — every eid / pair-target survives a load into a world with a DI
 // ---------------------------------------------------------------------------
 // Structural surrogate for the DEFERRED throughput bench: delta payload length scales with the number
 // of CHANGED rows (W), not the total entity count (N). Writing W of N entities yields a delta whose
-// length is a function of W, independent of N. (Rejects the bitECS 100MB static buffer; §9 / §6.2.)
+// length is a function of W, independent of N. (Rejects the bitECS 100MB static buffer)
 // ---------------------------------------------------------------------------
 
 describe('delta SIZE scales with changed-field count W, not entity count N (deferred-bench surrogate)', () => {

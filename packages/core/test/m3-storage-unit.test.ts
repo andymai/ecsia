@@ -1,4 +1,4 @@
-// M3 storage UNIT tests for the structural-migration surface the property suite does not pin down
+// storage UNIT tests for the structural-migration surface the property suite does not pin down
 // by example: add/remove driving the expected migration (right archetype, columns carried, added
 // fields initialized), tag/zero-field components contributing NO ColumnSet, world.warm(sig)
 // promoting a cold archetype, and the EMPTY_ARCHETYPE_ID spawn path.
@@ -97,7 +97,7 @@ describe('add/remove drive the expected migration', () => {
   })
 })
 
-describe('tag / zero-field components contribute NO ColumnSet (§3.4)', () => {
+describe('tag / zero-field components contribute NO ColumnSet ', () => {
   test('a tag adds a distinct archetype but no readable column set', () => {
     const Alive = defineTag('Alive')
     const Health = defineComponent({ hp: 'i32' }, { name: 'c7' })
@@ -159,7 +159,7 @@ describe('EMPTY_ARCHETYPE_ID spawn path', () => {
   })
 })
 
-describe('world.warm(sig) promotes a cold archetype (§10.4)', () => {
+describe('world.warm(sig) promotes a cold archetype ', () => {
   test('a forced-cold archetype is promoted to hot and gains real columns', () => {
     const A = defineComponent({ a: 'f32' }, { name: 'c9' })
     const B = defineComponent({ b: 'f32' }, { name: 'c10' })

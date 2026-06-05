@@ -1,4 +1,4 @@
-// Rich fields (rich-fields.md): the entity-index-keyed sidecar for 'string' + object<T>, accessor
+// Rich fields: the entity-index-keyed sidecar for 'string' + object<T>, accessor
 // integration, RF-HYGIENE recycle, RF-MIGRATE survival, RF-REMOVE-READ onRemove parity, RF-CHANGED
 // parity, RF-PIN main-thread pinning, defaults, and createStableIndex.
 
@@ -17,7 +17,7 @@ import type { ComponentDef, Schema } from '@ecsia/core'
 
 const asComps = (...c: ComponentDef<Schema>[]): readonly ComponentDef<Schema>[] => c as readonly ComponentDef<Schema>[]
 
-describe('§4/§5 — basic sidecar read/write through the accessor', () => {
+describe('//write through the accessor', () => {
   test('a string rich field reads back what was written (rich-only component)', () => {
     const Label = defineComponent({ text: 'string' }, { name: 'Label' })
     const world = createWorld({ components: asComps(Label) })
@@ -54,7 +54,7 @@ describe('§4/§5 — basic sidecar read/write through the accessor', () => {
   })
 })
 
-describe('§3.1/§4.4 — defaults', () => {
+describe('/', () => {
   test('T-HYGIENE-DEFAULT: never-written string reads the intrinsic empty default', () => {
     const Label = defineComponent({ text: 'string' }, { name: 'Label' })
     const world = createWorld({ components: asComps(Label) })
@@ -69,7 +69,7 @@ describe('§3.1/§4.4 — defaults', () => {
     expect((world.entity(e).read(Node) as { meta: unknown }).meta).toBeUndefined()
   })
 
-  test('user-overridable default via field(token, { default }) (G-1 plumbing)', () => {
+  test('user-overridable default via field(token, { default }) ( plumbing)', () => {
     const Label = defineComponent({ text: field('string', { default: 'untitled' }) }, { name: 'Label' })
     const world = createWorld({ components: asComps(Label) })
     const e = world.spawnWith(Label)
@@ -89,7 +89,7 @@ describe('§3.1/§4.4 — defaults', () => {
   })
 })
 
-describe('§4.5 — RF-HYGIENE: recycled index never leaks the prior tenant', () => {
+describe(': recycled index never leaks the prior tenant', () => {
   test('T-HYGIENE-RECYCLE: a fresh entity at a recycled index reads the default', () => {
     const Label = defineComponent({ text: 'string' }, { name: 'Label' })
     // Tiny index space so despawn/respawn forces index recycling. generationBits modest so we can wrap.
@@ -123,7 +123,7 @@ describe('§4.5 — RF-HYGIENE: recycled index never leaks the prior tenant', ()
   })
 })
 
-describe('§4.1 — RF-MIGRATE: rich value survives archetype migration with zero carry', () => {
+describe(': rich value survives archetype migration with zero carry', () => {
   test('T-MIGRATE: add and remove a sibling component, rich value unchanged', () => {
     const Label = defineComponent({ text: 'string' }, { name: 'Label' })
     const Tag = defineComponent({ v: 'i32' }, { name: 'Tag' })
@@ -146,7 +146,7 @@ describe('§4.1 — RF-MIGRATE: rich value survives archetype migration with zer
   })
 })
 
-describe('§4.3a — RF-REMOVE-READ: onRemove reads the dying entity rich value', () => {
+describe(': onRemove reads the dying entity rich value', () => {
   test('T-REMOVE-READ: onRemove observer reads the LAST written rich value', () => {
     const Label = defineComponent({ text: 'string' }, { name: 'Label' })
     const world = createWorld({ components: asComps(Label) })
@@ -177,7 +177,7 @@ describe('§4.3a — RF-REMOVE-READ: onRemove reads the dying entity rich value'
   })
 })
 
-describe('§5.3 — RF-CHANGED: change-tracking parity', () => {
+describe(': change-tracking parity', () => {
   test('T-CHANGED-PARITY: a rich write marks .changed and fires onChange', () => {
     const Label = defineComponent({ text: 'string' }, { name: 'Label' })
     const world = createWorld({ components: asComps(Label) })
@@ -229,7 +229,7 @@ describe('§5.3 — RF-CHANGED: change-tracking parity', () => {
   })
 })
 
-describe('§8 — createStableIndex', () => {
+describe('', () => {
   test('T-STABLE-INDEX: resolves id→handle, drops on despawn, survives remove', () => {
     const Id = defineComponent({ id: 'string' }, { name: 'Id' })
     const world = createWorld({ components: asComps(Id) })

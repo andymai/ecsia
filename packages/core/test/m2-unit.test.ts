@@ -1,11 +1,11 @@
-// M2 unit suite (memory-buffers.md Exit criteria + type-system.md §1–§4). Pins the externally
+// unit suite ( Exit criteria). Pins the externally
 // observable behaviours of the memory/component layer:
-//   - defineComponent infers a usable component (read/write through the world).
-//   - entity.write(C).x = 5 mutates the column and reads back via read(C).
-//   - eid columns init fresh AND grown rows to -1 (the null sentinel), not 0 (C-2).
-//   - a single allocBacking site decides SAB-vs-AB: the backing strategy is the one switch (B-1).
-//   - field round-trip encode→store→decode for every ElementKind incl staticString and eid
-//     (-1 <-> null).
+// - defineComponent infers a usable component (read/write through the world).
+// - entity.write(C).x = 5 mutates the column and reads back via read(C).
+// - eid columns init fresh AND grown rows to -1 (the null sentinel), not 0.
+// - a single allocBacking site decides SAB-vs-AB: the backing strategy is the one switch.
+// - field round-trip encode→store→decode for every ElementKind incl staticString and eid
+// (-1 <-> null).
 
 import { describe, expect, test } from 'vitest'
 import { bindAccessorRow, buildColumnSet, createWorld, decodeEid, defineComponent, encodeEid, makeColumnLayout, staticString, vec } from '@ecsia/core'
@@ -29,8 +29,8 @@ describe('defineComponent infers a usable component', () => {
   test('a defined component reads and writes through the world entity surface', () => {
     const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c1' })
     const w = createWorld({ components: [Position] })
-    // M3: an entity reads/writes a component only once it HOLDS it. spawnWith lands it in the
-    // {Position} archetype in a single migration (archetype-storage.md §5.6).
+    // An entity reads/writes a component only once it HOLDS it. spawnWith lands it in the
+    // {Position} archetype in a single migration.
     const ref = w.entity(w.spawnWith(Position))
 
     // write() returns the mutable singleton; read() the same instance typed Readonly.
@@ -60,7 +60,7 @@ describe('defineComponent infers a usable component', () => {
   })
 })
 
-describe('C-2: eid columns init new + grown rows to -1 (null), not 0', () => {
+describe(': eid columns init new + grown rows to -1 (null), not 0', () => {
   test('fresh eid column rows are -1, and decode to null', () => {
     const b = newBuffers()
     // eid → i32, fillOnInit -1 (the layout the component module derives for an eid field).
@@ -70,7 +70,7 @@ describe('C-2: eid columns init new + grown rows to -1 (null), not 0', () => {
     for (const slot of view) expect(decodeEid(slot)).toBeNull()
   })
 
-  test('grown eid column tail is filled with -1 to the FULL grown capacity, not 0 (C-2)', () => {
+  test('grown eid column tail is filled with -1 to the FULL grown capacity, not 0 ', () => {
     const b = newBuffers()
     const col = b.column(k('eid:grow.0'), makeColumnLayout('i32', 1, -1), 4)
     // Write a real handle at row 1 so we can prove the existing rows survive while the tail is -1.
@@ -107,7 +107,7 @@ describe('C-2: eid columns init new + grown rows to -1 (null), not 0', () => {
   })
 })
 
-describe('B-1: a single allocBacking site decides SAB vs AB', () => {
+describe(': a single allocBacking site decides SAB vs AB', () => {
   // The backing strategy on `capabilities` is the ONE switch; every column AND region honours it
   // uniformly. We construct a Buffers per strategy and assert no allocation re-decides.
   const sabCaps = probeCapabilities('sab') // Node: resizable-sab
@@ -204,7 +204,7 @@ describe('field round-trip encode→store→decode for every ElementKind', () =>
     }).toThrow()
   })
 
-  test('eid round-trips a full u32 handle and maps -1 <-> null (C-2 sentinel)', () => {
+  test('eid round-trips a full u32 handle and maps -1 <-> null ( sentinel)', () => {
     // Direct codec round-trip for the sentinel boundary.
     expect(decodeEid(-1)).toBeNull()
     expect(decodeEid(encodeEid(0 as never))).toBe(0) // index 0 is a valid entity, NOT null

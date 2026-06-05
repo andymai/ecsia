@@ -1,14 +1,14 @@
-// The two-word entity record (entity-model.md §4): two parallel flat arrays addressed by the
+// The two-word entity record: two parallel flat arrays addressed by the
 // handle's index. Writing both words is the structural commit point (INVARIANT C1). The
 // commit is wrapped in `commitRecord` so a future v2 can swap the two plain stores for an
-// Atomics pair without touching callers (§4.2).
+// Atomics pair without touching callers.
 
 import { handleIndex } from './codec.js'
 import type { EntityHandle, HandleLayout } from './codec.js'
 
 /**
  * Record sentinel for an index not yet placed into any archetype. Normatively owned by
- * archetype-storage.md §3.1; declared here as the value the record arrays carry pre-placement.
+ * declared here as the value the record arrays carry pre-placement.
  */
 export const ARCHETYPE_NONE = 0xffffffff
 
@@ -37,7 +37,7 @@ export class EntityRecord {
     this.#arrays = arrays
   }
 
-  // Row word first, id word second (§4.2 ordering rationale); v1 stores are plain.
+  // Row word first, id word second; v1 stores are plain.
   commitRecord(index: number, archetypeId: number, row: number): void {
     this.#arrays.recordArchetypeRow[index] = row
     this.#arrays.recordArchetypeId[index] = archetypeId

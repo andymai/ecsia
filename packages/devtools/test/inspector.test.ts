@@ -1,4 +1,4 @@
-// inspectWorld (§1): the report must match a CONSTRUCTED world exactly. We spawn known entities with
+// inspectWorld: the report must match a CONSTRUCTED world exactly. We spawn known entities with
 // known components (incl. a rich-field component and a relation pair), then assert counts, signatures,
 // byte math, the rich field listing, and the relation pairCount — all off the plain serializable report.
 

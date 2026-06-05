@@ -92,7 +92,7 @@ describe('compileQuery term classification', () => {
   })
 })
 
-describe('compileQuery pair-term resolution (queries.md §10)', () => {
+describe('compileQuery pair-term resolution ', () => {
   test('without resolvePair (relation-free world) a pair term is unsatisfiable', () => {
     const q = compileQuery([pair(1, 2)], ctx()) // no resolvePair injected
     expect(q.unsatisfiable).toBe(true)

@@ -1,23 +1,23 @@
-// M4 query subsystem PROPERTY suite (queries.md §13). Each property is written to DISCRIMINATE: it
+// query subsystem PROPERTY suite. Each property is written to DISCRIMINATE: it
 // would fail if the invariant it guards were broken. Driven through the real createWorld surface so
 // the archetypeCreated hook + single-entity maintenance are exercised end to end, with an
 // independent per-entity ORACLE (world.has reads the per-entity bitmask; query.each walks the
 // archetype pointer cache — the two paths must agree).
 //
-//   PROP-MATCH   per-archetype iteration result set EQUALS a brute-force per-entity signatureMatches
-//                oracle (proves the O(A) path equals the O(N) oracle), over random component
-//                universes + random entities + random with/without/optional term sets.
-//   PROP-MAINT   after a random single migration (add/remove), the query membership re-test yields
-//                the same membership as a full re-scan, for every query referencing the changed
-//                component (incremental maintenance == full re-scan equivalence).
-//   PROP-OACOST  the per-archetype match RESULT is independent of entity count N at a fixed archetype
-//                set: vary N (10 / 1000) at the same set of distinct signatures and assert the
-//                matchingArchetypes set and the match predicate are identical. The cross-library
-//                wall-clock bench (vs bitECS/miniplex) is DEFERRED — no bench harness; see the note
-//                on the PROP-OACOST block. (queries.md task brief: assert O(A) via an instrumented
-//                signatureMatches counter independent of N — realized here as the instrumented
-//                standalone-engine counter test in m4-query-cost.property.test.ts plus this
-//                observable-result-independence property.)
+// PROP-MATCH per-archetype iteration result set EQUALS a brute-force per-entity signatureMatches
+// oracle (proves the O(A) path equals the O(N) oracle), over random component
+// universes + random entities + random with/without/optional term sets.
+// PROP-MAINT after a random single migration (add/remove), the query membership re-test yields
+// the same membership as a full re-scan, for every query referencing the changed
+// component (incremental maintenance == full re-scan equivalence).
+// PROP-OACOST the per-archetype match RESULT is independent of entity count N at a fixed archetype
+// set: vary N (10 / 1000) at the same set of distinct signatures and assert the
+// matchingArchetypes set and the match predicate are identical. The cross-library
+// wall-clock bench (vs bitECS/miniplex) is DEFERRED — no bench harness; see the note
+// on the PROP-OACOST block. ( task brief: assert O(A) via an instrumented
+// signatureMatches counter independent of N — realized here as the instrumented
+// standalone-engine counter test in m4-query-cost.property.test.ts plus this
+// observable-result-independence property.)
 
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'

@@ -1,4 +1,4 @@
-// Deferred observer command buffer (reactivity.md §7.4, M9). An observer handler MAY call
+// Deferred observer command buffer. An observer handler MAY call
 // world.spawn()/despawn()/add()/remove()/addPair()/removePair() during observerDrain. Because the
 // drain runs at a serial slot — iterating a FROZEN log snapshot — those structural ops must NOT be
 // direct-applied mid-drain (a synchronous despawn shuffle-pops a row a later observer in the same
@@ -6,7 +6,7 @@
 //
 // Instead they are STAGED here and applied at the NEXT serial flush (the start of the next drain).
 // This is the main-thread analogue of the worker command buffer: the observer sees a quiescent world,
-// stages intent, and the intent lands deterministically one flush later (R-3). Consequence (§7.4): an
+// stages intent, and the intent lands deterministically one flush later. Consequence: an
 // entity spawned inside an onChange handler is observed by onAdd observers NEXT frame, never
 // re-entrantly this frame.
 
@@ -42,7 +42,7 @@ type DeferredOp =
 /** The world verbs the deferred buffer replays at flush time (all serial / main-thread). */
 export interface ObserverCommandApply {
   /** Place an already-minted (alive) handle into its target signature. The handle was reserved when
-   *  the observer called spawn (so the observer could configure it); placement is deferred to flush. */
+   * the observer called spawn (so the observer could configure it); placement is deferred to flush. */
   placeReserved(handle: EntityHandle, defs: readonly ComponentDef<Schema>[]): void
   add(handle: EntityHandle, def: ComponentDef<Schema>): void
   remove(handle: EntityHandle, def: ComponentDef<Schema>): void

@@ -1,10 +1,10 @@
-// LiveQuery (queries.md §5.1, §9): the cached runtime object for one canonical query hash. Owns the
+// LiveQuery: the cached runtime object for one canonical query hash. Owns the
 // matchingArchetypes pointer cache (kept current by the archetypeCreated hook + the seed), the
 // `current` sparse-set result container, and the per-value-signature cursor/element bindings that
 // surface the accessor singletons during iteration.
 //
 // Matching state (current, matchingArchetypes, maintenance) is SHARED across value-signatures by
-// hash; only the cursor/element binding is per value-signature (§4.1 subtlety). Iteration walks the
+// hash; only the cursor/element binding is per value-signature. Iteration walks the
 // matchingArchetypes contiguous rows (the hot path, O(A) matched at archetype creation, NOT per
 // entity) and pokes the per-(archetype, component) accessor singleton — zero allocation per row.
 
@@ -25,7 +25,7 @@ type PooledElement = Record<string, unknown> & { handle: EntityHandle }
 type Accessors = ReadonlyArray<{ __idx: number; __eid: EntityHandle }>
 
 /** A cold value-term binding: its accessor singleton (on the per-type cold block) + its component id,
- * so the cursor can poke __idx to THIS entity's cold row (per (index, componentId), §12). */
+ * so the cursor can poke __idx to THIS entity's cold row (per (index, componentId)). */
 interface ColdSlot {
   readonly accessor: { __idx: number; __eid: EntityHandle }
   readonly componentId: ComponentId
@@ -33,10 +33,10 @@ interface ColdSlot {
 
 interface ValueBinding {
   readonly valueTerms: readonly CompiledValueTerm[]
-  /** Per-archetype pooled element (props are bound accessor singletons; §9.3). Built at match time. */
+  /** Per-archetype pooled element (props are bound accessor singletons). Built at match time. */
   readonly elements: Map<number, PooledElement>
   /**
-   * Per-archetype accessor singleton list (§5.3 / §9.2): built ONCE at match time alongside the
+   * Per-archetype accessor singleton list: built ONCE at match time alongside the
    * element, reused across each()/iterator calls so the hot path allocates nothing per call.
    */
   readonly accessors: Map<number, Accessors>
@@ -48,8 +48,8 @@ interface ValueBinding {
 }
 
 /**
- * Transient per-frame flavor lists (queries.md §7.4 / §8). Allocated only when a flavor is declared.
- * `added`/`removed` are net per frame (Q-F1): remove-then-add and add-then-remove within one frame
+ * Transient per-frame flavor lists. Allocated only when a flavor is declared.
+ * `added`/`removed` are net per frame: remove-then-add and add-then-remove within one frame
  * cancel out. The cancellation is achieved by tracking which side a transition is currently on —
  * adding an index that is pending-removed cancels the removal; removing a pending-added one cancels
  * the addition (the single-drain net-effect bitECS gets from toRemove + commitRemovals).
@@ -64,28 +64,28 @@ interface DeltaLists {
   hasRemoved: boolean
 }
 
-/** The reactivity write-log hooks the Changed flavor drives (reactivity.md §10 ReactivityQueryHooks). */
+/** The reactivity write-log hooks the Changed flavor drives. */
 export interface ReactivityQueryHooks {
-  /** §5.1: allocate this query's changed-flavor LogPointer + dedup bitset (idempotent). */
+  /**: allocate this query's changed-flavor LogPointer + dedup bitset (idempotent). */
   attachChangedFlavor(q: LiveQuery, componentIds: Iterable<number>): void
-  /** §5.3: drain this frame's changed entity indices (deduped, intersected with `current`). */
+  /**: drain this frame's changed entity indices (deduped, intersected with `current`). */
   drainChanged(q: LiveQuery): Uint32Array
 }
 
 export interface LiveQueryDeps {
-  /** index → its (archetypeId, row) — the entity record (entity-model.md §4.3). */
+  /** index → its (archetypeId, row) — the entity record. */
   resolveLocation(index: number): { archetypeId: number; row: number }
   /** index → its full EntityHandle (generation from the entity layer). */
   handleOf(index: number): EntityHandle
   /**
-   * The entity indices currently resident in cold archetype `archetypeId` (§12). Backed by the
+   * The entity indices currently resident in cold archetype `archetypeId`. Backed by the
    * ColdStore's per-archetype membership so cold iteration is O(rows in that archetype), NOT
    * O(|current|) per cold archetype.
    */
   coldResidentsOf(archetypeId: number): Iterable<number>
   /** The cold per-TYPE ColumnSet for `componentId` (cold blocks are keyed by component, not archetype). */
   coldColumnSet(componentId: ComponentId): ColumnSet | undefined
-  /** The cold-block row holding `componentId`'s fields for entity `index`, or -1 if absent (§12). */
+  /** The cold-block row holding `componentId`'s fields for entity `index`, or -1 if absent. */
   coldRowOf(index: number, componentId: ComponentId): number
 }
 
@@ -121,7 +121,7 @@ export class LiveQuery {
     return this.current.size
   }
 
-  // --- flavor declaration (queries.md §8.1) ----------------------------------
+  // --- flavor declaration ----------------------------------
 
   #ensureDelta(): DeltaLists {
     if (this.#delta === null) {
@@ -130,7 +130,7 @@ export class LiveQuery {
     return this.#delta
   }
 
-  /** Chainable flavor declarations (queries.md §8.1). Allocate nothing for undeclared flavors. */
+  /** Chainable flavor declarations. Allocate nothing for undeclared flavors. */
   added(): this {
     this.#ensureDelta().hasAdded = true
     return this
@@ -146,7 +146,7 @@ export class LiveQuery {
   }
 
   changed(...components: ReadonlyArray<unknown>): this {
-    // §8.3: the Changed flavor drains the reactivity WRITE LOG (not changeVersion — R-2). The filtered
+    // The Changed flavor drains the reactivity WRITE LOG (not changeVersion). The filtered
     // component set is the explicit `components` argument, or the query's whole referenced set when
     // omitted.
     this.#ensureDelta()
@@ -173,7 +173,7 @@ export class LiveQuery {
     this.#reactivity.attachChangedFlavor(this, this.#changedComponents)
   }
 
-  /** Reset per-frame transient flavor lists (FRAME_RESET, queries.md §8.2). */
+  /** Reset per-frame transient flavor lists (FRAME_RESET). */
   frameReset(): void {
     if (this.#delta !== null) {
       this.#delta.added.clear()
@@ -181,7 +181,7 @@ export class LiveQuery {
     }
   }
 
-  // --- value-signature bindings (§4.1 subtlety) ------------------------------
+  // --- value-signature bindings ------------------------------
 
   /** The value-role signature: the P/W-tagged value subset, read-vs-write distinguished. */
   static valueSignature(compiled: CompiledQuery): string {
@@ -230,14 +230,14 @@ export class LiveQuery {
     return b
   }
 
-  // --- matching-set maintenance (queries.md §5.3 / §6) -----------------------
+  // --- matching-set maintenance -----------------------
 
   /** Append a newly-created (or seeded) archetype to the pointer cache. */
   addMatchingArchetype(arch: Archetype): void {
     this.matchingArchetypes.push(arch)
   }
 
-  /** §6.1: add an entity index to `current`, recording a NET `added` delta (Q-F1) where declared. */
+  /**: add an entity index to `current`, recording a NET `added` delta where declared. */
   addEntity(index: number): void {
     if (this.current.has(index)) return
     this.current.add(index)
@@ -247,22 +247,22 @@ export class LiveQuery {
     if (d.hasAdded) d.added.add(index)
   }
 
-  /** §6.1: remove an entity index from `current`, recording a NET `removed` delta (Q-F1) where declared. */
+  /**: remove an entity index from `current`, recording a NET `removed` delta where declared. */
   removeEntity(index: number): void {
     if (!this.current.has(index)) return
     this.current.remove(index)
     const d = this.#delta
     if (d === null) return
     if (d.added.delete(index)) return // add-then-remove this frame → net no-op
-    // Capture the handle now: the entity is still alive (freeEntity runs after this drop, §6.3), so
+    // Capture the handle now: the entity is still alive (freeEntity runs after this drop), so
     // handleOf(index) resolves the dying entity's own generation rather than the recycled next one.
     if (d.hasRemoved) d.removed.set(index, this.#deps.handleOf(index))
   }
 
-  // --- iteration (queries.md §9) ---------------------------------------------
+  // --- iteration ---------------------------------------------
 
   /**
-   * queries.md §10.2(a): an exclusive specific-target pair matches the archetype by `presenceId(R)`
+   * (a): an exclusive specific-target pair matches the archetype by `presenceId(R)`
    * (a signature bit) but the target is a COLUMN value — so each row is filtered by
    * `targetColumn[row] === target`. Returns true when the query has no row filters (the common case).
    */
@@ -321,7 +321,7 @@ export class LiveQuery {
    * change-tracking push, so it lands close to a raw SoA loop. Cold archetypes (no contiguous columns)
    * are NOT visited by `eachChunk`; mix `each`/`eachCold` if a query can fragment. Writes through the
    * cursor are NOT recorded in the reactivity write log: a `.changed`/observer consumer will not see them
-   * — use `each` when reactivity must observe the write (queries.md §9, reactivity.md §3.3).
+   * — use `each` when reactivity must observe the write.
    *
    * The chunk and its column lookups are reused across calls/archetypes — do NOT store the chunk or a
    * returned view across iterations.
@@ -353,7 +353,7 @@ export class LiveQuery {
   *[Symbol.iterator](): Iterator<PooledElement> {
     // A simple eager collection of (archetype,row) snapshots would allocate; instead drive `each`
     // through a buffered generator that yields the SAME pooled element per archetype. Single active
-    // iteration is the contract (§9.1) — do not store the element across yields.
+    // iteration is the contract — do not store the element across yields.
     const binding = this.#hotBinding()
     for (const arch of this.matchingArchetypes) {
       if (arch.cold) {
@@ -391,12 +391,12 @@ export class LiveQuery {
   }
 
   /**
-   * §8.3: the Changed filter reads the reactivity WRITE LOG, not changeVersion. The write log lands
-   * at M5; until then there are no recorded writes, so the changed set is empty. The matching surface
-   * (binding the cursor per changed index, §9.5) is in place for M5 to fill the index source.
+   *: the Changed filter reads the reactivity WRITE LOG, not changeVersion. The write log lands
+   * at; until then there are no recorded writes, so the changed set is empty. The matching surface
+   * (binding the cursor per changed index) is in place for to fill the index source.
    */
   eachChanged(fn: (e: PooledElement) => void): void {
-    // §5.3: drain the write-log changed set (deduped, intersected with `current`), then bind the
+    // Drain the write-log changed set (deduped, intersected with `current`), then bind the
     // cursor per scattered index. The changed set spans multiple archetypes, so reuse #eachScattered.
     if (this.#reactivity === null || !this.#changedDeclared) return
     const indices = this.#reactivity.drainChanged(this)
@@ -405,7 +405,7 @@ export class LiveQuery {
 
   // --- internals -------------------------------------------------------------
 
-  /** §9.5: bind the cursor per scattered index (added set spans multiple archetypes). */
+  /**: bind the cursor per scattered index (added set spans multiple archetypes). */
   #eachScattered(indices: Iterable<number>, fn: (e: PooledElement) => void): void {
     const binding = this.#hotBinding()
     for (const index of indices) {
@@ -434,7 +434,7 @@ export class LiveQuery {
     return el
   }
 
-  /** Bind a cold row: each value-term's accessor lands on its own per-component cold-block row (§12). */
+  /** Bind a cold row: each value-term's accessor lands on its own per-component cold-block row. */
   #bindColdRow(arch: Archetype, binding: ValueBinding, index: number, handle: EntityHandle): PooledElement {
     const el = this.#coldElementFor(arch, binding)
     for (const slot of this.#coldSlotsFor(arch, binding)) {
@@ -446,9 +446,9 @@ export class LiveQuery {
   }
 
   /**
-   * Cold archetypes carry no contiguous columns; resolve each resident through the record (§12).
+   * Cold archetypes carry no contiguous columns; resolve each resident through the record.
    * O(rows in this cold archetype) — driven by the ColdStore's per-archetype membership, NOT by a
-   * filter over the whole `current` set (which would be O(cold archetypes × |current|), §12 penalty).
+   * filter over the whole `current` set (which would be O(cold archetypes × |current|)).
    */
   #eachCold(arch: Archetype, binding: ValueBinding, fn: (e: PooledElement) => void): void {
     for (const index of this.#deps.coldResidentsOf(arch.id as number)) {
@@ -456,7 +456,7 @@ export class LiveQuery {
     }
   }
 
-  /** Generator twin of #eachCold for the [Symbol.iterator] surface (Q-C1 cold transparency). */
+  /** Generator twin of #eachCold for the [Symbol.iterator] surface ( cold transparency). */
   *#eachColdGen(arch: Archetype, binding: ValueBinding): Generator<PooledElement> {
     for (const index of this.#deps.coldResidentsOf(arch.id as number)) {
       yield this.#bindColdRow(arch, binding, index, this.#deps.handleOf(index))
@@ -492,7 +492,7 @@ export class LiveQuery {
 
   /**
    * The accessor singletons whose __idx/__eid the cursor pokes for this (archetype, value-sig).
-   * Built ONCE per (archetype, value-sig) at first touch and cached on the binding (§5.3 / §9.2), so
+   * Built ONCE per (archetype, value-sig) at first touch and cached on the binding, so
    * the hot each()/iterator loop reuses it with zero per-call allocation.
    */
   #accessorsFor(arch: Archetype, binding: ValueBinding): Accessors {
@@ -555,9 +555,9 @@ export class LiveQuery {
  *
  * ```ts
  * q.eachChunk((c) => {
- *   const px = c.column(Position, 'x'), py = c.column(Position, 'y')
- *   const dx = c.column(Velocity, 'dx'), dy = c.column(Velocity, 'dy')
- *   for (let i = 0; i < c.count; i++) { px[i] += dx[i] * dt; py[i] += dy[i] * dt }
+ * const px = c.column(Position, 'x'), py = c.column(Position, 'y')
+ * const dx = c.column(Velocity, 'dx'), dy = c.column(Velocity, 'dy')
+ * for (let i = 0; i < c.count; i) { px[i] += dx[i] * dt; py[i] += dy[i] * dt }
  * })
  * ```
  *
@@ -592,7 +592,7 @@ export class QueryChunk {
       byName = new Map()
       let colIdx = 0
       for (const f of def.fields as readonly FieldDescriptor[]) {
-        // object<T> contributes no column (§3.8); skip it so column indices match the ColumnSet build order.
+        // object<T> contributes no column; skip it so column indices match the ColumnSet build order.
         if (f.ctor !== null) {
           byName.set(f.name, colIdx)
           colIdx += 1

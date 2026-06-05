@@ -1,9 +1,9 @@
-// The snapshot deserializer (serialization.md §5): apply a snapshot image into a FRESH world. Builds
+// The snapshot deserializer: apply a snapshot image into a FRESH world. Builds
 // the entity-ID remap table FIRST (PASS 1) so every eid field and relation pair forward-reference
 // resolves; recreates archetypes from signatures and bulk-loads columns with ONE set() per column
 // (PASS 1b); remaps eid columns in place (PASS 2); re-establishes relations through the relation
 // provider's addPair, which re-mints the receiver-local pair id (PASS 3). Ids are remapped BY NAME
-// (§5.2) — component/relation ids are producer-local.
+// — component/relation ids are producer-local.
 
 import type { ComponentId, EntityHandle, RelationId } from '@ecsia/schema'
 import type { World } from '@ecsia/core'
@@ -24,7 +24,7 @@ import {
 import { readPairPayload } from './payload.js'
 
 export interface DeserializeResult {
-  /** Old-handle → new-handle remap table (the entity-ID remap, §8.2). */
+  /** Old-handle → new-handle remap table (the entity-ID remap). */
   readonly remap: ReadonlyMap<EntityHandle, EntityHandle>
   readonly entitiesCreated: number
   readonly tick: number
@@ -61,7 +61,7 @@ export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
     // --- HEADER ---
     const magic = cur.u32()
     if (magic !== SNAPSHOT_MAGIC) throw new Error('serialization: bad magic (not an ecsia snapshot)')
-    // rich-fields.md §7.2 / G-2: the v2 reader accepts the version RANGE [MIN_SUPPORTED_VERSION,
+    // /: the v2 reader accepts the version RANGE [MIN_SUPPORTED_VERSION,
     // SERIALIZATION_FORMAT_VERSION] and per-section-gates the v2-only header growth + RICH section. A v1
     // image (no richSectionOffset word, no RICH section) loads cleanly; a hypothetical newer (>v2) image
     // is rejected. The inverse (v2 image into a v1 build) is rejected by the v1 build's strict check.
@@ -88,7 +88,7 @@ export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
     const registryOffset = cur.u32()
     const structureOffset = cur.u32()
     // v2 grew the header by one word (richSectionOffset at byte 32). v1 images stop at byte 32 — gate the
-    // read so a v1 image is not mis-parsed (G-5). 0 means "no RICH section present" even in a v2 image.
+    // read so a v1 image is not mis-parsed. 0 means "no RICH section present" even in a v2 image.
     const richSectionOffset = version >= RICH_FORMAT_VERSION ? cur.u32() : 0
 
     if (mode === 'replace' && s.aliveCount() > 0) {
@@ -249,16 +249,16 @@ export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
         const subject = remap.get(subjectH as EntityHandle)
         if (subject === undefined) continue
         const target = targetH === NO_ENTITY_U32 ? null : remap.get(targetH as EntityHandle) ?? null
-        if (targetH !== NO_ENTITY_U32 && target === null) continue // dangling target → drop (§8.3)
+        if (targetH !== NO_ENTITY_U32 && target === null) continue // dangling target → drop
         relProvider.addPair(subject, localRel, target, payload)
       }
     }
 
     // --- SECTION 5: RICH (JSON sidecar) — version-gated + flag-gated, seeked via richSectionOffset ---
-    // Per-section gating (G-2): only a v2+ image with FLAG_HAS_RICH and a non-zero offset carries one, so
+    // Per-section gating: only a v2+ image with FLAG_HAS_RICH and a non-zero offset carries one, so
     // a v1 image skips this entirely. Producer handles remap through PASS 1's table; producer component
     // ids remap by name (producerCidToLocal). Field index is producer-local but the field-layout guard
-    // (numComponents loop above) guarantees it is parallel on both sides (§7.2).
+    // (numComponents loop above) guarantees it is parallel on both sides.
     if (version >= RICH_FORMAT_VERSION && (flags & FLAG_HAS_RICH) !== 0 && richSectionOffset !== 0) {
       cur.seek(richSectionOffset)
       const richEntryCount = cur.u32()
@@ -333,7 +333,7 @@ function reinterpret(element: string, raw: Uint8Array, elems: number): ArrayLike
 
 
 // PASS 2: every eid field column now holds PRODUCER handles. Translate each through the remap table
-// in place; -1 (NO_ENTITY) passes through untouched; a non-snapshotted reference is nulled (§5.4).
+// in place; -1 (NO_ENTITY) passes through untouched; a non-snapshotted reference is nulled.
 function remapEidColumns(
   world: World,
   handlesByArch: Map<number, number[]>,

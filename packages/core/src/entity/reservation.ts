@@ -1,7 +1,7 @@
-// The worker-ID reservation handshake (entity-model.md §5). v1 ships the LAYOUT plus the
+// The worker-ID reservation handshake. v1 ships the LAYOUT plus the
 // single-thread path: the main thread reserves a block by calling the ordinary serial
 // `allocEntity`, so the entities are fully alive the instant they are reserved. The
-// Atomics.sub-on-reservedHead worker take is the v2 path exercised at M7 (§5.1 note).
+// Atomics.sub-on-reservedHead worker take is the v2 path exercised at.
 
 import type { EntityHandle } from './codec.js'
 import type { EntityIndex } from './index-allocator.js'

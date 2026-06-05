@@ -1,13 +1,13 @@
-// M11 — type-arity stress (type-system.md §6.5 / §6, queries.md §9.1). Compile-only: this file is
+// — type-arity stress. Compile-only: this file is
 // type-checked standalone by the guard test (m11-arity-stress.test.ts) under the project's strict
 // flags; no assertions run. It pins the externally-observable arity contracts:
 //
-//   1. arities 1..8 fully infer EVERY element type (read/write/has/without/optional + pair) — NO any.
-//   2. arity 9+ degrades to a TYPED LooseQueryElement (a Readonly<Record<...>>, NEVER any).
-//   3. Has<C>/HasWrite<C> are the explicit-annotation escape hatch past the cap — e.A / e.B still type.
+// 1. arities 1..8 fully infer EVERY element type (read/write/has/without/optional + pair) — NO any.
+// 2. arity 9+ degrades to a TYPED LooseQueryElement (a Readonly<Record<...>>, NEVER any).
+// 3. Has<C>/HasWrite<C> are the explicit-annotation escape hatch past the cap — e.A / e.B still type.
 //
 // Component naming: the element prop name is CompKey<C> = the def's `name` LITERAL. defineComponent
-// types `name` as `string` (debug-only; type-system.md §2.3), so distinct-typed-prop inference is
+// types `name` as `string` (debug-only), so distinct-typed-prop inference is
 // pinned over hand-typed ComponentDefs whose `name` IS a literal — the exact machinery the schema
 // builder feeds once name-literal capture lands.
 
@@ -50,8 +50,8 @@ declare const w: { query: WorldQuery }
 
 // ---------------------------------------------------------------------------
 // (1) EVERY term kind in ONE within-cap query — full inference, no any.
-//     read → Readonly prop · write → mutable prop · has/without → no prop ·
-//     optional → ReadOf | undefined · bare def → Readonly prop · pair → payload prop.
+// read → Readonly prop · write → mutable prop · has/without → no prop ·
+// optional → ReadOf | undefined · bare def → Readonly prop · pair → payload prop.
 // ---------------------------------------------------------------------------
 
 declare const ownsPair: PairDef<typeof Owns>
@@ -87,12 +87,12 @@ void ownsPair
 
 // ---------------------------------------------------------------------------
 // (1b) MATRIX — EVERY arity 1..8 fully infers through the WorldQuery overload family. Each row
-//      asserts the EXACT value type of every inferred element prop (a wrong/widened/any inference
-//      makes the `const _x: number = ...` assignment fail) AND carries a not-any sentinel: a bogus
-//      method call under @ts-expect-error. `any` would swallow the bogus call → the directive goes
-//      unused → TS2578 → the guard test fails. So an arity-k row FAILS if inference broke at k.
-//      The components A..G carry DISTINCT field value types (f32→number, eid→EntityHandle, bool via
-//      ReadOf<D>, etc.) so each row pins a real value type, not just structural presence.
+// asserts the EXACT value type of every inferred element prop (a wrong/widened/any inference
+// makes the `const _x: number = ...` assignment fail) AND carries a not-any sentinel: a bogus
+// method call under @ts-expect-error. `any` would swallow the bogus call → the directive goes
+// unused → TS2578 → the guard test fails. So an arity-k row FAILS if inference broke at k.
+// The components A..G carry DISTINCT field value types (f32→number, eid→EntityHandle, bool via
+// ReadOf<D>, etc.) so each row pins a real value type, not just structural presence.
 // ---------------------------------------------------------------------------
 
 // arity 1
@@ -192,7 +192,7 @@ w.query(read(A), write(B), has(Tag), without(C), optional(D), E, F, G).each((el)
 
 // ---------------------------------------------------------------------------
 // (2) arity 9+ → typed LooseQueryElement (NEVER any). The element is assignable TO
-//     LooseQueryElement (typed degradation), and a bogus method call MUST error (proves not-any).
+// LooseQueryElement (typed degradation), and a bogus method call MUST error (proves not-any).
 // ---------------------------------------------------------------------------
 
 const q9 = w.query(read(A), read(A), read(A), read(A), read(A), read(A), read(A), read(A), read(A))
@@ -214,7 +214,7 @@ export const _looseEqBack: _LooseFromUnbounded = _lqe2le
 
 // ---------------------------------------------------------------------------
 // (3) Escape hatch: annotate the iteration variable past the cap with Has<C> & HasWrite<C>.
-//     The runtime terms still drive matching; the annotation drives typing (no inference cost).
+// The runtime terms still drive matching; the annotation drives typing (no inference cost).
 // ---------------------------------------------------------------------------
 
 w.query(
@@ -238,10 +238,10 @@ annotated.b.x = 7
 annotated.c.n = 9
 
 // ---------------------------------------------------------------------------
-// (4) READONLY-SHORTHAND carry (M2 / type-system.md §4.2, Must-Fix #2). The lifted `entity.<comp>`
-//     shorthand surface (Has<C>) is deeply Readonly: assigning a field is specifically TS2540
-//     ("Cannot assign to 'x' because it is a read-only property") — NOT just any error. The guard
-//     test asserts this code is present, so a regression that drops the readonly modifier surfaces.
+// (4) READONLY-SHORTHAND carry. The lifted `entity.<comp>`
+// shorthand surface (Has<C>) is deeply Readonly: assigning a field is specifically TS2540
+// ("Cannot assign to 'x' because it is a read-only property") — NOT just any error. The guard
+// test asserts this code is present, so a regression that drops the readonly modifier surfaces.
 // ---------------------------------------------------------------------------
 
 declare const shorthand: Has<typeof A>

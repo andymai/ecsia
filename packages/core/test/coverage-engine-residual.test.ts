@@ -67,7 +67,7 @@ describe('QueryEngine matching over a high (multi-word) component id', () => {
   })
 })
 
-describe('dropEntity + frameReset across queries (engine §6.3 / §8.2)', () => {
+describe('dropEntity + frameReset across queries (engine)', () => {
   test('despawn evicts the index from EVERY live query, constraint-less ones included', () => {
     const comps = manyComponents(4)
     const world = createWorld({ components: comps })

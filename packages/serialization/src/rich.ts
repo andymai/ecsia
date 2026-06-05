@@ -1,7 +1,7 @@
-// Shared helpers for the RICH (sidecar JSON) section of snapshots and deltas (rich-fields.md §7). Rich
+// Shared helpers for the RICH (sidecar JSON) section of snapshots and deltas. Rich
 // fields ('string' / object<T>) hold arbitrary JS values that cannot ride the raw SoA byte-copy path, so
 // they serialize as length-prefixed UTF-8 JSON. This module owns the kind ordinal mapping and the
-// non-serializable-value policy (onUnserializable, §7.4) so the snapshot and delta writers stay in sync.
+// non-serializable-value policy (onUnserializable) so the snapshot and delta writers stay in sync.
 
 import type { ComponentId, EntityHandle } from '@ecsia/schema'
 
@@ -12,7 +12,7 @@ export function richKindOrdinal(kind: 'string' | 'object'): number {
   return kind === 'string' ? RICH_KIND_STRING : RICH_KIND_OBJECT
 }
 
-/** Context handed to `onUnserializable` when a rich value cannot be JSON-encoded (rich-fields.md §7.4). */
+/** Context handed to `onUnserializable` when a rich value cannot be JSON-encoded. */
 export interface UnserializableContext {
   readonly componentId: ComponentId
   readonly fieldIndex: number
@@ -24,7 +24,7 @@ export interface UnserializableContext {
 
 /**
  * Called when a rich value cannot be JSON-encoded (cycles, BigInt). Return a replacement value to encode,
- * or `undefined` to SKIP the field for that entity (the receiver re-defaults it, rich-fields.md §4.4).
+ * or `undefined` to SKIP the field for that entity (the receiver re-defaults it).
  * Default policy (no hook): SKIP + a dev-mode console.warn naming (component, field, handle).
  */
 export type OnUnserializable = (ctx: UnserializableContext) => unknown

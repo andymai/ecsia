@@ -1,8 +1,8 @@
-// A growable little-endian byte cursor over ONE reusable ArrayBuffer (serialization.md §9). The
+// A growable little-endian byte cursor over ONE reusable ArrayBuffer. The
 // snapshot/delta serializers own one cursor each and return a Uint8Array subarray onto the reused
 // buffer — zero per-tick allocation. The buffer doubles on overflow; `slice` happens ONLY at the
-// process boundary (the *Copy() paths, §9.3). All multi-byte words are written little-endian with an
-// explicit littleEndian=true (§9.4).
+// process boundary (the *Copy() paths). All multi-byte words are written little-endian with an
+// explicit littleEndian=true.
 
 const LE = true
 
@@ -56,22 +56,22 @@ export class WriteCursor {
     this.#pos += 4
   }
 
-  /** Back-patch a u32 already written at byte `at` (header offsets/counts, §4.3). */
+  /** Back-patch a u32 already written at byte `at` (header offsets/counts). */
   patchU32(at: number, v: number): void {
     this.#view.setUint32(at, v >>> 0, LE)
   }
 
-  /** Back-patch a single byte already written at `at` (e.g. the header flags byte, rich-fields.md §7.2). */
+  /** Back-patch a single byte already written at `at` (e.g. the header flags byte). */
   patchU8(at: number, v: number): void {
     this.#view.setUint8(at, v & 0xff)
   }
 
-  /** Pad to a 4-byte boundary (SoA sections are word-aligned, §2). */
+  /** Pad to a 4-byte boundary (SoA sections are word-aligned). */
   alignTo4(): void {
     while ((this.#pos & 3) !== 0) this.u8(0)
   }
 
-  /** Copy a typed-array slice as raw platform-LE bytes (the single set() per column, §4.3). */
+  /** Copy a typed-array slice as raw platform-LE bytes (the single set() per column). */
   copyBytes(src: ArrayBufferView): void {
     const bytes = new Uint8Array(src.buffer, src.byteOffset, src.byteLength)
     this.#ensure(bytes.byteLength)
@@ -79,12 +79,12 @@ export class WriteCursor {
     this.#pos += bytes.byteLength
   }
 
-  /** A view onto the reused buffer for [0, pos). Valid only until the next serialize call (§9.2). */
+  /** A view onto the reused buffer for [0, pos). Valid only until the next serialize call. */
   bytesView(): Uint8Array {
     return this.#u8.subarray(0, this.#pos)
   }
 
-  /** A fresh detached copy safe to transfer/persist (§9.3 — the ONLY slice site). */
+  /** A fresh detached copy safe to transfer/persist. */
   bytesCopy(): Uint8Array {
     return this.#u8.slice(0, this.#pos)
   }
@@ -134,7 +134,7 @@ export class ReadCursor {
     while ((this.#pos & 3) !== 0) this.#pos += 1
   }
 
-  /** A zero-copy subarray of `byteLength` raw bytes, advancing the cursor (one set() per column, §5.3). */
+  /** A zero-copy subarray of `byteLength` raw bytes, advancing the cursor (one set() per column). */
   takeBytes(byteLength: number): Uint8Array {
     const out = this.#u8.subarray(this.#pos, this.#pos + byteLength)
     this.#pos += byteLength

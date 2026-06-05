@@ -1,15 +1,15 @@
-// M4 query subsystem invariant suite (queries.md §13). Driven through the real createWorld surface
+// query subsystem invariant suite. Driven through the real createWorld surface
 // so the archetypeCreated hook + single-entity maintenance are exercised end to end.
 //
-//   Q-H1   hash dedup: same terms (any order, read/write) share ONE LiveQuery; has(A) vs read(A)
-//          share matching but distinct value bindings.
-//   Q-M1   per-archetype matching: iteration walks matchingArchetypes; late queries seed, new
-//          archetypes join via the archetypeCreated hook.
-//   Q-M2   maintenance scope: add/remove/despawn move entities in and out of the matching set.
-//   Q-I1   current ⟺ matchingArchetypes coherence after every structural op.
-//   Q-F1   added/removed coalescing: remove-then-add and add-then-remove net to no delta.
-//   Q-A1   zero-alloc iteration: pooled element reused across rows and iterations.
-//   iteration correctness: each yields exactly the matching entities; value props read/write.
+// hash dedup: same terms (any order, read/write) share ONE LiveQuery; has(A) vs read(A)
+// share matching but distinct value bindings.
+// per-archetype matching: iteration walks matchingArchetypes; late queries seed, new
+// archetypes join via the archetypeCreated hook.
+// maintenance scope: add/remove/despawn move entities in and out of the matching set.
+// current ⟺ matchingArchetypes coherence after every structural op.
+// added/removed coalescing: remove-then-add and add-then-remove net to no delta.
+// zero-alloc iteration: pooled element reused across rows and iterations.
+// iteration correctness: each yields exactly the matching entities; value props read/write.
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, defineTag, read, write, has, without, optional } from '@ecsia/core'
@@ -31,7 +31,7 @@ function makeKit(): {
   return { world: createWorld({ components }), Position, Velocity, Health, Alive }
 }
 
-describe('Q-H1 canonical-hash dedup', () => {
+describe(' canonical-hash dedup', () => {
   test('identical term sets (order-independent) return the SAME LiveQuery', () => {
     const { world, Position, Velocity } = makeKit()
     const a = world.query(read(Position), read(Velocity))
@@ -55,7 +55,7 @@ describe('Q-H1 canonical-hash dedup', () => {
   })
 })
 
-describe('iteration correctness + per-archetype matching (Q-M1)', () => {
+describe('iteration correctness + per-archetype matching ', () => {
   test('each yields exactly the matching entities with readable value props', () => {
     const { world, Position, Velocity } = makeKit()
     const q = world.query(read(Position), write(Velocity))
@@ -112,7 +112,7 @@ describe('iteration correctness + per-archetype matching (Q-M1)', () => {
   })
 })
 
-describe('Q-M2 incremental maintenance', () => {
+describe(' incremental maintenance', () => {
   test('add/remove migrate the entity in and out of the matching set', () => {
     const { world, Position, Velocity } = makeKit()
     const q = world.query(read(Position), read(Velocity))
@@ -143,7 +143,7 @@ describe('Q-M2 incremental maintenance', () => {
   })
 })
 
-describe('Q-I1 current ⟺ matchingArchetypes coherence', () => {
+describe(' current ⟺ matchingArchetypes coherence', () => {
   test('the matchingArchetypes walk yields exactly current.size entities', () => {
     const { world, Position, Velocity } = makeKit()
     const q = world.query(read(Position))
@@ -157,7 +157,7 @@ describe('Q-I1 current ⟺ matchingArchetypes coherence', () => {
   })
 })
 
-describe('Q-F1 added/removed coalescing', () => {
+describe(' added/removed coalescing', () => {
   test('remove-then-add within a frame nets to no delta', () => {
     const { world, Position, Velocity } = makeKit()
     const q = world.query(read(Position), read(Velocity)).added().removed()
@@ -202,7 +202,7 @@ describe('Q-F1 added/removed coalescing', () => {
   })
 })
 
-describe('Q-A1 zero-alloc iteration (pooled element + cursor)', () => {
+describe(' zero-alloc iteration (pooled element + cursor)', () => {
   test('the pooled element is the SAME object across rows and iterations', () => {
     const { world, Position } = makeKit()
     const q = world.query(read(Position))

@@ -1,12 +1,12 @@
-// A WORKER-ELIGIBLE system (scheduler.md §3.1 / §7.2): its body is expressed against the
+// A WORKER-ELIGIBLE system: its body is expressed against the
 // `WorkerWorldView` (shared-SAB column field access + the command encoder) and an explicit list of
 // matched entity indices, so the SAME kernel runs identically on a worker thread (over the shared
 // buffer set) and on the main thread (single-thread mode) — the structural guarantee behind
-// serial-equivalence (SCH-3): there is ONE body, not two.
+// serial-equivalence: there is ONE body, not two.
 //
 // The main thread does the bitmask-free archetype MATCHING (it owns the query engine) and hands the
 // worker the matched entity indices; the worker runs the per-entity kernel reading ARCHETYPE TABLES
-// ONLY (never the bitmask, Must-Fix #1). Field writes go to disjoint shared columns; structural ops
+// ONLY (never the bitmask). Field writes go to disjoint shared columns; structural ops
 // are deferred to the worker's command buffer.
 
 import type { ComponentDef, Schema } from '@ecsia/schema'

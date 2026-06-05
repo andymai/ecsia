@@ -1,11 +1,11 @@
-// The per-query result container (queries.md §7.1): a SAB-capable Uint32Array sparse set storing
+// The per-query result container: a SAB-capable Uint32Array sparse set storing
 // ENTITY INDICES (not full handles — the index is the stable maintenance key, matching the bitmask
 // and the entity record addressing). O(1) add/remove/has, dense iteration, no duplicates.
 //
 // `dense`/`sparse` are u32 regions allocated through Buffers.region so they are SAB-backed when
-// threaded and length-track on the primary grow path (V-1). `current` is read-only to workers (they
-// iterate matchingArchetypes rows, §9.4), so no atomics on the iteration path. Sizing is lazy: the
-// set grows to the entity-index high-water as entities are added, never eagerly to maxEntities (§7.3).
+// threaded and length-track on the primary grow path. `current` is read-only to workers (they
+// iterate matchingArchetypes rows), so no atomics on the iteration path. Sizing is lazy: the
+// set grows to the entity-index high-water as entities are added, never eagerly to maxEntities.
 
 import type { Buffers, Region, RegionKey } from '../memory/index.js'
 import { isSharedBacking } from '../memory/buffers.js'
@@ -44,7 +44,7 @@ export class SparseSetU32 {
     return pos < this.#size && (this.#dense[pos] as number) === index
   }
 
-  /** O(1); idempotent (has-guarded so no dup). Grows the addressable space lazily (§7.3). */
+  /** O(1); idempotent (has-guarded so no dup). Grows the addressable space lazily. */
   add(index: number): void {
     if (this.has(index)) return
     this.#ensureCapacity(index + 1)
@@ -117,7 +117,7 @@ function growRegion(buffers: Buffers, region: Region<Uint32Array>, newLength: nu
       }
     }
   }
-  // Fallback: re-allocate a fresh backing and copy. Serial-flush only (V-2); workers never maintain.
+  // Fallback: re-allocate a fresh backing and copy. Serial-flush only; workers never maintain.
   const isShared = isSharedBacking(region.backing)
   const fresh: ArrayBufferLike = isShared
     ? (new SharedArrayBuffer(required) as ArrayBufferLike)

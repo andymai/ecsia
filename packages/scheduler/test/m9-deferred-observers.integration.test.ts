@@ -1,12 +1,12 @@
-// M9 INTEGRATION — the scheduler drives the deferred observer drain at the SERIAL SLOT under both the
+// INTEGRATION — the scheduler drives the deferred observer drain at the SERIAL SLOT under both the
 // single-thread (runUpdate) and threaded (runUpdateThreaded) executors, for both observerCadence
-// values ('frame-end' default, 'per-system' opt-in). The headline R-3 goal end-to-end: an observer
+// values ('frame-end' default, 'per-system' opt-in). The headline goal end-to-end: an observer
 // that stages a structural op during the drain has it applied at the NEXT serial flush, observed by
 // onAdd next drain — never mid-system, never re-entrant.
 //
 // The threaded path is exercised with workerCount === 0 (the degenerate threaded executor): it walks
 // the same wave loop and calls world.observerDrain() at the serial slot, proving the wiring holds on
-// runUpdateThreaded without needing the M7 worker pool spun up.
+// runUpdateThreaded without needing the worker pool spun up.
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, onAdd, onChange, write } from '@ecsia/core'
@@ -125,7 +125,7 @@ describe('threaded runUpdateThreaded drives observerDrain at the serial slot (de
 
     await scheduler.updateThreaded(pool, 1)
     expect(added).toBe(0)
-    expect((world as World).phase).toBe('serial') // exits the serial slot (SCH-4)
+    expect((world as World).phase).toBe('serial') // exits the serial slot
 
     await scheduler.updateThreaded(pool, 1)
     expect(added).toBe(1)

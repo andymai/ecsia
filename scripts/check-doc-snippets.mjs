@@ -138,7 +138,7 @@ async function main() {
       `(${skipped} block(s) skipped via no-check)…`,
   )
 
-  const tsc = process.platform === 'win32' ? 'tsc.cmd' : 'tsc'
+  const tsc = process.platform === 'win32'? 'tsc.cmd': 'tsc'
   const res = spawnSync(join(ROOT, 'node_modules', '.bin', tsc), ['-p', join(SCRATCH, 'tsconfig.json')], {
     cwd: ROOT,
     encoding: 'utf8',
@@ -148,10 +148,10 @@ async function main() {
   if (res.status !== 0) {
     // Rewrite scratch paths back to the source .md so the failure points at the doc, not the temp file.
     const remapped = out.replace(
-      new RegExp(`website\\${sep}\\.snippet-check\\${sep}([^\\s(]+)\\.ts`, 'g'),
+      new RegExp(`website\\${sep}\\.snippet-check\\${sep}([^\\s(])\\.ts`, 'g'),
       (_m, name) => {
         const g = generated.find((x) => x.outFile.endsWith(`${name}.ts`))
-        return g ? `${relative(ROOT, g.md)} (snippet near line ${g.line})` : name
+        return g? `${relative(ROOT)} (snippet near line ${g.line})`: name
       },
     )
     console.error(remapped.trim() || 'tsc failed with no output')

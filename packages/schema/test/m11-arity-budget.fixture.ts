@@ -1,4 +1,4 @@
-// M11 — tsc compile-time BUDGET fixture (type-system.md §6.4, report §5.2/§7.5 mitigation 4).
+// — tsc compile-time BUDGET fixture (report).
 //
 // This file is NOT a vitest test (it is named `.fixture.ts`, not `.test.ts`, so the workspace glob
 // never collects it). The guard test (m11-arity-budget.test.ts) compiles it with

@@ -1,7 +1,7 @@
-// The dense/sparse swap-and-move free-list (entity-model.md §3): the authoritative registry of
+// The dense/sparse swap-and-move free-list: the authoritative registry of
 // which index slots are alive and at which generation. All mutation here is single-writer
 // (main-thread, serial phase). `dense` stores full handles (index ⊕ generation) so recycling
-// can reissue the bumped handle with a single read (§3.1 adaptation note).
+// can reissue the bumped handle with a single read.
 
 import { handleIndex, makeHandle } from './codec.js'
 import type { EntityHandle, HandleLayout } from './codec.js'
@@ -17,7 +17,7 @@ export class CapacityExceeded extends Error {
 
 /**
  * Asked of the store when a brand-new index would exceed the currently-addressable array
- * length. Returns the new addressable length after growth (§7 grow-and-republish); returns the
+ * length. Returns the new addressable length after growth; returns the
  * unchanged length when growth is impossible, which makes `allocEntity` throw CapacityExceeded.
  */
 export type GrowHook = (need: number) => number
@@ -44,7 +44,7 @@ export interface EntityIndexBounds {
    * Hard mint ceiling: the largest number of distinct indices that may ever be minted. The
    * allocator throws CapacityExceeded once denseLen reaches this with no free slot. Typically
    * `min(maxEntities, maxIndex + 1)`, minus one when threaded to reserve `maxIndex` for the
-   * NO_ENTITY sentinel (§2.5 / §3.3).
+   * NO_ENTITY sentinel.
    */
   readonly ceiling: number
 }
@@ -72,7 +72,7 @@ export class EntityIndex {
     this.#grow = grow ?? ((): number => this.#addressable)
   }
 
-  /** Re-publish the backing arrays after a growth (§7); positions/cursors are unchanged. */
+  /** Re-publish the backing arrays after a growth; positions/cursors are unchanged. */
   rebind(arrays: EntityIndexArrays, addressable: number): void {
     this.#arrays = arrays
     this.#addressable = addressable
@@ -109,7 +109,7 @@ export class EntityIndex {
       throw new CapacityExceeded(this.#ceiling, c.aliveCount)
     }
     if (c.denseLen >= this.#addressable) {
-      // Ask the store to grow the backing arrays (§7) and re-publish via rebind(); if it cannot,
+      // Ask the store to grow the backing arrays and re-publish via rebind(); if it cannot,
       // addressable is unchanged and we are genuinely exhausted.
       const grown = this.#grow(c.denseLen + 1)
       if (c.denseLen >= grown) {

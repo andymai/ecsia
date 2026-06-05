@@ -1,4 +1,4 @@
-// RF-PIN (rich-fields.md §6): a component with >=1 rich field is restrictedToMainThread; any system
+// RF-PIN: a component with >=1 rich field is restrictedToMainThread; any system
 // declaring read OR write access to it is worker-ineligible. The pin is component-level and fires via
 // the EXISTING computeWorkerEligible walk once 'string'.shareable === false — no planner change.
 
@@ -57,7 +57,7 @@ describe('RF-PIN — the command-buffer field codec skips rich fields without er
     const Thing = asComp(defineComponent({ hp: 'i32', name: 'string' }, { name: 'ThingC' }) as ComponentDef<Schema>)
     createWorld({ components: [Thing] })
     const codec = buildFieldCodec(Thing)
-    // Only `hp` is encodable; `name` (string, shareable=false) is filtered out (defense-in-depth, §6.1).
+    // Only `hp` is encodable; `name` (string, shareable=false) is filtered out (defense-in-depth).
     expect(codec.fields.length).toBe(1)
     const out = new Int32Array(codec.totalWords)
     expect(() => codec.encode({ hp: 5, name: 'ignored' }, out, 0)).not.toThrow()

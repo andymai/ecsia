@@ -271,14 +271,14 @@ describe('generationBits === 0 rejected when threaded === true', () => {
   })
 })
 
-describe('capacity & growth (entity-model.md §3.4 / §7, I3 / I9)', () => {
+describe('capacity & growth (I3 / I9)', () => {
   test('spawning past the initial maxEntities grows the arrays; handles stay alive and resolvable', () => {
     // Initial addressable length is 4; growth doubles up to the index space.
     const w = createWorld({ maxEntities: 4 })
     const handles: EntityHandle[] = []
     for (let i = 0; i < 9; i++) handles.push(w.spawn())
     // Every handle — including those minted past the initial 4 — must be alive (NOT silently
-    // out-of-bounds / reported dead, the critical Must-Fix bug).
+    // out-of-bounds / reported dead, the critical bug).
     for (const h of handles) expect(w.isAlive(h)).toBe(true)
     expect(w.handleStats().aliveCount).toBe(9)
     expect(w.handleStats().minted).toBe(9)
@@ -311,7 +311,7 @@ describe('capacity & growth (entity-model.md §3.4 / §7, I3 / I9)', () => {
     expect(() => w.spawn()).toThrow(/exhausted/)
   })
 
-  test('threaded worlds reserve maxIndex for the NO_ENTITY sentinel (§2.5)', () => {
+  test('threaded worlds reserve maxIndex for the NO_ENTITY sentinel ', () => {
     // crossOriginIsolated is false in the test env, so threaded arrays are plain ArrayBuffers,
     // but the mint ceiling is still maxIndex (not maxIndex + 1): the sentinel slot is unusable.
     // gen 30 → maxIndex 3; threaded ceiling = 3, so at most 3 distinct mints.
@@ -327,9 +327,9 @@ describe('capacity & growth (entity-model.md §3.4 / §7, I3 / I9)', () => {
   })
 })
 
-describe('I7 — isAlive never consults a bitmask (Must-Fix #1, structural)', () => {
-  // No bitmask module exists in M1, so a runtime stub cannot be wired (the spec's eventual
-  // bitmask lives in archetype-storage §6, M-bitmask). Until then, prove the invariant
+describe('I7 — isAlive never consults a bitmask (structural)', () => {
+  // No bitmask module exists in, so a runtime stub cannot be wired (the spec's eventual
+  // bitmask lives in archetype-storage, M-bitmask). Until then, prove the invariant
   // structurally: isAlive's implementation reads only the identity triad (sparse/dense/
   // generation) and never names anything bitmask-shaped. This assertion CAN fail if a future
   // edit makes isAlive touch a membership word — unlike a console.warn spy, which never could.

@@ -1,9 +1,9 @@
 // Coverage for ArchetypeStore column-row initialization corners and the warm() promotion's
 // missing-source fallback:
-//   - #initColumnRow skips object<T> fields (ctor === null) and applies the explicit fill for
-//     needsExplicitInit fields (eid → EID_NULL), exercised by adding such a component via migration;
-//   - warm() over an archetype whose signature includes a TAG component takes the dstSet-absent
-//     `continue` (the tag contributes no hot ColumnSet) while still promoting the column-bearing one.
+// - #initColumnRow skips object<T> fields (ctor === null) and applies the explicit fill for
+// needsExplicitInit fields (eid → EID_NULL), exercised by adding such a component via migration;
+// - warm() over an archetype whose signature includes a TAG component takes the dstSet-absent
+// `continue` (the tag contributes no hot ColumnSet) while still promoting the column-bearing one.
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, defineTag, object } from '@ecsia/core'

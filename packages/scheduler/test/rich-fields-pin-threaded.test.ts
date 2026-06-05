@@ -1,11 +1,11 @@
-// RF-PIN serial-equivalence under a REAL multi-worker frame (rich-fields.md §6 / §11 T-PIN, the
+// RF-PIN serial-equivalence under a REAL multi-worker frame (the
 // threaded leg). A rich-field-bearing component is restrictedToMainThread, so a system writing it is
 // worker-INELIGIBLE and runs its run() body SERIALLY on the main thread BEFORE each round's worker
 // dispatch (update-threaded.ts:10-11,44 — "object-field systems"). We assert that a threaded world
 // mixing a worker-eligible NUMERIC system (kernel-dispatched) with a main-pinned RICH system produces
 // the IDENTICAL state as a single-threaded run of the same plan. If the rich system were (wrongly)
-// dispatched to a worker, its sidecar write would be lost (the field codec drops non-shareable fields,
-// §6.1) and the rich state would diverge — so this is a discriminating equivalence, not a tautology.
+// dispatched to a worker, its sidecar write would be lost (the field codec drops non-shareable
+// fields) and the rich state would diverge — so this is a discriminating equivalence, not a tautology.
 //
 // RESOURCE SAFETY: exactly ONE WorkerPool, disposed in afterEach; a single targeted file run.
 

@@ -1,14 +1,14 @@
-// M8 relations runtime invariants (relations.md §12). Exercises the full createRelations(world) seam
-// end-to-end: tag/exclusive/overflow storage kinds, presence bit (P1), idempotent index-keyed mint
-// (P2), zero-migration exclusive re-target (P3), cascade ordering (P4/P5), wildcard O(1) match (P6),
-// overflow payload (P7), back-ref bucket reclaim (P8), and lazy depth (P9).
+// relations runtime invariants. Exercises the full createRelations(world) seam
+// end-to-end: tag/exclusive/overflow storage kinds, presence bit, idempotent index-keyed mint
+// zero-migration exclusive re-target, cascade ordering, wildcard O(1) match,
+// overflow payload, back-ref bucket reclaim, and lazy depth.
 
 import { describe, it, expect } from 'vitest'
 import { createWorld } from '@ecsia/core'
 import { createRelations, Wildcard } from '../src/index.js'
 
-describe('M8 relations — storage-kind resolution & structural ops', () => {
-  it('tag relation: addPair sets the pair + presence bits; hasPair / hasRelation track them (P1)', () => {
+describe(' relations — storage-kind resolution & structural ops', () => {
+  it('tag relation: addPair sets the pair + presence bits; hasPair / hasRelation track them ', () => {
     const world = createWorld()
     const rel = createRelations(world)
     const ChildOf = rel.defineRelation(null) // payload-free → tag
@@ -22,10 +22,10 @@ describe('M8 relations — storage-kind resolution & structural ops', () => {
 
     rel.removePair(child, ChildOf, parent)
     expect(rel.hasPair(child, ChildOf, parent)).toBe(false)
-    expect(rel.hasRelation(child, ChildOf)).toBe(false) // presence dropped at the last R-pair (P1)
+    expect(rel.hasRelation(child, ChildOf)).toBe(false) // presence dropped at the last R-pair
   })
 
-  it('mintPair is idempotent and keyed by target index (P2): re-add is stable, no double presence', () => {
+  it('mintPair is idempotent and keyed by target index: re-add is stable, no double presence', () => {
     const world = createWorld()
     const rel = createRelations(world)
     const Likes = rel.defineRelation(null)
@@ -37,7 +37,7 @@ describe('M8 relations — storage-kind resolution & structural ops', () => {
     expect([...rel.subjectsOf(Likes, b)]).toEqual([a])
   })
 
-  it('exclusive re-target is a field write, no archetype churn after the first attach (P3)', () => {
+  it('exclusive re-target is a field write, no archetype churn after the first attach ', () => {
     const world = createWorld()
     const rel = createRelations(world)
     const ChildOf = rel.defineRelation({ weight: 'f32' }, { exclusive: true })
@@ -51,7 +51,7 @@ describe('M8 relations — storage-kind resolution & structural ops', () => {
     const archAfterAttach = archOf(world, child)
 
     // Re-target repeatedly. The T1 valve rewrites the eid column in place — NO archetype move, so the
-    // child's archetype id is invariant across every re-parent (P3).
+    // child's archetype id is invariant across every re-parent.
     rel.addPair(child, ChildOf, p2, { weight: 2 })
     expect(archOf(world, child)).toBe(archAfterAttach)
     rel.addPair(child, ChildOf, p3, { weight: 3 })
@@ -64,7 +64,7 @@ describe('M8 relations — storage-kind resolution & structural ops', () => {
     expect([...rel.subjectsOf(ChildOf, p3)]).toEqual([child])
   })
 
-  it('overflow-table relation: payload lives off-archetype, readable via getPair (P7)', () => {
+  it('overflow-table relation: payload lives off-archetype, readable via getPair ', () => {
     const world = createWorld()
     const rel = createRelations(world)
     const Damage = rel.defineRelation({ amount: 'u32' }, { exclusive: false })
@@ -83,8 +83,8 @@ describe('M8 relations — storage-kind resolution & structural ops', () => {
   })
 })
 
-describe('M8 relations — wildcard query, cascade, back-ref, depth', () => {
-  it('Pair(R, Wildcard) matches via the presence bit; Pair(R, target) matches the specific pair (P6)', () => {
+describe(' relations — wildcard query, cascade, back-ref, depth', () => {
+  it('Pair(R, Wildcard) matches via the presence bit; Pair(R, target) matches the specific pair ', () => {
     const world = createWorld()
     const rel = createRelations(world)
     const Likes = rel.defineRelation(null)
@@ -102,7 +102,7 @@ describe('M8 relations — wildcard query, cascade, back-ref, depth', () => {
 
     const c = world.spawn()
     const neverMinted = world.query(rel.Pair(Likes, c) as never)
-    expect(neverMinted.count).toBe(0) // querying a never-minted pair matches nothing & does not mint (Q-R2)
+    expect(neverMinted.count).toBe(0) // querying a never-minted pair matches nothing & does not mint
   })
 
   it('exclusive Pair(R, specificParent) row-filters by the eid column', () => {
@@ -121,7 +121,7 @@ describe('M8 relations — wildcard query, cascade, back-ref, depth', () => {
     expect(world.query(rel.Pair(ChildOf, Wildcard) as never).count).toBe(2)
   })
 
-  it('cascade deleteSubject deletes children iteratively (P4/P5); none mode just drops dangling pairs', () => {
+  it('cascade deleteSubject deletes children iteratively; none mode just drops dangling pairs', () => {
     const world = createWorld()
     const rel = createRelations(world)
     const ChildOf = rel.defineRelation(null, { exclusive: true, cascade: 'deleteSubject' })
@@ -133,10 +133,10 @@ describe('M8 relations — wildcard query, cascade, back-ref, depth', () => {
 
     world.despawn(root)
     expect(world.isAlive(child)).toBe(false) // cascaded
-    expect(world.isAlive(grandchild)).toBe(false) // iterative BFS reached the grandchild (P5)
+    expect(world.isAlive(grandchild)).toBe(false) // iterative BFS reached the grandchild
   })
 
-  it("cascade 'none': deleting the target removes the dangling pair, subject survives (P4)", () => {
+  it("cascade 'none': deleting the target removes the dangling pair, subject survives ", () => {
     const world = createWorld()
     const rel = createRelations(world)
     const Likes = rel.defineRelation(null) // default cascade none
@@ -148,7 +148,7 @@ describe('M8 relations — wildcard query, cascade, back-ref, depth', () => {
     expect(rel.hasRelation(a, Likes)).toBe(false) // dangling pair removed before b's slot recycles
   })
 
-  it('back-ref buckets are reclaimed when empty (P8)', () => {
+  it('back-ref buckets are reclaimed when empty ', () => {
     const world = createWorld()
     const rel = createRelations(world)
     const Likes = rel.defineRelation(null)
@@ -160,7 +160,7 @@ describe('M8 relations — wildcard query, cascade, back-ref, depth', () => {
     expect([...rel.subjectsOf(Likes, b)]).toEqual([]) // empty bucket, no leak
   })
 
-  it('lazy depthOf walks the exclusive parent chain; throws on non-exclusive (P9)', () => {
+  it('lazy depthOf walks the exclusive parent chain; throws on non-exclusive ', () => {
     const world = createWorld()
     const rel = createRelations(world)
     const ChildOf = rel.defineRelation(null, { exclusive: true })

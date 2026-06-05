@@ -1,12 +1,12 @@
-// M5 reactivity invariant suite (reactivity.md §11). Driven through createWorld so the trackWrite
+// reactivity invariant suite. Driven through createWorld so the trackWrite
 // setter call-site, the shape-log commit points, and the query-flavor hooks are exercised end to end.
 //
-//   Must-Fix #2 / R-2  the .changed FILTER is driven by trackWrite from the MUTABLE setter; the
-//                       Readonly shorthand NEVER tracks; changeVersion drives the PUBLIC predicate.
-//   R-3                 observers fire only at observerDrain, never synchronously mid-system.
-//   R-8                 a destroy observer can resolve the dying entity's last component value.
-//   R-9                 add-then-remove of a component within a frame nets to no add/remove delta.
-//   R-5                 ring overflow spills and recovers (no hard throw).
+// / the .changed FILTER is driven by trackWrite from the MUTABLE setter; the
+// Readonly shorthand NEVER tracks; changeVersion drives the PUBLIC predicate.
+// observers fire only at observerDrain, never synchronously mid-system.
+// a destroy observer can resolve the dying entity's last component value.
+// add-then-remove of a component within a frame nets to no add/remove delta.
+// ring overflow spills and recovers (no hard throw).
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, read, write, onAdd, onRemove, onChange } from '@ecsia/core'
@@ -23,7 +23,7 @@ function makeKit(opts?: Parameters<typeof createWorld>[0]): {
   return { world: createWorld({ ...opts, components }), Position, Velocity }
 }
 
-describe('Must-Fix #2 / R-2 — the Changed filter is write-log driven from the mutable setter', () => {
+describe(' / — the Changed filter is write-log driven from the mutable setter', () => {
   test('a mutable setter write surfaces in eachChanged; the readonly path never tracks', () => {
     const { world, Position } = makeKit()
     const q = world.query(read(Position)).changed()
@@ -72,7 +72,7 @@ describe('Must-Fix #2 / R-2 — the Changed filter is write-log driven from the 
   })
 })
 
-describe('R-3 — observers are deferred, never synchronous', () => {
+describe(' — observers are deferred, never synchronous', () => {
   test('onChange does not fire from the setter; only at observerDrain', () => {
     const { world, Position } = makeKit()
     let fired = 0
@@ -122,7 +122,7 @@ describe('R-3 — observers are deferred, never synchronous', () => {
   })
 })
 
-describe('changeVersion granularity — component-level default (Q-CD1)', () => {
+describe('changeVersion granularity — component-level default ', () => {
   test('writing one field stamps the whole-entity row (component granularity): changedSince is true for the entity', () => {
     const { world, Position } = makeKit()
     const e = world.spawnWith(Position)
@@ -149,7 +149,7 @@ describe('changeVersion granularity — component-level default (Q-CD1)', () => 
   })
 })
 
-describe('R-8 — destroy ordering lets an onRemove handler read the last value', () => {
+describe(' — destroy ordering lets an onRemove handler read the last value', () => {
   test('onRemove resolves the dying entity and reads its final component value', () => {
     const { world, Position } = makeKit()
     let seen = -1
@@ -164,9 +164,9 @@ describe('R-8 — destroy ordering lets an onRemove handler read the last value'
     expect(seen).toBe(42)
   })
 
-  test('§7.4 deferred reclaim: despawning a NON-last row with a live sibling reads the DYING value, not the shuffled-in sibling', () => {
+  test(': despawning a NON-last row with a live sibling reads the DYING value, not the shuffled-in sibling', () => {
     // The discriminating case the single-entity test cannot reach: a sibling occupies the archetype's
-    // last row and swap-pops into the dying entity's row. Without §7.4 deferred reclaim the dying
+    // last row and swap-pops into the dying entity's row. Without
     // entity's column data is overwritten by the sibling BEFORE observerDrain, so the handler would
     // read the sibling's value. With deferral it reads the dying entity's own pre-removal value.
     const { world, Position } = makeKit()
@@ -186,7 +186,7 @@ describe('R-8 — destroy ordering lets an onRemove handler read the last value'
     expect((world.entity(b).read(Position) as { x: number }).x).toBe(22)
   })
 
-  test('§7.4 gate: without a remove-observer the row is reclaimed immediately (sibling shuffles into the dying row)', () => {
+  test(': without a remove-observer the row is reclaimed immediately (sibling shuffles into the dying row)', () => {
     const { world, Position } = makeKit()
     const a = world.spawnWith(Position)
     const b = world.spawnWith(Position)
@@ -205,7 +205,7 @@ describe('R-8 — destroy ordering lets an onRemove handler read the last value'
   })
 })
 
-describe('R-9 — add-then-remove within a frame coalesces (off the shape log too)', () => {
+describe(' — add-then-remove within a frame coalesces (off the shape log too)', () => {
   test('maintainStructural drain agrees with synchronous maintenance', () => {
     const { world, Position, Velocity } = makeKit()
     const q = world.query(read(Position), read(Velocity)).added().removed()
@@ -223,7 +223,7 @@ describe('R-9 — add-then-remove within a frame coalesces (off the shape log to
   })
 })
 
-describe('R-5 — recoverable overflow spill (no hard throw)', () => {
+describe(' — recoverable overflow spill (no hard throw)', () => {
   test('writing more entities than the tiny ring holds does not throw and reports all changed', () => {
     const { world, Position } = makeKit({ maxEntities: 64, reactivity: { maxWritesPerFrame: 4 } })
     const q = world.query(read(Position)).changed()

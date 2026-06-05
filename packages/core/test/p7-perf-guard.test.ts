@@ -1,16 +1,16 @@
-// P7 perf-regression GUARDS — structural / counter-based, NOT wall-clock (non-flaky by construction).
-// These lock in the two iteration hot-path optimizations whose measured numbers live in docs/perf/P7.md:
+// perf-regression GUARDS — structural / counter-based, NOT wall-clock (non-flaky by construction).
+// These lock in the two iteration hot-path optimizations whose measured numbers live in docs/perf/.md:
 //
-//   WRITE-PATH-GATE  the .each setter's trackWrite chain is fully skipped when no write consumer exists.
-//                    Counter invariant: with `tracking.active === false`, N scalar writes ⇒ ZERO
-//                    handleIndex decodes AND ZERO trackWrite calls; flip it true ⇒ exactly N of each.
-//                    This is the P7 optimization that cut .each ~22.8 → ~10.4 ns/ent (50k, single proc).
+// WRITE-PATH-GATE the .each setter's trackWrite chain is fully skipped when no write consumer exists.
+// Counter invariant: with `tracking.active === false`, N scalar writes ⇒ ZERO
+// handleIndex decodes AND ZERO trackWrite calls; flip it true ⇒ exactly N of each.
+// This is the optimization that cut .each ~22.8 → ~10.4 ns/ent (50k, single proc).
 //
-//   CHUNK-SETUP-O(A) eachChunk's per-call machinery (column resolves) is O(archetypes), independent of
-//                    N: the column index map is built ONCE per (component) and reused, and the chunk is a
-//                    single reused instance. Counter invariant: column-index BUILD count does not grow
-//                    with entity count, and the row loop allocates nothing per row (asserted via a stable
-//                    chunk identity + a constant resolve count across two N).
+// CHUNK-SETUP-O(A) eachChunk's per-call machinery (column resolves) is O(archetypes), independent of
+// N: the column index map is built ONCE per (component) and reused, and the chunk is a
+// single reused instance. Counter invariant: column-index BUILD count does not grow
+// with entity count, and the row loop allocates nothing per row (asserted via a stable
+// chunk identity + a constant resolve count across two N).
 //
 // A wall-clock assertion would be flaky across machines/JIT; these assert the STRUCTURE that makes the
 // win real, so a regression that re-introduces per-write handle decoding or per-call column rebuilding
@@ -53,7 +53,7 @@ function countingWorld(): AccessorWorld & {
   }
 }
 
-describe('P7 WRITE-PATH-GATE — trackWrite chain is dead-skipped with no consumer (counter-based)', () => {
+describe(' WRITE-PATH-GATE — trackWrite chain is dead-skipped with no consumer (counter-based)', () => {
   const N = 256
 
   function writeN(active: boolean): { handleIndexCalls: number; trackWriteCalls: number } {
@@ -82,7 +82,7 @@ describe('P7 WRITE-PATH-GATE — trackWrite chain is dead-skipped with no consum
     expect(r.trackWriteCalls).toBe(N)
   })
 
-  // V-1 / ACC-1: the gate is orthogonal to view rebind. After a column grow re-points the accessor's
+  // /: the gate is orthogonal to view rebind. After a column grow re-points the accessor's
   // view, the gate must STILL (a) let the value write land on the live (grown) view regardless of
   // tracking state, and (b) when active, record exactly one tracked write. Guards that the fast-out did
   // not bypass the rebind protocol.
@@ -125,7 +125,7 @@ describe('P7 WRITE-PATH-GATE — trackWrite chain is dead-skipped with no consum
   })
 })
 
-describe('P7 CHUNK-SETUP-O(A) — eachChunk preamble is independent of N (structural)', () => {
+describe(' CHUNK-SETUP-O(A) — eachChunk preamble is independent of N (structural)', () => {
   function build(n: number): { resolves: number; chunkIdentities: Set<unknown>; rows: number } {
     const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'p7cx' })
     const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'p7cv' })

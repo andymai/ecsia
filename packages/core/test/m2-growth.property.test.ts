@@ -1,10 +1,10 @@
-// M2 property suite (memory-buffers.md §7 — the load-bearing growth invariants V-1 / C-1 / B-2).
+// property suite.
 // Random .grow() sequences interleaved with writes pin the three serial-phase observable invariants:
-//   V-1  a view CAPTURED BEFORE growth still reads values written AFTER growth at high rows
-//        (length-tracking widening). NEGATIVE CONTROL proves the test discriminates: a view built
-//        WITH an explicit length does NOT widen.
-//   C-1  view.length === capacity()*stride at every observable point.
-//   B-2  column .buffer identity is stable across growth on the primary (resizable) path.
+// a view CAPTURED BEFORE growth still reads values written AFTER growth at high rows
+// (length-tracking widening). NEGATIVE CONTROL proves the test discriminates: a view built
+// WITH an explicit length does NOT widen.
+// view.length === capacity()*stride at every observable point.
+// column .buffer identity is stable across growth on the primary (resizable) path.
 //
 // This env probes 'resizable-ab' (Node, single mode) so the primary path is exercised. Each test
 // asserts the primary-path property only under a resizable backing and degrades its assertion to the
@@ -23,7 +23,7 @@ const isPrimary = caps.backing === 'resizable-ab'
 const newBuffers = (): Buffers => new Buffers({ capabilities: caps, maxEntities: 1 << 20 })
 
 // A growth plan: a strictly increasing sequence of target capacities plus a row to write at each
-// step. Targets stay <= 4000 and columns start at initialCapacity 256 so the §7.7 reservation
+// step. Targets stay <= 4000 and columns start at initialCapacity 256 so the
 // (256*16 = 4096 rows) covers every target — the PRIMARY in-place `.grow()` is exercised throughout
 // (exceeding the reservation would legitimately escalate to the fallback re-alloc, a separate path).
 const RESERVE_INITIAL = 256
@@ -31,7 +31,7 @@ const growPlan = fc
   .array(fc.integer({ min: 1, max: 4000 }), { minLength: 1, maxLength: 12 })
   .map((caps_) => [...caps_].sort((a, b) => a - b))
 
-describe('V-1: a pre-grow length-tracking view widens to read post-grow high-row writes', () => {
+describe(': a pre-grow length-tracking view widens to read post-grow high-row writes', () => {
   test('captured view reads values written after grow at high rows', () => {
     fc.assert(
       fc.property(growPlan, fc.float({ noNaN: true, min: -1e6, max: 1e6 }), (targets, value) => {
@@ -62,7 +62,7 @@ describe('V-1: a pre-grow length-tracking view widens to read post-grow high-row
     )
   })
 
-  // NEGATIVE CONTROL: a view built WITH an explicit length does NOT widen. If V-1's library code
+  // NEGATIVE CONTROL: a view built WITH an explicit length does NOT widen. If 's library code
   // ever built views with an explicit length, the positive test above would read garbage at high
   // rows; this control proves the captured-view test discriminates that difference.
   test('NEGATIVE CONTROL: an explicit-length view does NOT widen on grow', () => {
@@ -72,7 +72,7 @@ describe('V-1: a pre-grow length-tracking view widens to read post-grow high-row
     }
     const b = newBuffers()
     const col = b.column(k('vg-neg.0'), makeColumnLayout('f32', 1), 1)
-    // Explicit-length view (the BUG V-1 forbids): frozen window at construction.
+    // Explicit-length view (the BUG forbids): frozen window at construction.
     const frozen = new Float32Array(col.backing, 0, col.capacity())
     expect(frozen.length).toBe(1)
 
@@ -85,7 +85,7 @@ describe('V-1: a pre-grow length-tracking view widens to read post-grow high-row
   })
 })
 
-describe('C-1: view.length === capacity()*stride at every observable point', () => {
+describe(': view.length === capacity()*stride at every observable point', () => {
   test('holds across random grow sequences for scalar and vec strides', () => {
     fc.assert(
       fc.property(growPlan, fc.constantFrom(1, 2, 3, 4), (targets, stride) => {
@@ -103,11 +103,11 @@ describe('C-1: view.length === capacity()*stride at every observable point', () 
   })
 })
 
-describe('B-2: column SAB/AB identity is stable across growth on the primary path', () => {
-  // Start with initialCapacity 256 so the §7.7 reservation (initial*16 = 4096 rows) comfortably
+describe(': column SAB/AB identity is stable across growth on the primary path', () => {
+  // Start with initialCapacity 256 so the (initial*16 = 4096 rows) comfortably
   // covers every grow target below — the primary in-place `.grow()` is exercised the whole way, so
   // backing identity MUST be preserved. (Exceeding the reservation legitimately escalates to the
-  // fallback re-alloc, §7.7; that path is covered by V-1/C-1's fallback branches, not here.)
+  // fallback re-alloc,; that path is covered by /'s fallback branches, not here.)
   const INITIAL = 256
   const withinReservation = fc
     .array(fc.integer({ min: 1, max: 4000 }), { minLength: 1, maxLength: 12 })
@@ -121,7 +121,7 @@ describe('B-2: column SAB/AB identity is stable across growth on the primary pat
         const backing0 = col.backing
         for (const target of targets) b.grow(col, target)
         if (isPrimary) {
-          // Same buffer object after every grow — what makes zero-copy worker sharing safe (§6.4).
+          // Same buffer object after every grow — what makes zero-copy worker sharing safe.
           expect(col.backing).toBe(backing0)
         } else {
           // Non-resizable engine: fallback re-allocates; the view still length-matches capacity.

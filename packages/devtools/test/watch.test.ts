@@ -1,4 +1,4 @@
-// watchWorld (§2): per-frame deltas across REAL frames. We drive a real scheduler that spawns, writes,
+// watchWorld: per-frame deltas across REAL frames. We drive a real scheduler that spawns, writes,
 // and despawns on known frames, then assert the EXACT delta counts the watcher reports at each tick —
 // and that dispose() stops the callbacks cleanly.
 
@@ -14,10 +14,10 @@ describe('watchWorld — exact per-frame deltas over real frames', () => {
     const world = createWorld({ components: [Health], maxEntities: 1024 })
 
     // Frame schedule:
-    //  frame 0: spawn 3 entities.
-    //  frame 1: write Health on all 3 (3 change-tracked writes).
-    //  frame 2: despawn 1.
-    //  frame 3: no-op.
+    // frame 0: spawn 3 entities.
+    // frame 1: write Health on all 3 (3 change-tracked writes).
+    // frame 2: despawn 1.
+    // frame 3: no-op.
     let n = 0
     const handles: number[] = []
     const Sys = defineSystem({

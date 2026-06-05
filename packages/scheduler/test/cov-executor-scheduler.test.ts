@@ -1,6 +1,6 @@
 // Coverage: executor/scheduler.ts — strideFor's explicit `registeredComponentCount` branch (line 49,
 // branch 49). When provided, the access stride is ceil(count/32) regardless of declared ids; when
-// omitted it is derived from the max declared component id. scheduler.md §12.
+// omitted it is derived from the max declared component id.
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent } from '@ecsia/core'

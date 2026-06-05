@@ -1,4 +1,4 @@
-// Compile-only inference obligations (type-system.md §11). Type-checked standalone (see the
+// Compile-only inference obligations. Type-checked standalone (see the
 // runtime guard test that compiles this file); no assertions run. Contracts are pinned by mutual
 // assignability rather than a brittle `Equal` helper (deferred conditionals defeat strict Equal,
 // while bidirectional assignment proves the same equivalence).
@@ -23,7 +23,7 @@ export const _r1: Readonly<{ x: number; y: number }> = rp
 export const _r1b: ReadView<PosSchema> = { x: 1, y: 2 } as Readonly<{ x: number; y: number }>
 export const _w1: { x: number; y: number } = wp
 wp.x = 5 // mutable
-// @ts-expect-error shorthand/read is deeply readonly (Must-Fix #2)
+// @ts-expect-error shorthand/read is deeply readonly
 rp.x = 5
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c1' })
@@ -42,7 +42,7 @@ export const _s1: 'idle' | 'run' = rBody.state
 // A ComponentDef is assignable to the generic def (query/scheduler seam).
 export const _asDef: ComponentDef<PosSchema> = Position
 
-// --- Rich fields (rich-fields.md §2.2): 'string' types as string; object<T> read=Readonly<T>, write=T ---
+// --- Rich fields: 'string' types as string; object<T> read=Readonly<T>, write=T ---
 import { object, field } from '@ecsia/core'
 import type { ObjectToken } from '@ecsia/core'
 

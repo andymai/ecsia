@@ -1,13 +1,13 @@
-// The factory-closure accessor class (component-schema.md §8.2; type-system.md §9). ONE hidden
+// The factory-closure accessor class. ONE hidden
 // class per (archetype, component), closing over the column views and reading a mutable __idx.
 // This is NOT an ES Proxy on the accessor itself and NOT new Function() — it is a parameterised
-// closure returning a plain JS class (the permitted technique, type-system.md §10).
+// closure returning a plain JS class (the permitted technique).
 //
 // Each instance is the single monomorphic singleton for its (archetype, component): read()/the
-// shorthand return it typed Readonly (I-ACC-3), write() returns it mutable. A getter reads the
-// captured view at __idx; a setter writes the slot AND calls world.trackWrite (I-ACC-4 / Must-Fix
-// #2). On the primary grow path captured views auto-widen (I-ACC-2, no call); on the fallback path
-// __rebind rebuilds them from the new backing (I-ACC-2b).
+// shorthand return it typed Readonly, write() returns it mutable. A getter reads the
+// captured view at __idx; a setter writes the slot AND calls world.trackWrite. On the primary
+// grow path captured views auto-widen (no rebind call); on the fallback path __rebind rebuilds
+// them from the new backing.
 
 import type {
   AccessorFactory,
@@ -25,18 +25,18 @@ import { sidecarKey } from './sidecar.js'
 import type { RichKind, SidecarKey } from './sidecar.js'
 
 // The seam the world hands the accessor: how a setter reports a tracked write. trackWrite is a
-// no-op stub until M5 (world.md §9.1 canonical signature); the call SITE is present and correct.
+// no-op stub until; the call SITE is present and correct.
 export interface AccessorWorld {
   trackWrite(index: number, componentId: ComponentId, fieldIndex?: number): void
   handleIndex(handle: EntityHandle): number
   // Shared single-bit "any write consumer exists" cell (recomputed on flavor/observer/changeVersion
   // (de)registration, NEVER per write). When `active` is false the entire trackWrite chain is provably
   // dead (write-log push gated off AND changeVersion stamping disabled), so the setter skips the
-  // handleIndex decode + closure hops entirely — the per-write hot-path fast-out (P7). Reading a live
+  // handleIndex decode + closure hops entirely — the per-write hot-path fast-out. Reading a live
   // shared cell (not a snapshot) keeps the semantics: the instant a consumer registers, `active` flips
   // and the very next write tracks, identical to calling trackWrite unconditionally.
   readonly tracking: { readonly active: boolean }
-  // The rich-field seam (rich-fields.md §5.1): getters/setters for sidecar-backed fields delegate here
+  // The rich-field seam: getters/setters for sidecar-backed fields delegate here
   // so accessor.ts stays free of any direct sidecar/entity dependency (same discipline as trackWrite).
   sidecarRead(key: SidecarKey, index: number, gen: number): unknown
   sidecarWrite(key: SidecarKey, index: number, gen: number, value: unknown): void
@@ -44,8 +44,8 @@ export interface AccessorWorld {
   generationOf(index: number): number
 }
 
-// The per-(archetype, component) binding context the world/storage builds. M3 owns binding this
-// against a real archetype's column set; for M2 the column set is allocated directly.
+// The per-(archetype, component) binding context the world/storage builds. owns binding this
+// against a real archetype's column set; for the column set is allocated directly.
 export interface AccessorBinding {
   readonly world: AccessorWorld
   readonly componentId: ComponentId
@@ -78,7 +78,7 @@ interface FieldPlan {
 }
 
 // A sidecar-backed (rich) field's plan — installed as a getter/setter pair targeting the SidecarStore,
-// independent of the column binding (rich-fields.md §5.2 option b). The column-count assert is unchanged.
+// independent of the column binding. The column-count assert is unchanged.
 interface RichPlan {
   readonly fieldIndex: number
   readonly name: string
@@ -117,8 +117,8 @@ function planFields(def: ComponentDef<Schema>): { columnPlans: FieldPlan[]; rich
         isVec: f.stride > 1,
       })
     } else if (f.rich !== undefined) {
-      // Rich (sidecar-backed) field: gets a getter/setter pair targeting the sidecar (rich-fields.md
-      // §5.2/§5.3). Its field index is still consumed so column keys stay stable across the field set.
+      // Rich (sidecar-backed) field: gets a getter/setter pair targeting the sidecar. Its field
+      // index is still consumed so column keys stay stable across the field set.
       richPlans.push({ fieldIndex, name: f.name, rich: f.rich, sidecarKey: sidecarKey(componentId, fieldIndex) })
     }
     fieldIndex += 1
@@ -127,7 +127,7 @@ function planFields(def: ComponentDef<Schema>): { columnPlans: FieldPlan[]; rich
 }
 
 // Build the per-(archetype, component) ColumnBinding[] for a column set the caller allocated. The
-// archetype-binding seam (M3) will produce these from a real archetype's columns; for M2 the
+// archetype-binding seam will produce these from a real archetype's columns; for the
 // caller passes the freshly-allocated columns directly.
 export function bindingsFor(
   columns: ReadonlyArray<{ view: TypedArray; layout: ColumnLayout }>,
@@ -146,7 +146,7 @@ export function makeAccessorFactory<S extends Schema>(def: ComponentDef<S>): Acc
   const componentId = def.id as ComponentId
 
   return ((columns: ReadonlyArray<ColumnBinding>) => {
-    // The assert counts ONLY column-bearing plans (rich-fields.md §5.2 option b): a rich-only or mixed
+    // The assert counts ONLY column-bearing plans: a rich-only or mixed
     // component binds against its column subset, and the rich getters install independently below.
     if (columns.length !== plans.length) {
       throw new Error(`accessor factory for '${def.name}': expected ${plans.length} columns, got ${columns.length}`)
@@ -158,7 +158,7 @@ export function makeAccessorFactory<S extends Schema>(def: ComponentDef<S>): Acc
     const offsets: number[] = columns.map((c) => c.byteOffset)
     const elements: ElementKind[] = columns.map((c) => c.element as ElementKind)
 
-    // One reusable VecView per vec field (§1.3: no allocation on read). Lazily built on first get
+    // One reusable VecView per vec field (no allocation on read). Lazily built on first get
     // and cached here, then re-returned for every subsequent get; it reads owner.__idx lazily so it
     // stays correct as __idx is re-poked, and resolves the live view from `views[i]` so a fallback
     // rebind is transparent.
@@ -175,7 +175,7 @@ export function makeAccessorFactory<S extends Schema>(def: ComponentDef<S>): Acc
 
       __rebindField(fieldIndex: number, newBacking: Backing): void {
         const Ctor = elementCtor(elements[fieldIndex] as ElementKind)
-        // No length argument (V-1): rebuild the length-tracking view at the captured byteOffset.
+        // No length argument: rebuild the length-tracking view at the captured byteOffset.
         views[fieldIndex] = new Ctor(newBacking as ArrayBufferLike, offsets[fieldIndex]) as TypedArray
       }
     }
@@ -186,15 +186,15 @@ export function makeAccessorFactory<S extends Schema>(def: ComponentDef<S>): Acc
       const encode = plan.encode
       const fieldIndex = plan.fieldIndex
 
-      // I-ACC-4: fieldIndex is forwarded ONLY by field-granular setters. M2 ships no changeTracking
+      // fieldIndex is forwarded ONLY by field-granular setters. There is no changeTracking
       // surface, so vec setters pass withField=true unconditionally. TODO: gate withField on the
-      // per-component changeTrackingDefault when reactivity config lands (M5), so component-granular
+      // per-component changeTrackingDefault when reactivity config lands, so component-granular
       // components omit fieldIndex.
       const track = (self: Accessor, withField: boolean): void => {
         const b = self.__binding
         if (b === null) return
         // Fast-out: no write consumer ⇒ trackWrite is a no-op anyway, so skip the handleIndex decode
-        // and the two closure hops entirely (P7 write-path gate). See AccessorWorld.tracking.
+        // and the two closure hops entirely ( write-path gate). See AccessorWorld.tracking.
         if (!b.world.tracking.active) return
         if (withField) b.world.trackWrite(b.world.handleIndex(self.__eid), componentId, fieldIndex)
         else b.world.trackWrite(b.world.handleIndex(self.__eid), componentId)
@@ -236,7 +236,7 @@ export function makeAccessorFactory<S extends Schema>(def: ComponentDef<S>): Acc
       }
     })
 
-    // Rich (sidecar-backed) getters/setters (rich-fields.md §5.3). The getter returns the live JS
+    // Rich (sidecar-backed) getters/setters. The getter returns the live JS
     // reference (string primitive / object<T>); the setter writes the sidecar slot AND routes through
     // the SAME field-granular trackWrite numeric setters use, so Changed/observers fire identically
     // (RF-CHANGED). In-place mutation of an object<T> reference is NOT tracked — only re-assignment is.
@@ -271,7 +271,7 @@ interface VecAccess {
   [index: number]: number
 }
 
-// A thin vec view, built ONCE per (accessor, vec field) and reused across gets (§1.3: no allocation
+// A thin vec view, built ONCE per (accessor, vec field) and reused across gets (no allocation
 // on read). It reads `owner.__idx` lazily so the single cached wrapper stays correct as __idx is
 // re-poked, and resolves the live view from `views[viewIndex]` so a fallback rebind is transparent.
 // Indexed/named axis reads decode; writes encode + report a field-granular write.

@@ -1,21 +1,21 @@
-// M10 DISCRIMINATING property suite for the STRUCTURAL-since-T delta (serialization.md §6.2 / §6.4 / §9).
+// DISCRIMINATING property suite for the STRUCTURAL-since-T delta.
 // Each property is built to FAIL if the locked design regresses — they are not tautologies:
 //
-//   P-SOUND  delta-with-structure SOUNDNESS: for a RANDOM interleaving of value writes AND structural
-//            ops (spawn / despawn / add / remove / addPair) in (T, now], applying the delta to a
-//            mirror taken at T reproduces the LIVE world — entity set + values + relations — by deep
-//            compare. This FAILS if the structural section is dropped: a spawn-since-T would be
-//            missing from the mirror (proven by the includeStructural:false control below, which is
-//            EXPECTED to diverge precisely on the structural ops).
+// P-SOUND delta-with-structure SOUNDNESS: for a RANDOM interleaving of value writes AND structural
+// ops (spawn / despawn / add / remove / addPair) in (T, now], applying the delta to a
+// mirror taken at T reproduces the LIVE world — entity set + values + relations — by deep
+// compare. This FAILS if the structural section is dropped: a spawn-since-T would be
+// missing from the mirror (proven by the includeStructural:false control below, which is
+// EXPECTED to diverge precisely on the structural ops).
 //
-//   P-NOALLOC  the delta GATHER path performs NO per-tick / per-row heap allocation (§9): repeated
-//            delta() over a stable topology reuses the hoisted output buffer and allocates ZERO
-//            per-row Float64Array (the §6.2 native-width raw-copy path, NOT an f64-widening gather).
-//            Instrumented by counting Float64Array / ArrayBuffer constructions across many ticks.
+// P-NOALLOC the delta GATHER path performs NO per-tick / per-row heap allocation: repeated
+// delta() over a stable topology reuses the hoisted output buffer and allocates ZERO
+// per-row Float64Array (the, NOT an f64-widening gather).
+// Instrumented by counting Float64Array / ArrayBuffer constructions across many ticks.
 //
-//   P-WIRE   the value field WIRE round-trips through the §6.2 element-ordinal + native-element-width
-//            encoding for EVERY ElementKind (u8/u8c/i8/u16/i16/u32/i32/f32/f64): a value written on
-//            the producer arrives bit-faithful on the receiver after a value-only delta.
+// P-WIRE the value field WIRE round-trips through the + native-element-width
+// encoding for EVERY ElementKind (u8/u8c/i8/u16/i16/u32/i32/f32/f64): a value written on
+// the producer arrives bit-faithful on the receiver after a value-only delta.
 
 import fc from 'fast-check'
 import { describe, expect, test } from 'vitest'
@@ -71,7 +71,7 @@ function makeKit(): Kit {
 
 // Apply the op stream on the producer over a SINGLE general population `live`: any entity may be written,
 // migrated (add/remove Q), despawned, or related — value writes and structural mutations freely
-// interleave on the same entities and archetypes. This is the general case §6.3/§6.4 mandate (the delta
+// interleave on the same entities and archetypes. This is the general case /(the delta
 // must survive write-then-migrate and a non-exclusive addPair regardless of subject index).
 function applyOps(kit: Kit, ops: readonly Op[], live: EntityHandle[]): void {
   const aliveList = (): EntityHandle[] => live.filter((h) => kit.world.isAlive(h))
@@ -160,7 +160,7 @@ function canon(
   return { rows, pairs }
 }
 
-describe('P-SOUND — delta-with-structure soundness over random value + structural ops (§6.4)', () => {
+describe('P-SOUND — delta-with-structure soundness over random value + structural ops ', () => {
   test('apply(delta) deep-equals the live world (entity set + values + relations)', () => {
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 6 }), fc.array(opArb, { minLength: 1, maxLength: 24 }), (n0, ops) => {
@@ -239,10 +239,10 @@ describe('P-SOUND — delta-with-structure soundness over random value + structu
 })
 
 // ---------------------------------------------------------------------------------------------------
-// P-NOALLOC — the delta gather path performs no per-tick / per-row heap allocation (§9).
+// P-NOALLOC — the delta gather path performs no per-tick / per-row heap allocation.
 // ---------------------------------------------------------------------------------------------------
 
-describe('P-NOALLOC — repeated delta() reuses the hoisted buffer; zero per-row Float64Array (§9 / §6.2)', () => {
+describe('P-NOALLOC — repeated delta() reuses the hoisted buffer; zero per-row Float64Array ', () => {
   test('no per-row Float64Array allocation across many value-write ticks', () => {
     const P = defineComponent({ pos: 'f64' }, { name: 'p' }) as ComponentDef<Schema>
     const world = createWorld({ components: [P], maxEntities: 256 })
@@ -283,7 +283,7 @@ describe('P-NOALLOC — repeated delta() reuses the hoisted buffer; zero per-row
         for (const h of ents) (world.entity(h).write(P) as { pos: number }).pos = t
         ser.delta() // returns a view onto the REUSED buffer — no copy, no per-row gather alloc
       }
-      // The §6.2 gather is a raw byte copy at native width — it must NOT widen each row into a fresh
+      // The
       // Float64Array. Zero per-row f64 allocations across all measured ticks.
       expect(f64Count).toBe(0)
       // The hoisted output buffer is reused (it only doubles on overflow); a stable-size delta over 50
@@ -328,7 +328,7 @@ function valueArbFor(kind: ElementKind): fc.Arbitrary<number> {
   }
 }
 
-describe('P-WIRE — value field round-trips through element-ordinal + native width for every ElementKind (§6.2)', () => {
+describe('P-WIRE — value field round-trips through element-ordinal + native width for every ElementKind ', () => {
   for (const kind of ALL_KINDS) {
     test(`kind ${kind}: producer value arrives bit-faithful through a value-only delta`, () => {
       fc.assert(
@@ -401,7 +401,7 @@ describe('non-exclusive ADD_PAIR-since-T must not despawn its index-0 subject', 
 // REGRESSION: a VALUE write to an entity that is THEN relocated by a structural op (its own migration,
 // or a SIBLING's swap-remove within the same archetype) must survive in the delta. The changeVersion
 // stamp is keyed by ENTITY INDEX (change-version.ts), so it follows the entity across the relocation and
-// `world.changedRows(arch, since)` (the §6.3 scan) still sees the moved-but-written row.
+// `world.changedRows(arch, since)` still sees the moved-but-written row.
 // ---------------------------------------------------------------------------------------------------
 
 describe('a value write followed by the entity migrating must survive in the delta', () => {

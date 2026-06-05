@@ -1,13 +1,13 @@
-// @ecsia/core — the single-threaded kernel. PUBLIC surface (P0.5 surface diet).
+// @ecsia/core — the single-threaded kernel. PUBLIC surface.
 //
 // This barrel is split into two sections:
-//   • PUBLIC — the documented user/umbrella surface: createWorld + config, component/tag definition,
-//     entity sentinels, reactivity observer builders, and the schema token/inference re-exports the
-//     umbrella (ecsia) curates.
-//   • INTERNAL (cross-package) — kernel seams that sibling packages (@ecsia/{relations,serialization})
-//     import via '@ecsia/core'. They are NOT user API, but removing them would break those siblings,
-//     so they stay exported here under a clearly-marked banner rather than on a hidden subpath
-//     (package.json#exports maps only `.`).
+// • PUBLIC — the documented user/umbrella surface: createWorld + config, component/tag definition,
+// entity sentinels, reactivity observer builders, and the schema token/inference re-exports the
+// umbrella (ecsia) curates.
+// • INTERNAL (cross-package) — kernel seams that sibling packages (@ecsia/{relations,serialization})
+// import via '@ecsia/core'. They are NOT user API, but removing them would break those siblings,
+// so they stay exported here under a clearly-marked banner rather than on a hidden subpath
+// (package.json#exports maps only `.`).
 //
 // The rest of the kernel (store/bitmask/registry/query-engine/memory-backing classes + low-level
 // schema helpers) is implementation detail and lives in ./internal.ts — NOT re-exported here. This
@@ -90,7 +90,7 @@ export type {
   ReadOf,
   WriteOf,
   SchemaOf,
-  // query DSL types (queries.md / type-system.md §5–§7)
+  // query DSL types
   QueryTerm,
   QueryElement,
   Query,
@@ -122,7 +122,7 @@ export type {
   SerializeRelationProvider,
   SerializeStructuralRecord,
 } from './serialize-surface.js'
-// P5 / @ecsia/devtools introspection seam (read-only): the FULL archetype census + live-query
+// / @ecsia/devtools introspection seam (read-only): the FULL archetype census + live-query
 // enumeration that __serialize (snapshot-shaped) does not reach. Imported by @ecsia/devtools via '.'.
 export type { InspectSurface, InspectArchetype, InspectQuery } from './inspect-surface.js'
 

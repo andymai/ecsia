@@ -1,34 +1,34 @@
-// M9 PROPERTY (fast-check) — the R-3 NO-RE-ENTRANCY HEADLINE under a REAL multi-worker frame.
+// PROPERTY (fast-check) — the NO-RE-ENTRANCY HEADLINE under a REAL multi-worker frame.
 //
 // Setup: a real worker_threads WorkerPool (2 workers) drives a fuzzed structural frame through the
 // PUBLIC frame loop scheduler.updateThreaded(pool, dt). One worker regenerates Health (disjoint
 // value write), one spawns a Mana child per matched entity (OP_CREATE + OP_ADD via the per-worker
 // command buffer, applied in deterministic worker-index merge order). The onAdd(Mana) observers
 // THEMSELVES stage structural commands (despawn the new child, or spawn a grandchild) — exercising
-// §7.4: those ops are STAGED to the deferred buffer and applied at the NEXT serial flush, never
+// Those ops are STAGED to the deferred buffer and applied at the NEXT serial flush, never
 // mid-drain. We assert three discriminating facts:
 //
-//   R-3 (a) NO PARTIALLY-APPLIED WAVE: at the instant each observer fires, the world is quiescent —
-//     the entity it is handed is fully placed (holds Mana) and every structural op the handler issues
-//     is NOT yet visible (hasn't shuffled a row a later observer in the same drain still reads). The
-//     handler records `world.has(child, Mana)` (must be true) and, for a staged despawn, that the
-//     child is STILL alive immediately after staging (deferred). A re-entrant apply would flip these.
+// (a) NO PARTIALLY-APPLIED WAVE: at the instant each observer fires, the world is quiescent —
+// the entity it is handed is fully placed (holds Mana) and every structural op the handler issues
+// is NOT yet visible (hasn't shuffled a row a later observer in the same drain still reads). The
+// handler records `world.has(child, Mana)` (must be true) and, for a staged despawn, that the
+// child is STILL alive immediately after staging (deferred). A re-entrant apply would flip these.
 //
-//   R-3 (b) CROSS-RUN IDENTITY: the ordered observer event stream from the THREADED run is byte-for-
-//     byte identical to a SINGLE-THREADED run of the SAME workload (same seeds, same frames, same
-//     observer staging policy). Worker nondeterminism (which worker finishes first) must NOT leak into
-//     the observed stream — the command merge order is fixed, so the deltas are deterministic.
+// (b) CROSS-RUN IDENTITY: the ordered observer event stream from the THREADED run is byte-for-
+// byte identical to a SINGLE-THREADED run of the SAME workload (same seeds, same frames, same
+// observer staging policy). Worker nondeterminism (which worker finishes first) must NOT leak into
+// the observed stream — the command merge order is fixed, so the deltas are deterministic.
 //
-//   R-3 (c) EXACTLY ONCE: each net structural change is observed exactly once (no double-emit from the
-//     command-apply path re-driving a lifecycle hook) — checked implicitly by the stream equality
-//     (a double-emit on either side diverges) and explicitly by the add-count == spawn-count assertion.
+// (c) EXACTLY ONCE: each net structural change is observed exactly once (no double-emit from the
+// command-apply path re-driving a lifecycle hook) — checked implicitly by the stream equality
+// (a double-emit on either side diverges) and explicitly by the add-count == spawn-count assertion.
 //
-// CHANGE-STREAM leg (reactivity.md §9.1/§9.2, R-4): worker VALUE writes now stage into the per-worker
+// CHANGE-STREAM leg: worker VALUE writes now stage into the per-worker
 // write corral (world-view.ts writeField → makeWriteCorralWriter) and merge into the shared write log
 // in ascending worker-index order at the serial flush slot (pool.runRound → world.__mergeWorkerWrites).
 // So onChange(Health) fires for worker writes exactly as for single-thread writes. This suite asserts
 // the CHANGE stream is byte-for-byte identical across thread modes (audit point (2) change leg), in
-// addition to the STRUCTURAL (onAdd/onRemove) stream that flows through command-buffer apply (CB-7).
+// addition to the STRUCTURAL (onAdd/onRemove) stream that flows through command-buffer apply.
 
 import { fileURLToPath } from 'node:url'
 import { describe, expect, test, afterEach } from 'vitest'
@@ -49,7 +49,7 @@ interface Ev {
 }
 
 // Normalize within (kind) by index: robust to intra-wave timing, but a reorder ACROSS kinds or a
-// double/missing emit still diverges. Identical to the M7 integration's `norm`.
+// double/missing emit still diverges. Identical to the integration's `norm`.
 const norm = (d: Ev[]): Ev[] =>
   d.slice().sort((a, b) => a.kind.localeCompare(b.kind) || a.index - b.index || a.component - b.component)
 
@@ -80,13 +80,13 @@ function seed(threaded: boolean, workers: number, n: number): Seeded {
 }
 
 // `policy` controls what the onAdd(Mana) handler STAGES (the re-entrant structural op under test):
-//   'noop'    — observe only.
-//   'despawn' — despawn the just-added child (staged → applied next flush → onRemove fires next drain).
-//   'grand'   — spawn a grandchild + add Mana (staged → onAdd fires for it next drain).
+// 'noop' — observe only.
+// 'despawn' — despawn the just-added child (staged → applied next flush → onRemove fires next drain).
+// 'grand' — spawn a grandchild + add Mana (staged → onAdd fires for it next drain).
 type Policy = 'noop' | 'despawn' | 'grand'
 
 // Wire the onAdd(Mana)/onRemove(Mana) observers + the staging policy. Returns the captured stream and
-// a list of R-3 quiescence assertions to check after the run.
+// a list of quiescence assertions to check after the run.
 function wireObservers(s: Seeded, policy: Policy): { events: Ev[]; quiescence: boolean[] } {
   const events: Ev[] = []
   const quiescence: boolean[] = []
@@ -96,18 +96,18 @@ function wireObservers(s: Seeded, policy: Policy): { events: Ev[]; quiescence: b
   s.world.observe(onAdd(s.Mana), (e: { __handle: EntityHandle }, ctx: { kind: string; component: number }) => {
     const idx = handleIndex(e.__handle, layout) as number
     events.push({ kind: 'add', component: ctx.component, index: idx })
-    // R-3 (a): at fire time the entity is FULLY placed — it must already hold Mana (no partial wave).
+    // (a): at fire time the entity is FULLY placed — it must already hold Mana (no partial wave).
     quiescence.push(s.world.has(e.__handle, s.Mana))
     if (grandchildren.has(idx)) return // don't recurse on grandchildren (bounded)
     if (policy === 'despawn') {
       s.world.despawn(e.__handle)
-      // R-3 (a): the despawn is STAGED — the child is STILL alive immediately after (not applied mid-drain).
+      // (a): the despawn is STAGED — the child is STILL alive immediately after (not applied mid-drain).
       quiescence.push(s.world.isAlive(e.__handle))
     } else if (policy === 'grand') {
       const g = s.world.spawn()
       s.world.add(g, s.Mana)
       grandchildren.add(handleIndex(g, layout) as number)
-      // R-3 (a): the grandchild is reserved-alive but NOT yet a Mana holder (placement deferred).
+      // (a): the grandchild is reserved-alive but NOT yet a Mana holder (placement deferred).
       quiescence.push(!s.world.has(g, s.Mana))
     }
   })
@@ -115,7 +115,7 @@ function wireObservers(s: Seeded, policy: Policy): { events: Ev[]; quiescence: b
     events.push({ kind: 'remove', component: ctx.component, index: handleIndex(e.__handle, layout) as number })
   })
   // CHANGE leg: onChange(Health) must fire for the worker's regen value writes — and be identical to
-  // the single-thread reference's regen writes (R-4 change-stream parity across thread modes).
+  // the single-thread reference's regen writes ( change-stream parity across thread modes).
   s.world.observe(onChange(s.Health), (e: { __handle: EntityHandle }, ctx: { kind: string; component: number }) => {
     events.push({ kind: 'change', component: ctx.component, index: handleIndex(e.__handle, layout) as number })
   })
@@ -128,7 +128,7 @@ afterEach(async () => {
   pool = undefined
 })
 
-describe('R-3 — deferred observers under a REAL multi-worker frame: no re-entrancy, stream === single-thread', () => {
+describe(' — deferred observers under a REAL multi-worker frame: no re-entrancy, stream === single-thread', () => {
   test('a fuzzed multi-worker spawner frame: threaded observer stream is IDENTICAL to the single-thread run, and no observer sees a partial wave', async () => {
     await fc.assert(
       fc.asyncProperty(
@@ -206,12 +206,12 @@ describe('R-3 — deferred observers under a REAL multi-worker frame: no re-entr
           await pool.dispose()
           pool = undefined
 
-          // R-3 (b) CROSS-RUN IDENTITY: the observer event streams (add + remove + change) must be
+          // (b) CROSS-RUN IDENTITY: the observer event streams (add + remove + change) must be
           // identical. A worker-order leak, a double-emit, a dropped event, or a mid-drain mutation
           // would diverge them.
           expect(norm(thrCap.events)).toEqual(norm(refCap.events))
 
-          // R-4 CHANGE-STREAM PARITY (audit point (2) change leg): the onChange(Health) stream from the
+          // CHANGE-STREAM PARITY (audit point (2) change leg): the onChange(Health) stream from the
           // worker writes is byte-for-byte identical to the single-thread reference's regen writes — AND
           // non-empty, so the assertion is not vacuous (worker writes really reached the write log via
           // the corral merge). This is the leg that was previously documented out-of-scope.
@@ -220,12 +220,12 @@ describe('R-3 — deferred observers under a REAL multi-worker frame: no re-entr
           expect(norm(thrChange)).toEqual(norm(refChange))
           expect(thrChange.length).toBeGreaterThanOrEqual(n * frames)
 
-          // R-3 (a) NO PARTIAL WAVE: every quiescence probe held on BOTH runs (entity fully placed at
+          // (a) NO PARTIAL WAVE: every quiescence probe held on BOTH runs (entity fully placed at
           // fire time; staged ops not yet applied mid-drain).
           expect(thrCap.quiescence.every((q) => q)).toBe(true)
           expect(refCap.quiescence.every((q) => q)).toBe(true)
 
-          // R-3 (c) EXACTLY ONCE: one add per spawned child, every frame — no double-emit. (`grand`
+          // (c) EXACTLY ONCE: one add per spawned child, every frame — no double-emit. (`grand`
           // adds extra children, but both runs add the same extra count, so the streams still match;
           // we assert the floor: at least the N base spawns per frame were observed.)
           const baseAdds = thrCap.events.filter((e) => e.kind === 'add').length

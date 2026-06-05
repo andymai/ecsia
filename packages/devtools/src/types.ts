@@ -1,9 +1,9 @@
-// @ecsia/devtools — the DATA LAYER report shapes (P5). Every report is a PLAIN, serializable object
+// @ecsia/devtools — the DATA LAYER report shapes. Every report is a PLAIN, serializable object
 // (no class instances, no functions, no live handles) so it can be JSON-stringified, snapshotted, diffed,
 // and asserted headless. The renderers (renderText / renderHTML) are PURE functions over exactly these
 // shapes — they never touch a live world.
 
-/** One component type's storage census (inspector §1). */
+/** One component type's storage census (inspector ). */
 export interface ComponentReport {
   readonly name: string
   readonly id: number
@@ -17,17 +17,17 @@ export interface ComponentReport {
   readonly totalBytes: number
 }
 
-/** One archetype's census (inspector §1). Includes cold + empty archetypes. */
+/** One archetype's census (inspector ). Includes cold + empty archetypes. */
 export interface ArchetypeReport {
   readonly id: number
   /** Component names in this archetype's signature (synthetic pair/presence ids rendered as `#id`). */
   readonly signature: readonly string[]
   readonly count: number
-  /** 'hot' = column-backed; 'cold' = lazily-materialized (archetype-storage §10). */
+  /** 'hot' = column-backed; 'cold' = lazily-materialized (archetype-storage ). */
   readonly temperature: 'hot' | 'cold'
 }
 
-/** One live (compiled, cached) query's census (inspector §1). */
+/** One live (compiled, cached) query's census (inspector ). */
 export interface QueryReport {
   /** Human-rendered terms, e.g. `read(position)`, `write(velocity)`, `without(frozen)`. */
   readonly terms: readonly string[]
@@ -35,13 +35,13 @@ export interface QueryReport {
   readonly size: number
 }
 
-/** One relation's live-pair census (inspector §1). */
+/** One relation's live-pair census (inspector ). */
 export interface RelationReport {
   readonly name: string
   readonly pairCount: number
 }
 
-/** The whole-world inspection report — a plain serializable snapshot (inspector §1). */
+/** The whole-world inspection report — a plain serializable snapshot (inspector ). */
 export interface WorldReport {
   readonly entities: {
     readonly alive: number
@@ -59,9 +59,9 @@ export interface WorldReport {
   readonly relations: readonly RelationReport[]
 }
 
-// --- watch mode (§2) -------------------------------------------------------
+// --- watch mode -------------------------------------------------------
 
-/** One frame's deltas vs the previous observed frame (watch §2). */
+/** One frame's deltas vs the previous observed frame (watch ). */
 export interface FrameDelta {
   /** 0-based frame index since watch start. */
   readonly frame: number
@@ -79,9 +79,9 @@ export interface FrameDelta {
   readonly changedTotal: number
 }
 
-// --- wave visualizer (§3) --------------------------------------------------
+// --- wave visualizer --------------------------------------------------
 
-/** One system's per-wave introspection (waves §3). */
+/** One system's per-wave introspection (waves ). */
 export interface SystemExplain {
   readonly name: string
   readonly reads: readonly string[]
@@ -89,12 +89,12 @@ export interface SystemExplain {
   readonly workerEligible: boolean
 }
 
-/** One batch (concurrent round member set) within a wave (waves §3). */
+/** One batch (concurrent round member set) within a wave (waves ). */
 export interface BatchExplain {
   readonly systems: readonly SystemExplain[]
 }
 
-/** One wave: an ordered set of batches (rounds) that run after the previous wave (waves §3). */
+/** One wave: an ordered set of batches (rounds) that run after the previous wave (waves ). */
 export interface WaveExplain {
   readonly index: number
   readonly batches: readonly BatchExplain[]
@@ -102,7 +102,7 @@ export interface WaveExplain {
 
 /**
  * An access overlap that the schedule ACTUALLY enforced — two systems with overlapping write-write or
- * read-write access that the plan placed in different waves/rounds (waves §3). Pairs whose overlap the
+ * read-write access that the plan placed in different waves/rounds (waves ). Pairs whose overlap the
  * scheduler suppressed via `inAnyOrderWith` (kept concurrent, same round) are NOT reported here.
  */
 export interface ConflictExplain {
@@ -112,13 +112,13 @@ export interface ConflictExplain {
   readonly kind: 'write-write' | 'read-write'
 }
 
-/** A system pinned to the main thread, with the reason it cannot run on a worker (waves §3). */
+/** A system pinned to the main thread, with the reason it cannot run on a worker (waves ). */
 export interface PinExplain {
   readonly system: string
   readonly reason: 'rich-fields' | 'main-thread'
 }
 
-/** The whole-plan explanation — the WHY of the schedule, plain + serializable (waves §3). */
+/** The whole-plan explanation — the WHY of the schedule, plain + serializable (waves ). */
 export interface PlanExplain {
   readonly waves: readonly WaveExplain[]
   readonly conflicts: readonly ConflictExplain[]

@@ -1,11 +1,11 @@
-// The binding registry (P4 deliverable 1): a world-scoped map EntityHandle → THREE.Object3D, with
+// The binding registry ( deliverable 1): a world-scoped map EntityHandle → THREE.Object3D, with
 // automatic teardown when the entity goes away. This is the seam every other bridge piece reads: the
 // transform-sync system walks the ECS columns and writes into the Object3D `objectOf(handle)` returns.
 //
 // Auto-unbind: we register an onRemove observer per bound component-set? No — entities carry arbitrary
 // components, so there is no single component whose removal means "despawned". Instead we drive
 // teardown off the world's despawn lifecycle directly. The public reactive surface that fires on
-// despawn is the onRemove observer (reactivity.md §7: despawn enqueues a remove for every held
+// despawn is the onRemove observer (despawn enqueues a remove for every held
 // component, so onRemove(C) fires for each held C). But a registry that must catch EVERY despawn
 // regardless of which components an entity holds cannot key off one component. So we expose an
 // explicit `sweep()` the driver calls each frame AND, for the common case, an onRemove observer over a
@@ -21,10 +21,10 @@ import type { WorldLike } from './schema.js'
 
 export interface ThreeBindings {
   /** Associate `object3d` with `handle`. If `scene` was provided, the object is added to it. Re-binding
-   *  a handle replaces (and detaches from the scene) the previous object. */
+   * a handle replaces (and detaches from the scene) the previous object. */
   bind(handle: EntityHandle, object3d: Object3D): void
   /** Drop the binding for `handle` (and remove its object from the scene if one was provided). No-op if
-   *  unbound. Returns the object that was bound, or undefined. */
+   * unbound. Returns the object that was bound, or undefined. */
   unbind(handle: EntityHandle): Object3D | undefined
   /** The Object3D bound to `handle`, or undefined. */
   objectOf(handle: EntityHandle): Object3D | undefined
@@ -36,7 +36,7 @@ export interface ThreeBindings {
   entries(): IterableIterator<[EntityHandle, Object3D]>
   /**
    * Auto-unbind when `anchor` is removed from an entity OR the entity despawns (onRemove fires on both,
-   * reactivity.md §7). Returns the observer handle so the caller can dispose it; registering twice for
+   * ). Returns the observer handle so the caller can dispose it; registering twice for
    * the same anchor is idempotent (the second call returns the existing handle). The handler reads only
    * `e.handle` — a scalar safe to read under the lenient pooled-ref rules even for a dying entity.
    */

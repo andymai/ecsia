@@ -233,8 +233,8 @@ describe('I8 + free-list density invariant under random op sequences', () => {
             }
 
             // (c) density: the dense prefix [0, aliveCount) holds exactly the alive handles,
-            //     the free region [aliveCount, denseLen) is disjoint from it, and together they
-            //     cover every minted index exactly once (a permutation of [0, denseLen)).
+            // the free region [aliveCount, denseLen) is disjoint from it, and together they
+            // cover every minted index exactly once (a permutation of [0, denseLen)).
             const seenIndices = new Set<number>()
             const aliveIndices = new Set<number>()
             for (let pos = 0; pos < idx.denseLen; pos++) {

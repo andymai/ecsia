@@ -1,11 +1,11 @@
-// Canonical archetype signatures (archetype-storage.md §3.2, §3.3, §3.8, §5.2, §8).
+// Canonical archetype signatures.
 // A Signature is the sorted, de-duplicated Uint32Array of ComponentIds defining an archetype's
 // exact component set. Sorting makes structurally-equal sets identical regardless of add order, so
 // equality is a linear word compare and the lookup map keys on an FNV-1a hash of the sorted ids.
 
 import type { ComponentId } from '@ecsia/schema'
 
-/** Canonical, sorted, de-duplicated component ids. Owned (never aliased) per archetype (SIG-1). */
+/** Canonical, sorted, de-duplicated component ids. Owned (never aliased) per archetype. */
 export type Signature = Uint32Array & { readonly __ecsiaSignature: unique symbol }
 
 /** O(n) equality of two sorted signatures. */
@@ -25,7 +25,7 @@ export function sigHash(a: Signature): number {
   return h >>> 0
 }
 
-/** Sort + de-dup an arbitrary id multiset into the canonical form (SIG-1 holds). */
+/** Sort + de-dup an arbitrary id multiset into the canonical form ( holds). */
 export function canonicalize(ids: Iterable<ComponentId | number>): Signature {
   const arr = Uint32Array.from(new Set(ids as Iterable<number>))
   arr.sort()
@@ -75,7 +75,7 @@ export function sigWithRemoved(sig: Signature, c: ComponentId): Signature {
   return out as Signature
 }
 
-/** Packed membership words for fast bitwise-AND query matching (§3.3). */
+/** Packed membership words for fast bitwise-AND query matching. */
 export function buildSigWords(sig: Signature, stride: number): Uint32Array {
   const w = new Uint32Array(stride)
   for (let i = 0; i < sig.length; i++) {
@@ -85,7 +85,7 @@ export function buildSigWords(sig: Signature, stride: number): Uint32Array {
   return w
 }
 
-/** Exact membership test against the sorted signature array, O(log |sig|) (§3.8). */
+/** Exact membership test against the sorted signature array, O(log |sig|). */
 export function sigHas(sig: Signature, c: ComponentId | number): boolean {
   const v = c as number
   let lo = 0
@@ -100,13 +100,13 @@ export function sigHas(sig: Signature, c: ComponentId | number): boolean {
   return false
 }
 
-/** One AND-term against a packed signature word (§8). */
+/** One AND-term against a packed signature word. */
 export interface MatchTerm {
   readonly wordIndex: number
   readonly mask: number
 }
 
-/** Signature-AND helper the query module calls; exposed for testing (§8). */
+/** Signature-AND helper the query module calls; exposed for testing. */
 export function signatureMatches(
   sigWords: Uint32Array,
   withW: readonly MatchTerm[],

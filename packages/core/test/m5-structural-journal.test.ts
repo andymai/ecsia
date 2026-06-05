@@ -1,5 +1,4 @@
-// Direct unit suite for the persistent STRUCTURAL JOURNAL (reactivity.md §6.4 / §7.3 /
-// serialization.md §6.4). Drives the bounded drop-oldest ring, the evicted-tick gap flag, the
+// Direct unit suite for the persistent STRUCTURAL JOURNAL (). Drives the bounded drop-oldest ring, the evicted-tick gap flag, the
 // lazy-enable opt-out, and tick-wrap reset — the branches the world-driven suites never reach.
 
 import { describe, expect, test } from 'vitest'
@@ -8,7 +7,7 @@ import { ShapeKind } from '../src/reactivity/log.js'
 
 const j = (cap?: number): StructuralJournal => new StructuralJournal(cap)
 
-describe('StructuralJournal — lazy opt-in (§6.1)', () => {
+describe('StructuralJournal — lazy opt-in ', () => {
   test('disabled journal records nothing and drainSince returns no gap', () => {
     const sj = j()
     // default-disabled: every record is a no-op (zero record cost until a serializer attaches).
@@ -68,7 +67,7 @@ describe('StructuralJournal — drainSince filtering + record fidelity', () => {
   })
 })
 
-describe('StructuralJournal — bounded ring drop-oldest + evicted-gap flag (§6.4)', () => {
+describe('StructuralJournal — bounded ring drop-oldest + evicted-gap flag ', () => {
   test('within capacity: full history is resident, no gap for since < oldest', () => {
     const sj = j(16) // capacity clamps to a minimum of 16
     sj.enabled = true
@@ -109,7 +108,7 @@ describe('StructuralJournal — bounded ring drop-oldest + evicted-gap flag (§6
   })
 })
 
-describe('StructuralJournal — tick-wrap reset (§13.4)', () => {
+describe('StructuralJournal — tick-wrap reset ', () => {
   test('resetAll clears the window so subsequent records start fresh with no gap', () => {
     const cap = 16
     const sj = j(cap)

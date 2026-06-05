@@ -3,8 +3,8 @@
 //
 // It stands up BOTH server variants against the SAME bundle and asserts the browser-scoped smoke
 // (entry.ts) passes in each:
-//   • isolated (COOP/COEP)      → crossOriginIsolated===true, SAB path selected, SAB alloc+grow succeed
-//   • non-isolated (no headers) → crossOriginIsolated===false, probe falls back LOUDLY (no SAB path)
+// • isolated (COOP/COEP) → crossOriginIsolated===true, SAB path selected, SAB alloc+grow succeed
+// • non-isolated (no headers) → crossOriginIsolated===false, probe falls back LOUDLY (no SAB path)
 //
 // HONEST SCOPING: no threaded worker pool is exercised here — ecsia's WorkerPool is node:worker_threads
 // based; a browser Web-Worker pool is future work (see README).

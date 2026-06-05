@@ -1,5 +1,5 @@
 // Coverage: planner/access.ts (idOf unregistered guard, worker-eligibility) + planner/define-system.ts
-// (validation throws + the three ordering-hint combinators). scheduler.md §3, §4.2.
+// (validation throws + the three ordering-hint combinators).,
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, object } from '@ecsia/core'

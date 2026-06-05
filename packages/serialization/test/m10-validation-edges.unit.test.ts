@@ -1,5 +1,5 @@
-// Error / validation / merge-mode edge coverage for the snapshot+delta apply paths (serialization.md
-// §5.2, §6.4, §11 S-10/S-11). Each test drives a SPECIFIC rejected or branch-only input and asserts
+// Error / validation / merge-mode edge coverage for the snapshot+delta apply paths.
+// Each test drives a SPECIFIC rejected or branch-only input and asserts
 // the documented outcome — a thrown guard, a dropped dangling reference, or a merge that preserves
 // pre-existing entities.
 
@@ -21,7 +21,7 @@ function makeWorld() {
   return { world, P }
 }
 
-describe('snapshot/delta serializers — serial-phase guard (§11 S-11)', () => {
+describe('snapshot/delta serializers — serial-phase guard ', () => {
   it('snapshot() throws when the world is not at a serial flush point', () => {
     const { world } = makeWorld()
     const ser = createSnapshotSerializer(world)
@@ -65,7 +65,7 @@ describe('snapshot — includeRelations=false omits the relations section', () =
   })
 })
 
-describe('deserialize — header validation gates (§5.2 / §11 S-10)', () => {
+describe('deserialize — header validation gates ', () => {
   it('load() throws off the serial slot', () => {
     const { world } = makeWorld()
     const bytes = createSnapshotSerializer(world).snapshotCopy()
@@ -104,7 +104,7 @@ describe('deserialize — header validation gates (§5.2 / §11 S-10)', () => {
 
 })
 
-describe('deserialize — merge mode preserves pre-existing entities (§5.x)', () => {
+describe('deserialize — merge mode preserves pre-existing entities ', () => {
   it("mode:'merge' does NOT clear the receiver; both old and incoming entities are alive", () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const src = createWorld({ components: [P as ComponentDef<Schema>] })
@@ -142,7 +142,7 @@ describe('deserialize — merge mode preserves pre-existing entities (§5.x)', (
   })
 })
 
-describe('deserialize — relation re-establishment + the NO_ENTITY (cleared) target path (§8.3)', () => {
+describe('deserialize — relation re-establishment + the NO_ENTITY (cleared) target path ', () => {
   it('re-establishes an exclusive pair AND a cleared (null-target) exclusive subject loads without a pair', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const src = createWorld({ components: [P as ComponentDef<Schema>] })
@@ -173,7 +173,7 @@ describe('deserialize — relation re-establishment + the NO_ENTITY (cleared) ta
   })
 })
 
-describe('applyDelta — header validation (§6.4)', () => {
+describe('applyDelta — header validation ', () => {
   it('throws off the serial slot', () => {
     const { world } = makeWorld()
     const ser = createDeltaSerializer(world, world.currentTick())

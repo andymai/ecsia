@@ -24,7 +24,7 @@ const caps = (backing: RuntimeCapabilities['backing']): RuntimeCapabilities =>
     backing,
   })
 
-describe('allocU32 — backing selection (memory-buffers.md §5.5)', () => {
+describe('allocU32 — backing selection ', () => {
   test('shared:false yields a plain ArrayBuffer region, shared:true a SharedArrayBuffer (Node can share)', () => {
     const ab = allocU32(8, { shared: false })
     expect(ab.shared).toBe(false)
@@ -50,7 +50,7 @@ describe('allocU32 — backing selection (memory-buffers.md §5.5)', () => {
     expect(() => region.grow(5)).toThrow(/reserved max is 4/)
   })
 
-  test('resizable region grows in place and the length-tracking view widens (V-1)', () => {
+  test('resizable region grows in place and the length-tracking view widens ', () => {
     const region = allocU32(4, { maxLength: 32 })
     const captured = region.view
     captured[3] = 0xdead
@@ -84,7 +84,7 @@ describe('allocU32 — backing selection (memory-buffers.md §5.5)', () => {
   })
 })
 
-describe('Buffers grow-patch FALLBACK path (memory-buffers.md §7.5)', () => {
+describe('Buffers grow-patch FALLBACK path ', () => {
   test('grow-patch-ab re-allocates a fresh AB, re-points the column, preserves old data', () => {
     const b = new Buffers({ capabilities: caps('grow-patch-ab'), maxEntities: 1 << 16 })
     const col = b.column(k('gp:0.0'), makeColumnLayout('f32', 1), 4)
@@ -114,7 +114,7 @@ describe('Buffers grow-patch FALLBACK path (memory-buffers.md §7.5)', () => {
     expect((col.view as Uint32Array).length).toBe(8)
   })
 
-  test('grow-patch eid column fills the grown tail with -1, not 0 (C-2 over the fallback path)', () => {
+  test('grow-patch eid column fills the grown tail with -1, not 0 ( over the fallback path)', () => {
     const b = new Buffers({ capabilities: caps('grow-patch-ab'), maxEntities: 1 << 16 })
     const col = b.column(k('gp:eid.0'), makeColumnLayout('i32', 1, -1), 4)
     expect([...(col.view as Int32Array)]).toEqual([-1, -1, -1, -1])

@@ -1,10 +1,10 @@
-// M6 scheduler INTEGRATION suite — end-to-end, in lieu of the deferred boids bench. A small system
+// scheduler INTEGRATION suite — end-to-end, in lieu of the deferred boids bench. A small system
 // pipeline runs via the single-threaded executor and DETERMINISTICALLY mutates the right components;
 // the reactivity `.changed` flavor sees the writes after the frame (the wave/frame-boundary drain).
 //
 // DEFERRED: the wall-clock graph-build bench (plan-construction throughput) is NOT measured here —
 // no bench harness in this milestone. Its STRUCTURAL surrogate is the property suite's plan-shape
-// assertions (DET-1) plus the "plan built once" check below; the timing surrogate is flagged for the
+// assertions plus the "plan built once" check below; the timing surrogate is flagged for the
 // reviewer.
 
 import { describe, expect, test } from 'vitest'
@@ -32,7 +32,7 @@ function kit(n: number) {
   return { world, Position, Velocity, handles }
 }
 
-describe('movement pipeline end-to-end (§6)', () => {
+describe('movement pipeline end-to-end ', () => {
   test('a movement system integrates Position from Velocity across N entities, deterministically', () => {
     const N = 32
     const { world, Position, Velocity, handles } = kit(N)
@@ -58,7 +58,7 @@ describe('movement pipeline end-to-end (§6)', () => {
       expect(p.x).toBeCloseTo((i + 1) * 1.5)
       expect(p.y).toBeCloseTo(-(i + 1) * 1.5)
     }
-    // SCH-4: single-thread executor never leaves 'serial'.
+    // Single-thread executor never leaves 'serial'.
     expect(world.phase).toBe('serial')
   })
 
@@ -111,7 +111,7 @@ describe('movement pipeline end-to-end (§6)', () => {
         }
       },
     })
-    // Registration order is the implicit-edge direction (§4.3): Accelerate first ⇒ Accelerate→Move.
+    // Registration order is the implicit-edge direction: Accelerate first ⇒ Accelerate→Move.
     const scheduler = createScheduler(world, [Accelerate, Move])
 
     // Accelerate runs BEFORE Move within the frame (conflict on Velocity: Accelerate writes,
@@ -129,7 +129,7 @@ describe('movement pipeline end-to-end (§6)', () => {
     expect(waveOf(idOf('Accelerate'))).toBeLessThan(waveOf(idOf('Move')))
   })
 
-  test('the plan is built ONCE — repeated updates never rebuild it (SCH-5 surrogate)', () => {
+  test('the plan is built ONCE — repeated updates never rebuild it ( surrogate)', () => {
     const { world, Position, Velocity } = kit(4)
     const Move = defineSystem({
       name: 'Move',

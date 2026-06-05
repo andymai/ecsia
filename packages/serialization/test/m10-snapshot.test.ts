@@ -15,7 +15,7 @@ function defs() {
   }
 }
 
-describe('M10 snapshot — round-trip', () => {
+describe(' snapshot — round-trip', () => {
   it('emits a valid header + reproduces component columns', () => {
     const D = defs()
     const src = createWorld({ components: [D.Position, D.Velocity, D.Target, D.Tag] })
@@ -43,7 +43,7 @@ describe('M10 snapshot — round-trip', () => {
     expect(dst.has(result.remap.get(e2 as never) as never, R.Tag)).toBe(true)
   })
 
-  it('remaps eid fields through the remap table (§5.4 / S-5)', () => {
+  it('remaps eid fields through the remap table ', () => {
     const D = defs()
     const src = createWorld({ components: [D.Position, D.Target] })
     const a = src.spawnWith(D.Position)
@@ -60,7 +60,7 @@ describe('M10 snapshot — round-trip', () => {
     expect(who).toBe(na as number)
   })
 
-  it('determinism: two snapshots of the same state are byte-identical (S-8)', () => {
+  it('determinism: two snapshots of the same state are byte-identical ', () => {
     const D = defs()
     const src = createWorld({ components: [D.Position] })
     const e = src.spawnWith(D.Position)
@@ -72,8 +72,8 @@ describe('M10 snapshot — round-trip', () => {
   })
 })
 
-describe('M10 snapshot — relations', () => {
-  it('round-trips exclusive + overflow relations with both eids remapped (S-4/S-5/S-6)', () => {
+describe(' snapshot — relations', () => {
+  it('round-trips exclusive + overflow relations with both eids remapped ', () => {
     const P1 = defineComponent({ x: 'f32' }, { brand: 'P' })
     const src = createWorld({ components: [P1] })
     const rel = createRelations(src)

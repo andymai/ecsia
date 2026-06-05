@@ -1,10 +1,10 @@
-// @ecsia/schema — type-level field tokens + per-component inference (type-system.md §1–§4, §9).
-// Type-only for the inference surface; the runtime carries only the token constructors (§1.1) so
+// @ecsia/schema — type-level field tokens + per-component inference.
+// Type-only for the inference surface; the runtime carries only the token constructors so
 // `vec`/`staticString`/`object` call-sites stay literal-typed. @ecsia/core consumes these; the
 // dependency is one-directional (schema never imports core) to keep the graph acyclic.
 
 // ---------------------------------------------------------------------------
-// §1.1 Field token table (the single source of truth)
+// (the single source of truth)
 // ---------------------------------------------------------------------------
 
 export type ScalarToken =
@@ -36,12 +36,12 @@ export interface ObjectToken<T> {
   readonly __t?: T
 }
 
-// Free-form rich tokens: sidecar-backed, non-shareable, main-thread-pinned (rich-fields.md §2.1).
+// Free-form rich tokens: sidecar-backed, non-shareable, main-thread-pinned.
 // `'string'` is a bare string literal token (used like 'f32') holding an arbitrary JS string; it is
 // distinct from the enum-choices staticString. object<T> is the other rich kind.
 export type RichToken = 'string'
 
-// A token wrapped with a user-overridable default (component-schema.md §4.1; rich-fields.md §3.1 / G-1).
+// A token wrapped with a user-overridable default.
 // `field('string', { default: 'x' })` or `field(object<T>(), { default: ... })`. The inner token drives
 // every inference path through TokenOf; the default is consumed only at descriptor resolution.
 export interface FieldSpec<F extends BaseFieldToken> {
@@ -62,7 +62,7 @@ export type FieldToken = BaseFieldToken | FieldSpec<BaseFieldToken>
 /** Unwrap a {@link FieldSpec} to its inner token; a bare token passes through. */
 export type TokenOf<F extends FieldToken> = F extends FieldSpec<infer T> ? T : F
 
-// Token constructors — keep call-sites literal-typed without caller `as const` (type-system.md §1.1).
+// Token constructors — keep call-sites literal-typed without caller `as const`.
 export const vec = <E extends ScalarToken, N extends number>(elem: E, len: N): VecToken<E, N> => ({
   kind: 'vec',
   elem,
@@ -80,7 +80,7 @@ export const staticString = <const C extends readonly string[]>(...choices: C): 
 })
 export const object = <T>(): ObjectToken<T> => ({ kind: 'object' })
 
-// Wrap any token with a user-overridable default (rich-fields.md §3.1). Additive: bare tokens still
+// Wrap any token with a user-overridable default. Additive: bare tokens still
 // work unwrapped; `field(token, { default })` carries the default through to the FieldDescriptor.
 export const field = <const F extends BaseFieldToken>(token: F, opts: { default: FieldValue<F> }): FieldSpec<F> => ({
   __fieldSpec: true,
@@ -89,7 +89,7 @@ export const field = <const F extends BaseFieldToken>(token: F, opts: { default:
 })
 
 // ---------------------------------------------------------------------------
-// §8 Branded ID contracts (zero runtime cost; prevent cross-assignment)
+// (zero runtime cost; prevent cross-assignment)
 // ---------------------------------------------------------------------------
 
 declare const __brand: unique symbol
@@ -105,7 +105,7 @@ export type EntityIndex = Brand<number, 'EntityIndex'>
 export type Tick = Brand<number, 'Tick'>
 
 // ---------------------------------------------------------------------------
-// §1.2 / §1.3 Token → value type (the accessor element type)
+// / → value type (the accessor element type)
 // ---------------------------------------------------------------------------
 
 export type ScalarValue<T extends ScalarToken> = T extends 'bool'
@@ -114,7 +114,7 @@ export type ScalarValue<T extends ScalarToken> = T extends 'bool'
     ? EntityHandle
     : number
 
-// A fixed-length, indexable vec view — no allocation on read (§1.3).
+// A fixed-length, indexable vec view — no allocation on read.
 export interface VecView<E extends ScalarToken, N extends number> {
   readonly length: N
   [index: number]: ScalarValue<E>
@@ -148,7 +148,7 @@ export type FieldValue<F extends FieldToken> = F extends FieldSpec<infer Inner>
             : never
 
 // ---------------------------------------------------------------------------
-// §1.4 Runtime field descriptor (value-level layout contract)
+// (value-level layout contract)
 // ---------------------------------------------------------------------------
 
 export type TypedArrayCtor =
@@ -173,22 +173,22 @@ export interface FieldDescriptor {
   /** false for object-token AND 'string'; gates worker use. */
   readonly shareable: boolean
   /**
-   * The sidecar kind for a non-column rich field; undefined for column-backed fields (rich-fields.md
-   * §2.3). RF-DESC: `ctor === null ⟺ rich !== undefined ⟺ shareable === false`.
+   * The sidecar kind for a non-column rich field; undefined for column-backed fields.
+   * `ctor === null ⟺ rich !== undefined ⟺ shareable === false`.
    */
   readonly rich?: 'string' | 'object'
   readonly encode: (v: unknown) => number
   readonly decode: (slot: number) => unknown
   /** staticString only. */
   readonly choices?: readonly string[]
-  // Runtime-only extensions (component-schema.md §3.2 / §4): the value-level default and whether
+  // Runtime-only extensions: the value-level default and whether
   // a fresh row must be explicitly written (true for eid and user-overridden defaults).
   readonly default: unknown
   readonly needsExplicitInit: boolean
 }
 
 // ---------------------------------------------------------------------------
-// §1.5 Storage strategy (type-inert) + §2.1 ComponentDef
+// (type-inert) +
 // ---------------------------------------------------------------------------
 
 export type StorageStrategy = 'packed' | 'sparse'
@@ -200,7 +200,7 @@ export interface ComponentOptions {
 
 export type Schema = Readonly<Record<string, FieldToken>>
 
-// §2.2 inferred views. ReadView is deeply readonly; WriteView is mutable; vec/object fields switch
+// WriteView is mutable; vec/object fields switch
 // their container readonly-ness through the per-token read/write fork (FieldValueRW).
 type FieldValueRW<F extends FieldToken, RW extends 'r' | 'w'> = F extends FieldSpec<infer Inner>
   ? FieldValueRW<Inner, RW>
@@ -218,9 +218,9 @@ export type ReadView<S extends Schema> = { readonly [K in keyof S]: FieldValueRW
 export type WriteView<S extends Schema> = { -readonly [K in keyof S]: FieldValueRW<S[K], 'w'> }
 
 // `N` is the component's NAME LITERAL, captured by defineComponent so CompKey<C> can lift it to a
-// precise element-property key (type-system.md §3 CompKey / §5.2). It defaults to `string` so every
+// precise element-property key. It defaults to `string` so every
 // existing `ComponentDef<S>` annotation stays valid and an unbranded/inferred-name def degrades to a
-// string-index element key rather than a compile error. `name` is debug-only at runtime (§2.3); the
+// string-index element key rather than a compile error. `name` is debug-only at runtime; the
 // literal lives only in the type so the named-shorthand surface (entity.position, Has<C>) is real.
 export interface ComponentDef<S extends Schema, N extends string = string> {
   readonly schema: S
@@ -235,7 +235,7 @@ export interface ComponentDef<S extends Schema, N extends string = string> {
   readonly __write?: WriteView<S>
 }
 
-// §3 inference helpers (one component at a time — no N-ary tuple recursion).
+// (one component at a time — no N-ary tuple recursion).
 export type SchemaOf<C> = C extends ComponentDef<infer S> ? S : never
 export type ReadOf<C> = ReadView<SchemaOf<C>>
 export type WriteOf<C> = WriteView<SchemaOf<C>>
@@ -259,7 +259,7 @@ export type SpawnArgFor<E> = E extends readonly [infer C, unknown]
   : E
 
 // ---------------------------------------------------------------------------
-// §9 Accessor type contract (the factory the component module must satisfy)
+// (the factory the component module must satisfy)
 // ---------------------------------------------------------------------------
 
 export interface AccessorInstance {
@@ -285,7 +285,7 @@ export type AccessorFactory<S extends Schema> = (
   }
 
 // ---------------------------------------------------------------------------
-// §8 entity sentinel + §12 misc constants
+// +
 // ---------------------------------------------------------------------------
 
 export const NO_ENTITY = 0xffffffff as EntityHandle
@@ -294,8 +294,8 @@ export const NULL_ENTITY = NO_ENTITY
 export const MAX_QUERY_ARITY = 8
 
 // ---------------------------------------------------------------------------
-// §7 Relation typing — the type-level contract the query DSL threads (the relations
-// RUNTIME lands at M8; M4 needs only the PairDef/Wildcard/RelationDef SHAPES so a
+// (the relations
+// RUNTIME lands at; needs only the PairDef/Wildcard/RelationDef SHAPES so a
 // Pair(...) term type-checks through query([...])).
 // ---------------------------------------------------------------------------
 
@@ -322,17 +322,17 @@ export type WildcardToken = typeof Wildcard
 export interface PairDef<R extends RelationDef<Schema | void>> {
   readonly relation: R
   readonly target: EntityHandle | WildcardToken
-  /** Synthetic ComponentId minted at addPair (relations.md §2.6); UNREGISTERED (-1) for a query-only pair. */
+  /** Synthetic ComponentId minted at addPair; UNREGISTERED (-1) for a query-only pair. */
   readonly id: ComponentId
-  /** A pair carries its relation's payload schema as its read/write views (type-system.md §7.2). */
+  /** A pair carries its relation's payload schema as its read/write views. */
   readonly __read?: R extends RelationDef<infer P> ? (P extends Schema ? ReadView<P> : Record<never, never>) : Record<never, never>
   readonly __write?: R extends RelationDef<infer P> ? (P extends Schema ? WriteView<P> : Record<never, never>) : Record<never, never>
 }
 
 // ---------------------------------------------------------------------------
-// §5.1 Query term DSL (the typed wrappers + value-level constructors). read/write fork the
+// (the typed wrappers + value-level constructors). read/write fork the
 // inferred element mutability; has/without are membership-only; optional narrows to `| undefined`.
-// A bare ComponentDef is treated as read (type-system.md §5.1).
+// A bare ComponentDef is treated as read.
 // ---------------------------------------------------------------------------
 
 export interface ReadTerm<C> {
@@ -371,14 +371,14 @@ export type QueryTerm =
   | PairDef<RelationDef<Schema | void>>
   | ComponentDef<Schema>
 
-// §5.4 Has<...> entity narrowing (the escape hatch + the read-only shorthand surface).
+// <...> entity narrowing (the escape hatch + the read-only shorthand surface).
 export type Has<C extends ComponentDef<Schema>> = { readonly [K in CompKey<C>]: ReadOf<C> }
 export type HasWrite<C extends ComponentDef<Schema>> = { [K in CompKey<C>]: WriteOf<C> }
 
-// §3 CompKey: lift a component's per-component key (its name) for the element property name.
+// Lift a component's per-component key (its name) for the element property name.
 export type CompKey<C> = C extends { name: infer N extends string } ? N : never
 
-// §7.3 pair value type in queries — the relation payload schema, forked by read/write.
+// forked by read/write.
 type PairValue<P extends PairDef<RelationDef<Schema | void>>, RW extends 'r' | 'w'> = P extends PairDef<infer R>
   ? R extends RelationDef<infer Pay>
     ? Pay extends Schema
@@ -389,7 +389,7 @@ type PairValue<P extends PairDef<RelationDef<Schema | void>>, RW extends 'r' | '
     : Record<never, never>
   : Record<never, never>
 
-// §5.2 term → element-contribution mapping. has/without contribute nothing (membership-only);
+// → element-contribution mapping. has/without contribute nothing (membership-only);
 // optional contributes a possibly-undefined view; a Pair contributes its payload under the relation name.
 export type TermElement<T> = T extends WriteTerm<infer C>
   ? { [K in CompKey<C>]: WriteOf<C> }
@@ -409,7 +409,7 @@ export type TermElement<T> = T extends WriteTerm<infer C>
               ? { [K in CompKey<T>]: ReadOf<T> }
               : Record<never, never>
 
-// §5.3 tuple fold → query element type: the INTERSECTION of each term's contribution. Intersection
+// → query element type: the INTERSECTION of each term's contribution. Intersection
 // (not deep recursion) keeps instantiation shallow — TS folds A & B & C left-to-right.
 export type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (k: infer I) => void ? I : never
 
@@ -417,13 +417,13 @@ export type QueryElement<Terms extends readonly QueryTerm[]> = readonly QueryTer
   ? LooseQueryElement
   : UnionToIntersection<{ [I in keyof Terms]: TermElement<Terms[I]> }[number]>
 
-// §6.1 the loose fallback element when arity > the cap: every named slot present-but-loose (a typed
+// > the cap: every named slot present-but-loose (a typed
 // degradation, NEVER `any` — rejecting bitECS's ComponentRef = any).
 export type LooseQueryElement = Readonly<Record<string, Readonly<Record<string, unknown>>>> & {
   handle: EntityHandle
 }
 
-// §9 the opt-in column-cursor surface: one reused chunk per matched hot archetype exposing raw SoA
+// One reused chunk per matched hot archetype exposing raw SoA
 // columns + a row span. The runtime class lands in @ecsia/core; this fixes the structural shape.
 export interface QueryChunk {
   /** Rows in this chunk (the archetype's dense row count). Iterate `0..count`. */
@@ -436,16 +436,16 @@ export interface QueryChunk {
   stride<S extends Schema>(def: ComponentDef<S>, field: string): number
 }
 
-// §9.1 the Query surface (runtime side lands in @ecsia/core; this fixes the typed shape).
+// (runtime side lands in @ecsia/core; this fixes the typed shape).
 export interface Query<Terms extends readonly QueryTerm[]> {
   readonly terms: Terms
   /** Iterate every matching entity; `e` is the pooled element (do NOT store it across iterations). */
   each(fn: (e: QueryElement<Terms> & { handle: EntityHandle }) => void): void
   [Symbol.iterator](): Iterator<QueryElement<Terms> & { handle: EntityHandle }>
-  /** Opt-in SoA fast path (queries.md §9): one reused {@link QueryChunk} per matched hot archetype, with
+  /** Opt-in SoA fast path: one reused {@link QueryChunk} per matched hot archetype, with
    * raw typed column views + a row span. Bypasses the per-row accessor AND the reactivity write log. */
   eachChunk(fn: (chunk: QueryChunk) => void): void
-  /** Flavor declarations (chainable; queries.md §8.1). */
+  /** Flavor declarations (chainable). */
   added(): this
   removed(): this
   changed(...components: ComponentDef<Schema>[]): this
@@ -457,21 +457,21 @@ export interface Query<Terms extends readonly QueryTerm[]> {
   readonly count: number
 }
 
-// §6.1/§6.3 the PAST-CAP query surface (arity > MAX_QUERY_ARITY). Its element is the typed
+// /(arity > MAX_QUERY_ARITY). Its element is the typed
 // LooseQueryElement by default, but `each`/iterators are GENERIC on the element so the explicit
 // escape hatch (a `(e: Has<A> & HasWrite<B>) => ...` annotation) binds `EL` from the annotation
 // rather than failing against the loose record — the loose element is NOT structurally assignable to
 // a precise `Has<C>`, so a non-generic `each` would reject the annotation. The default keeps the
 // unannotated case typed (LooseQueryElement, never `any`); the annotation drives typing past the cap
-// with zero inference cost (type-system.md §6.3, report §7.5 mitigation 3). `EL` is unconstrained so
+// with zero inference cost (report ). `EL` is unconstrained so
 // any user annotation is accepted; the runtime terms still drive matching regardless.
 export interface LooseQuery {
   readonly terms: readonly QueryTerm[]
   each<EL = LooseQueryElement>(fn: (e: EL & { handle: EntityHandle }) => void): void
   [Symbol.iterator](): Iterator<LooseQueryElement>
-  /** Opt-in SoA fast path (queries.md §9): see {@link Query.eachChunk}. */
+  /** Opt-in SoA fast path: see {@link Query.eachChunk}. */
   eachChunk(fn: (chunk: QueryChunk) => void): void
-  /** Flavor declarations (chainable; queries.md §8.1). */
+  /** Flavor declarations (chainable). */
   added(): this
   removed(): this
   changed(...components: ComponentDef<Schema>[]): this
@@ -482,9 +482,9 @@ export interface LooseQuery {
   readonly count: number
 }
 
-// §6.1 the arity-cap overload family: 1..8 fully inferred, 9+ → typed LooseQueryElement. Fixed-length
+// 1..8 fully inferred, 9+ → typed LooseQueryElement. Fixed-length
 // overloads bound TS instantiation to the matched arity; the catch-all stops recursion entirely (the
-// COMPILE-TIME budget assertion itself is M11 — this just lands the cap + escape hatch).
+// COMPILE-TIME budget assertion itself is — this just lands the cap + escape hatch).
 export interface WorldQuery {
   <T0 extends QueryTerm>(...terms: [T0]): Query<[T0]>
   <T0 extends QueryTerm, T1 extends QueryTerm>(...terms: [T0, T1]): Query<[T0, T1]>
@@ -528,8 +528,8 @@ export interface WorldQuery {
   >(
     ...terms: [T0, T1, T2, T3, T4, T5, T6, T7]
   ): Query<[T0, T1, T2, T3, T4, T5, T6, T7]>
-  /** 9+ : degraded overload — returns a LooseQuery whose element is the typed LooseQueryElement and
-   *  whose `each` is generic-on-element for the explicit Has/HasWrite escape hatch (§6.3). Compile
-   *  time stays bounded: the catch-all stops the variadic fold entirely. */
+  /** 9+: degraded overload — returns a LooseQuery whose element is the typed LooseQueryElement and
+   * whose `each` is generic-on-element for the explicit Has/HasWrite escape hatch. Compile
+   * time stays bounded: the catch-all stops the variadic fold entirely. */
   (...terms: QueryTerm[]): LooseQuery
 }

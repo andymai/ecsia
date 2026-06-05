@@ -1,12 +1,12 @@
-// The generational handle: a packed u32 [generation : high][index : low] (entity-model.md §2).
+// The generational handle: a packed u32 [generation: high][index: low].
 // Encode/decode are pure, branch-free bit ops; the brand is erased at runtime.
 
-// The handle/index brands are the canonical type-system.md §8 brands, shared with @ecsia/schema so
+// The handle/index brands are the canonical, shared with @ecsia/schema so
 // the eid field type, accessors, and the entity layer all agree on one EntityHandle/EntityIndex.
 import type { EntityHandle as SchemaEntityHandle, EntityIndex as SchemaEntityIndex } from '@ecsia/schema'
 import { IS_DEV } from '../env.js'
 
-/** A packed u32: [generation : generationBits][index : indexBits], generation in the HIGH bits. */
+/** A packed u32: [generation: generationBits][index: indexBits], generation in the HIGH bits. */
 export type EntityHandle = SchemaEntityHandle
 
 /** The low-bits index portion — the slot in the dense/sparse arrays. */
@@ -50,7 +50,7 @@ export function isNoEntity(handle: EntityHandle): boolean {
 /**
  * Build the immutable handle layout from a generation-bit split. `indexBits = 32 -
  * generationBits`. `1 << 32` is 1 in JS (shift is mod-32), so the all-ones index mask is
- * special-cased for `generationBits === 0` (entity-model.md §2.2 edge case).
+ * special-cased for `generationBits === 0`.
  */
 export function makeHandleLayout(generationBits: number): HandleLayout {
   if (!Number.isInteger(generationBits) || generationBits < 0 || generationBits > 31) {
@@ -72,7 +72,7 @@ export function makeHandleLayout(generationBits: number): HandleLayout {
 }
 
 export function makeHandle(index: number, generation: number, layout: HandleLayout): EntityHandle {
-  // Dev-mode guard (entity-model.md §2.3): a generation above maxGeneration would overflow the
+  // Dev-mode guard: a generation above maxGeneration would overflow the
   // generation field and silently alias another slot's handle. Stripped in production builds.
   if (IS_DEV && generation > layout.maxGeneration) {
     throw new RangeError(`makeHandle: generation ${generation} exceeds maxGeneration ${layout.maxGeneration}`)

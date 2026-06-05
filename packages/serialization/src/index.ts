@@ -1,10 +1,10 @@
-// @ecsia/serialization — the snapshot/delta copy layer + the zero-copy worker bootstrap (serialization.md, M10).
+// @ecsia/serialization — the snapshot/delta copy layer + the zero-copy worker bootstrap.
 //
-// TWO TRANSPORTS, structurally separated (decision #9, S-1):
-//   - bootstrapForWorker → WorldBootstrap (SAB handles, never bytes): intra-process worker handoff,
-//     NO value serialization (§3).
-//   - createSnapshotSerializer / createDeltaSerializer → Uint8Array bytes (never SAB handles):
-//     network / persistence / cross-isolate copy layer (§4–§7).
+// TWO TRANSPORTS, structurally separated (decision #9):
+// - bootstrapForWorker → WorldBootstrap (SAB handles, never bytes): intra-process worker handoff,
+// NO value serialization.
+// - createSnapshotSerializer / createDeltaSerializer → Uint8Array bytes (never SAB handles):
+// network / persistence / cross-isolate copy layer.
 
 // ---- Zero-copy worker bootstrap (Layer 1) ----
 export { bootstrapForWorker, attachWorld, applyColumnsAdded } from './bootstrap.js'
@@ -20,7 +20,7 @@ export type { SnapshotDeserializer, DeserializeResult } from './deserialize.js'
 export { createDeltaSerializer, applyDelta } from './delta.js'
 export type { DeltaSerializer, DeltaOptions } from './delta.js'
 
-// Rich-field serialization policy hook (rich-fields.md §7.4) — shared by SnapshotOptions + DeltaOptions.
+// Rich-field serialization policy hook — shared by SnapshotOptions + DeltaOptions.
 export type { OnUnserializable, UnserializableContext } from './rich.js'
 
 // ---- Structural delta stream / observer log (Layer 2) ----

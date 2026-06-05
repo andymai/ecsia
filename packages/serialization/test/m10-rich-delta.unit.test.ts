@@ -1,4 +1,4 @@
-// Rich-field DELTA serialization (rich-fields.md §7.3 + §9): SECTION R riding the same changeVersion row
+// Rich-field DELTA serialization: SECTION R riding the same changeVersion row
 // selection, applyDelta ordering (structural → values → rich), present/absent per-row flagging, rich
 // values landing on entities CREATED by the same delta, and epsilon-diff (T-EPSILON-DROP / CORE-PURE).
 
@@ -22,7 +22,7 @@ function bootstrap<C extends ComponentDef<Schema>>(srcComps: readonly C[], dstCo
   return { dst, remap: new Map(remap) }
 }
 
-describe('M10 RICH — delta carries changed rich values (T-RT-DELTA, §7.3)', () => {
+describe(' RICH — delta carries changed rich values (T-RT-DELTA)', () => {
   it('a rich field changed since baseline applies to the stale mirror', () => {
     const Label = defineComponent({ text: 'string' }, { name: 'label' })
     const src = createWorld({ components: asComps(Label) })
@@ -85,7 +85,7 @@ describe('M10 RICH — delta carries changed rich values (T-RT-DELTA, §7.3)', (
   })
 })
 
-describe('M10 RICH — epsilon-diff (T-EPSILON-DROP / T-EPSILON-CORE-PURE, §9)', () => {
+describe(' RICH — epsilon-diff (T-EPSILON-DROP / T-EPSILON-CORE-PURE)', () => {
   it('a numeric change within epsilon is DROPPED; one exceeding is emitted; shadow accumulates', () => {
     const P = defineComponent({ x: 'f64' }, { name: 'p' })
     const src = createWorld({ components: asComps(P) })

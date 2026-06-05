@@ -1,8 +1,8 @@
-// SAB-backed per-worker entity-ID reservation (entity-model.md §5; scheduler.md §7.4). The main
+// SAB-backed per-worker entity-ID reservation. The main
 // thread pre-reserves a block of fully-formed (alive) handles per worker before each wave via the
-// serial `world.reserveEntityBlock` (M1 layout), writes the handles into a SAB, and the worker TAKES
-// them mid-wave with `Atomics.sub` on a cursor word — exercising the M1 Atomics.sub take path (the
-// v2 entity-model.md §5.1 note) without ever touching the shared free-list (Must-Fix #1).
+// serial `world.reserveEntityBlock` ( layout), writes the handles into a SAB, and the worker TAKES
+// them mid-wave with `Atomics.sub` on a cursor word — exercising the Atomics.sub take path (the
+// v2 ) without ever touching the shared free-list.
 //
 // SAB layout per worker: word 0 = cursor (next free slot, counts DOWN via Atomics.sub),
 // words [1 .. 1+capacity) = the reserved full handles. A take of cursor c yields handles[c-1].

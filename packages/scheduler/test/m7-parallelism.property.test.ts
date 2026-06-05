@@ -1,18 +1,18 @@
-// M7 PARALLELISM-SAFETY PROPERTY suite (fast-check). Each property is genuinely DISCRIMINATING — it
+// PARALLELISM-SAFETY PROPERTY suite (fast-check). Each property is genuinely DISCRIMINATING — it
 // would fail if the safety invariant it guards were broken — and is checked against an INDEPENDENT
 // oracle, never the implementation's own helpers.
 //
-//   SERIAL-EQUIVALENCE (headline, SCH-3 / CB-2): a random structural workload applied across MANY
-//     per-worker command buffers (nondeterministic encoding order, simulated by shuffling worker
-//     buffers) yields the IDENTICAL world (entity set + component values) as the deterministic
-//     fixed-worker-index merge. Determinism despite nondeterministic completion order.
-//   ENTITY-REF SAFETY (the M7-gating fuzz, CB-SAFE §8): random interleaved create/destroy/add streams
-//     across workers — every dangling ref is DROPPED (never applied to a recycled slot); OP_ADD_PAIR
-//     with a dead target dropped; reserved-ID create-then-use chains within a flush always succeed.
-//   NO WORKER BITMASK ACCESS (Must-Fix #1): the bitmask phase gate throws on ANY read/write while
-//     world.phase==='wave'; a fuzzed multi-worker run records ZERO bitmask access off the wave.
-//   NO MID-WAVE STRUCTURAL MUTATION (CO-1): no archetype rows / record / alive-count change while
-//     world.phase==='wave' across a fuzzed multi-worker run.
+// SERIAL-EQUIVALENCE (headline): a random structural workload applied across MANY
+// per-worker command buffers (nondeterministic encoding order, simulated by shuffling worker
+// buffers) yields the IDENTICAL world (entity set + component values) as the deterministic
+// fixed-worker-index merge. Determinism despite nondeterministic completion order.
+// ENTITY-REF SAFETY (the -gating fuzz, CB-SAFE ): random interleaved create/destroy/add streams
+// across workers — every dangling ref is DROPPED (never applied to a recycled slot); OP_ADD_PAIR
+// with a dead target dropped; reserved-ID create-then-use chains within a flush always succeed.
+// NO WORKER BITMASK ACCESS: the bitmask phase gate throws on ANY read/write while
+// world.phase==='wave'; a fuzzed multi-worker run records ZERO bitmask access off the wave.
+// NO MID-WAVE STRUCTURAL MUTATION: no archetype rows / record / alive-count change while
+// world.phase==='wave' across a fuzzed multi-worker run.
 
 import { fileURLToPath } from 'node:url'
 import { describe, expect, test } from 'vitest'
@@ -146,7 +146,7 @@ function fingerprint(world: World, Health: ComponentDef<Schema>, Mana: Component
   return { alive: world.handleStats().aliveCount, hp, mp }
 }
 
-// CB-7 / spec-gap #4: capture the ORDERED reactivity delta stream the apply path emits. Observers fire
+// / spec-gap #4: capture the ORDERED reactivity delta stream the apply path emits. Observers fire
 // at the serial drain, once per change, in the deterministic merge order — so two runs whose buffers
 // re-sort to the same ascending-worker-index order MUST produce the byte-identical ordered stream.
 interface ReactDelta {
@@ -173,7 +173,7 @@ function drainReactivity(world: World): void {
 }
 
 // --------------------------------------------------------------------------------------------------
-describe('SERIAL-EQUIVALENCE (headline, SCH-3 / CB-2)', () => {
+describe('SERIAL-EQUIVALENCE (headline)', () => {
   test('the SAME multi-worker workload applied in ANY completion order yields the IDENTICAL world as the fixed merge', () => {
     fc.assert(
       fc.property(
@@ -183,7 +183,7 @@ describe('SERIAL-EQUIVALENCE (headline, SCH-3 / CB-2)', () => {
           const SEED = 8
           // Build the canonical per-worker buffers once (encoding is deterministic per worker), then
           // apply them under TWO different "completion orders" (the array order is shuffled). flushAll
-          // sorts by workerIndex internally, so BOTH must produce the identical world (CB-2).
+          // sorts by workerIndex internally, so BOTH must produce the identical world.
           const buildBuffers = (k: Kit): CommandBuffer[] => {
             const bufs: CommandBuffer[] = []
             perWorker.forEach((ops, wi) => {
@@ -214,7 +214,7 @@ describe('SERIAL-EQUIVALENCE (headline, SCH-3 / CB-2)', () => {
 
           // DEEP-COMPARE (1): entity count + component-value multisets are identical regardless of order.
           expect(fb).toEqual(fa)
-          // DEEP-COMPARE (2, CB-7 / spec-gap #4): the ORDERED reactivity delta stream is identical too —
+          // DEEP-COMPARE (2, / spec-gap #4): the ORDERED reactivity delta stream is identical too —
           // observed exactly once per change, in the deterministic ascending-worker-index merge order
           // (flushAll re-sorts both runs to the same order). A reorder or double-emit would diverge.
           expect(db).toEqual(da)
@@ -226,7 +226,7 @@ describe('SERIAL-EQUIVALENCE (headline, SCH-3 / CB-2)', () => {
 })
 
 // --------------------------------------------------------------------------------------------------
-describe('COMMAND-BUFFER ENTITY-REF SAFETY (the M7-gating fuzz, CB-SAFE §8)', () => {
+describe('COMMAND-BUFFER ENTITY-REF SAFETY (the -gating fuzz, CB-SAFE )', () => {
   test('every dangling reference is DROPPED — no applied op ever names a non-alive seed slot', () => {
     fc.assert(
       fc.property(
@@ -244,7 +244,7 @@ describe('COMMAND-BUFFER ENTITY-REF SAFETY (the M7-gating fuzz, CB-SAFE §8)', (
           })
 
           // Instrument the apply surface: capture every (addMany/removeMany/writePayload/despawn)
-          // target and assert it was ALIVE at the moment of application (validate-then-apply, §8).
+          // target and assert it was ALIVE at the moment of application (validate-then-apply).
           const violations: string[] = []
           const base = worldApplyOf(k.world, k.codecById, () => {})
           const guarded: WorldApply = {
@@ -272,13 +272,13 @@ describe('COMMAND-BUFFER ENTITY-REF SAFETY (the M7-gating fuzz, CB-SAFE §8)', (
     )
   })
 
-  test('reserved-ID create-then-use chains within a flush ALWAYS succeed (CB-3, §8.5)', () => {
+  test('reserved-ID create-then-use chains within a flush ALWAYS succeed ', () => {
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 16 }), (chainLen) => {
         const k = makeKit(0)
         const aliveBeforeReserve = k.world.handleStats().aliveCount // 0 seeds
         const cb = makeCommandBuffer(0, 1024, false)
-        // Reserved handles are ALIVE the instant they are reserved (§6.1), so the alive delta is taken
+        // Reserved handles are ALIVE the instant they are reserved, so the alive delta is taken
         // against the pre-reserve count; the discriminator is that each child is alive AND has Mana.
         fillReservationFor(k.world, cb, chainLen)
         const enc = encoderOver(cb, (id) => k.codecById.get(id)!, () => {})
@@ -292,7 +292,7 @@ describe('COMMAND-BUFFER ENTITY-REF SAFETY (the M7-gating fuzz, CB-SAFE §8)', (
         }
         flushAll(worldApplyOf(k.world, k.codecById, () => {}), [cb])
         // Every created child is alive AND carries the add — none dropped (per-handle, not via a
-        // cached LiveQuery, so this discriminates the create-then-use chain itself, CB-3).
+        // cached LiveQuery, so this discriminates the create-then-use chain itself).
         expect(k.world.handleStats().aliveCount).toBe(aliveBeforeReserve + chainLen)
         for (const child of children) {
           expect(k.world.isAlive(child)).toBe(true)
@@ -330,7 +330,7 @@ describe('COMMAND-BUFFER ENTITY-REF SAFETY (the M7-gating fuzz, CB-SAFE §8)', (
 })
 
 // --------------------------------------------------------------------------------------------------
-describe('NO WORKER BITMASK ACCESS during a wave (Must-Fix #1)', () => {
+describe('NO WORKER BITMASK ACCESS during a wave ', () => {
   // The bitmask is the single-entity membership substrate; its phase gate throws on ANY read/write
   // while world.phase==='wave'. world.has() → storage.has → bitmaskHas → assertSerial. So any bitmask
   // touch off the serial slot is a HARD ERROR, which is exactly what proves workers never read it.
@@ -361,7 +361,7 @@ describe('NO WORKER BITMASK ACCESS during a wave (Must-Fix #1)', () => {
         // If ANY worker read the bitmask mid-wave, the #assertSerial gate (phase==='wave') would throw
         // inside the worker, set the wave error flag, and post a diagnostic — corrupting the result.
         // So a clean, serial-equivalent run with ZERO diagnostics is the proof of no worker bitmask
-        // access (Must-Fix #1). We capture every diagnostic the pool emits.
+        // access. We capture every diagnostic the pool emits.
         const diags: string[] = []
         const systems: PoolSystem[] = [
           { id: 0 as unknown as SystemId, name: 'Regen', matchComponents: [Health], kernel: () => {}, maxSpawnsPerWave: 0 },
@@ -397,9 +397,9 @@ describe('NO WORKER BITMASK ACCESS during a wave (Must-Fix #1)', () => {
 })
 
 // --------------------------------------------------------------------------------------------------
-describe('NO MID-WAVE STRUCTURAL MUTATION (CO-1)', () => {
-  test('any structural mutation attempted while phase==="wave" THROWS — the CO-1 gate', () => {
-    // The load-bearing CO-1 guard: every storage/entity/bitmask mutation asserts phase==='serial'.
+describe('NO MID-WAVE STRUCTURAL MUTATION ', () => {
+  test('any structural mutation attempted while phase==="wave" THROWS — the gate', () => {
+    // The load-bearing guard: every storage/entity/bitmask mutation asserts phase==='serial'.
     // While the world is in the wave window, a structural verb (add/remove/despawn) must throw, which
     // is exactly what forbids a worker from mutating archetype rows / records / bitmask mid-wave.
     const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
@@ -442,7 +442,7 @@ describe('NO MID-WAVE STRUCTURAL MUTATION (CO-1)', () => {
           const before = world.handleStats().aliveCount
           for (let r = 0; r < rounds; r++) {
             // The worker stages OP_CREATE+OP_ADD mid-wave; if it had mutated structure directly the
-            // CO-1 gate would have thrown in the worker (diagnostic). Each round nets +N alive at the
+            // gate would have thrown in the worker (diagnostic). Each round nets +N alive at the
             // serial flush — structural change happens at the flush, never inside the wave.
             await localPool.runRound([{ systemId: 0 as unknown as SystemId, workerIndex: 0 }], 1)
           }

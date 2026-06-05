@@ -1,6 +1,6 @@
-// Rich-field SNAPSHOT serialization (rich-fields.md §7.2): the JSON sidecar SECTION 5, enumerated via
-// a.signature ∩ richFields() (rich-only components MUST round-trip — G-4), the FLAG_HAS_RICH gate, the
-// onUnserializable SKIP+dev-warn default policy (§7.4), and the RF-NOREMAP boundary (§7.5).
+// Rich-field SNAPSHOT serialization: the JSON sidecar SECTION 5, enumerated via
+// a.signature ∩ richFields() (rich-only components MUST round-trip — ), the FLAG_HAS_RICH gate, the
+// onUnserializable SKIP+dev-warn default policy, and the RF-NOREMAP boundary.
 
 import { describe, it, expect, vi } from 'vitest'
 import { createWorld, defineComponent, object } from '@ecsia/core'
@@ -10,8 +10,8 @@ import { FLAG_HAS_RICH, SERIALIZATION_FORMAT_VERSION } from '../src/format.js'
 
 const asComps = (...c: ComponentDef<Schema>[]): readonly ComponentDef<Schema>[] => c as readonly ComponentDef<Schema>[]
 
-describe('M10 RICH — snapshot round-trips string + object<T> (T-RT-SNAPSHOT)', () => {
-  it('a rich-ONLY component (no ColumnSet) round-trips — proves the signature∩richFields walk (G-4)', () => {
+describe(' RICH — snapshot round-trips string + object<T> (T-RT-SNAPSHOT)', () => {
+  it('a rich-ONLY component (no ColumnSet) round-trips — proves the signature∩richFields walk ', () => {
     const Label = defineComponent({ text: 'string' }, { name: 'label' })
     const src = createWorld({ components: asComps(Label) })
     const e1 = src.spawnWith([Label, { text: 'hello' }])
@@ -46,7 +46,7 @@ describe('M10 RICH — snapshot round-trips string + object<T> (T-RT-SNAPSHOT)',
     expect(got.meta).toEqual({ tags: ['a', 'b'], n: 7 })
   })
 
-  it('an entity that never set its rich field emits nothing and re-defaults on load (sparse §7.2)', () => {
+  it('an entity that never set its rich field emits nothing and re-defaults on load (sparse )', () => {
     const Label = defineComponent({ text: 'string' }, { name: 'label' })
     const src = createWorld({ components: asComps(Label) })
     const written = src.spawnWith([Label, { text: 'set' }])
@@ -73,7 +73,7 @@ describe('M10 RICH — snapshot round-trips string + object<T> (T-RT-SNAPSHOT)',
   })
 })
 
-describe('M10 RICH — onUnserializable policy (T-RT-UNSERIALIZABLE, §7.4)', () => {
+describe(' RICH — onUnserializable policy (T-RT-UNSERIALIZABLE)', () => {
   it('default policy SKIPs a cyclic value + dev-warns; the rest of the snapshot survives', () => {
     const Node = defineComponent({ meta: object<unknown>() }, { name: 'node' })
     const src = createWorld({ components: asComps(Node) })
@@ -115,7 +115,7 @@ describe('M10 RICH — onUnserializable policy (T-RT-UNSERIALIZABLE, §7.4)', ()
   })
 })
 
-describe('M10 RICH — RF-NOREMAP boundary (T-RT-NOREMAP, §7.5)', () => {
+describe(' RICH — RF-NOREMAP boundary (T-RT-NOREMAP)', () => {
   it('an EntityHandle stored INSIDE an object<T> is NOT remapped; the parallel eid column IS', () => {
     const Ref = defineComponent({ who: 'eid', meta: object<{ rawHandle: number }>() }, { name: 'ref' })
     const src = createWorld({ components: asComps(Ref) })

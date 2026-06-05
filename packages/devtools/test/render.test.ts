@@ -1,4 +1,4 @@
-// Renderers (§4): PURE functions over the data layer. renderText must contain the load-bearing FACTS
+// Renderers: PURE functions over the data layer. renderText must contain the load-bearing FACTS
 // (grep-able: counts, component/system names, conflict kinds, pin reasons). renderHTML must be
 // SELF-CONTAINED (no external refs, no scripts) and contain the SAME facts.
 

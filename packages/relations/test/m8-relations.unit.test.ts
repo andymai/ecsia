@@ -1,12 +1,12 @@
-// M8 relations — INSTRUMENTED unit tests (relations.md §12, Exit criteria). These go beyond the
+// relations — INSTRUMENTED unit tests (Exit criteria). These go beyond the
 // behavioural smoke tests in m8-relations.test.ts: each asserts a STRUCTURAL property via an
 // instrumented core seam (a migration counter wrapped around the RelationsHost) so the assertion
 // discriminates the implementation choice, not just the observable result.
 //
-//   - exclusive ChildOf re-parent is a FIELD WRITE → ZERO migrations after the first attach (P3).
-//   - cascade deleteSubject removes a whole subtree (P5 ordering, iterative BFS).
-//   - getPair(s, Damage, t).weight reads/writes the OVERFLOW row (off-archetype payload, P7).
-//   - Pair(R, Wildcard) matches every holder of ANY R-pair, exactly once each (P6/§8.1).
+// - exclusive ChildOf re-parent is a FIELD WRITE → ZERO migrations after the first attach.
+// - cascade deleteSubject removes a whole subtree ( ordering, iterative BFS).
+// - getPair(s, Damage, t).weight reads/writes the OVERFLOW row (off-archetype payload).
+// - Pair(R, Wildcard) matches every holder of ANY R-pair, exactly once each.
 //
 // createRelations(world) drives the core surface ONLY through world.__installRelations(); we wrap
 // that single seam to count migrations without touching @ecsia/core source.
@@ -17,8 +17,8 @@ import type { ComponentDef, EntityHandle, RelationsHost, Schema, World } from '@
 import { createRelations, Wildcard } from '../src/index.js'
 
 /** A migration counter wrapped around the RelationsHost — the ONLY way addPair/removePair move an
- *  entity between archetypes (storage.addMany/removeMany via migrateAddingMany/migrateRemovingMany).
- *  Counting them is how P3 asserts "exclusive re-target performs ZERO migrations". */
+ * entity between archetypes (storage.addMany/removeMany via migrateAddingMany/migrateRemovingMany).
+ * Counting them is how asserts "exclusive re-target performs ZERO migrations". */
 interface Instrumented {
   world: World
   rel: ReturnType<typeof createRelations>
@@ -56,7 +56,7 @@ function archOf(world: World, handle: EntityHandle): number {
   return (world.entity(handle) as unknown as { __archetypeId: number }).__archetypeId
 }
 
-describe('M8 unit — exclusive re-parent is a FIELD WRITE (P3: ZERO migrations)', () => {
+describe(' unit — exclusive re-parent is a FIELD WRITE (ZERO migrations)', () => {
   it('the first attach migrates once; every subsequent re-target migrates ZERO times', () => {
     const { world, rel, counters, reset } = instrumentedRelations()
     const ChildOf = rel.defineRelation({ weight: 'f32' }, { exclusive: true })
@@ -73,7 +73,7 @@ describe('M8 unit — exclusive re-parent is a FIELD WRITE (P3: ZERO migrations)
     reset()
     // 49 re-parents. The T1 valve rewrites the eid target column in place — NO archetype move.
     for (let i = 1; i < parents.length; i++) rel.addPair(child, ChildOf, parents[i]!, { weight: i })
-    expect(counters.adds).toBe(0) // <-- THE discriminator: zero migrations across every re-parent (P3)
+    expect(counters.adds).toBe(0) // <-- THE discriminator: zero migrations across every re-parent
     expect(counters.removes).toBe(0)
     expect(archOf(world, child)).toBe(archAfterAttach) // archetype invariant across all re-parents
 
@@ -106,12 +106,12 @@ describe('M8 unit — exclusive re-parent is a FIELD WRITE (P3: ZERO migrations)
     reset()
     for (const t of targets) rel.addPair(a, Likes, t)
     // Each distinct (R, target) is a distinct pair component → a real migration per target. This is
-    // exactly the per-target churn the exclusive eid column eliminates (P3 contrast).
+    // exactly the per-target churn the exclusive eid column eliminates ( contrast).
     expect(counters.adds).toBe(targets.length)
   })
 })
 
-describe('M8 unit — cascade deleteSubject removes a SUBTREE', () => {
+describe(' unit — cascade deleteSubject removes a SUBTREE', () => {
   it('despawning the root deletes every descendant in a deep tree (iterative BFS)', () => {
     const { world, rel } = instrumentedRelations()
     const ChildOf = rel.defineRelation(null, { exclusive: true, cascade: 'deleteSubject' })
@@ -151,12 +151,12 @@ describe('M8 unit — cascade deleteSubject removes a SUBTREE', () => {
     world.despawn(target)
     for (const s of subjects) {
       expect(world.isAlive(s)).toBe(true) // subject survives
-      expect(rel.hasRelation(s, Likes)).toBe(false) // dangling pair dropped (P4)
+      expect(rel.hasRelation(s, Likes)).toBe(false) // dangling pair dropped
     }
   })
 })
 
-describe('M8 unit — getPair overflow row read/write (P7)', () => {
+describe(' unit — getPair overflow row read/write ', () => {
   it('Damage(s, t).weight lives in the overflow row, NOT a subject-archetype column', () => {
     const { world, rel, counters, reset } = instrumentedRelations()
     const Damage = rel.defineRelation({ weight: 'u32' }, { exclusive: false }) // → overflow-table
@@ -199,7 +199,7 @@ describe('M8 unit — getPair overflow row read/write (P7)', () => {
   })
 })
 
-describe('M8 unit — Pair(R, Wildcard) matches every holder of ANY R-pair', () => {
+describe(' unit — Pair(R, Wildcard) matches every holder of ANY R-pair', () => {
   it('a wildcard query counts each holder once, regardless of how many pairs it holds', () => {
     const { world, rel } = instrumentedRelations()
     const Likes = rel.defineRelation(null)
@@ -225,7 +225,7 @@ describe('M8 unit — Pair(R, Wildcard) matches every holder of ANY R-pair', () 
   })
 })
 
-describe('M8 unit — Pair(R, specificTarget) honors the WORLD indexBits (non-default generationBits, §2.1)', () => {
+describe(' unit — Pair(R, specificTarget) honors the WORLD indexBits (non-default generationBits)', () => {
   it('a specific-target pair query resolves correctly when generationBits != 10', () => {
     // DISCRIMINATOR: with generationBits=14 the world's indexBits is 18, so the generation occupies
     // bits 18..31. A target whose slot has been recycled carries generation bits in 18..21 — exactly

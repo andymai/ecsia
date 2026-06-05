@@ -1,4 +1,4 @@
-// Edge-case coverage for the reactivity ring-log primitives (reactivity.md §3/§8): LogRing's
+// Edge-case coverage for the reactivity ring-log primitives: LogRing's
 // wrap/overflow sentinel, the headLimit-bounded consume, observePeak grow/shrink scheduling, the
 // frame-boundary reset with lagging consumers, the spill drain order and applyResize re-allocation,
 // plus WriteCorral grow and nextPow2. Every assertion pins a concrete observable outcome that a
@@ -51,7 +51,7 @@ describe('LogRing.ringWords reports the ring length in words', () => {
   })
 })
 
-describe('hasUpdatesSince fast-out (§3.4)', () => {
+describe('hasUpdatesSince fast-out ', () => {
   test('false when the pointer is at head, true after any push (head moved)', () => {
     const r = ring({ capacityEntries: 4 })
     const ptr = r.makePointer()
@@ -77,7 +77,7 @@ describe('hasUpdatesSince fast-out (§3.4)', () => {
   })
 })
 
-describe('consume — generation mismatch yields the overflow sentinel once and conservatively advances (§3.6, branch 166)', () => {
+describe('consume — generation mismatch yields the overflow sentinel once and conservatively advances (branch 166)', () => {
   test('a stale-generation pointer gets exactly one sentinel and is fast-forwarded to head', () => {
     const r = ring({ capacityEntries: 4 })
     const ptr = r.makePointer()
@@ -98,7 +98,7 @@ describe('consume — generation mismatch yields the overflow sentinel once and 
   })
 })
 
-describe('consume — headLimit bounds the ring scan and pins the spill (§7.4)', () => {
+describe('consume — headLimit bounds the ring scan and pins the spill ', () => {
   test('entries appended past headLimit are deferred to the next (unbounded) drain', () => {
     const r = ring({ capacityEntries: 8 })
     const ptr = r.makePointer()
@@ -132,7 +132,7 @@ describe('consume — headLimit bounds the ring scan and pins the spill (§7.4)'
   })
 })
 
-describe('observePeak schedules a next-frame resize (§8.2, branches 199/214)', () => {
+describe('observePeak schedules a next-frame resize (branches 199/214)', () => {
   test('GROW: when the frame spilled past the ring, observePeak + frameReset widen the ring', () => {
     const r = ring({ capacityEntries: 2 }) // 2-word ring
     expect(r.ringWords).toBe(2)
@@ -241,7 +241,7 @@ describe('WriteCorral — push grows by allocate-copy, data getter exposes the b
   })
 })
 
-describe('nextPow2 (§8.2 sizing helper, branch 294)', () => {
+describe('nextPow2 (branch 294)', () => {
   test('n <= 1 clamps to 1; otherwise rounds up to the next power of two', () => {
     expect(nextPow2(0)).toBe(1)
     expect(nextPow2(1)).toBe(1)

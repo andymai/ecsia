@@ -1,7 +1,6 @@
 // Coverage: executor/update.ts (runUpdate entry/exit phase guards, frame-end cadence) and
 // executor/update-threaded.ts (runUpdateThreaded entry/exit phase guards, per-system serial-slot
 // observer drain) driven through a STUB world + a STUB RoundDispatcher — never a real WorkerPool.
-// scheduler.md §6.2, SCH-4.
 
 import { describe, expect, test, vi } from 'vitest'
 import { runUpdate, runUpdateThreaded } from '../src/internal.js'
@@ -46,10 +45,10 @@ function emptyPlan(): SchedulePlan {
 }
 
 describe('update.ts: runUpdate phase guards (lines 12-13/24-25, branches 11/23)', () => {
-  test('entering with phase !== serial throws the SCH-4 entry guard (branch 11)', () => {
+  test('entering with phase !== serial throws the entry guard (branch 11)', () => {
     const world = fakeWorld({ phase: 'wave' })
     expect(() => runUpdate(envOf(world, 'frame-end'), emptyPlan(), 0)).toThrow(
-      /scheduler\.update entered with world\.phase === 'wave', expected 'serial' \(SCH-4\)/,
+      /scheduler\.update entered with world\.phase === 'wave', expected 'serial'/,
     )
     // The guard fires BEFORE any frame work.
     expect(world.frameReset).not.toHaveBeenCalled()
@@ -64,7 +63,7 @@ describe('update.ts: runUpdate phase guards (lines 12-13/24-25, branches 11/23)'
       },
     })
     expect(() => runUpdate(envOf(world, 'frame-end'), emptyPlan(), 0)).toThrow(
-      /scheduler\.update exited with world\.phase === 'wave', expected 'serial' \(SCH-4\)/,
+      /scheduler\.update exited with world\.phase === 'wave', expected 'serial'/,
     )
     // The frame body DID run before the exit guard tripped.
     expect(world.frameReset).toHaveBeenCalledOnce()
@@ -100,10 +99,10 @@ describe('update-threaded.ts: runUpdateThreaded phase guards + per-system drain 
     }
   }
 
-  test('entering with phase !== serial throws the SCH-4 entry guard (branch 69)', async () => {
+  test('entering with phase !== serial throws the entry guard (branch 69)', async () => {
     const world = fakeWorld({ phase: 'wave' })
     await expect(runUpdateThreaded(envOf(world, 'frame-end'), emptyPlan(), stubPool(), 0)).rejects.toThrow(
-      /scheduler\.update entered with world\.phase === 'wave', expected 'serial' \(SCH-4\)/,
+      /scheduler\.update entered with world\.phase === 'wave', expected 'serial'/,
     )
     expect(world.frameReset).not.toHaveBeenCalled()
   })
@@ -115,7 +114,7 @@ describe('update-threaded.ts: runUpdateThreaded phase guards + per-system drain 
       },
     })
     await expect(runUpdateThreaded(envOf(world, 'frame-end'), emptyPlan(), stubPool(), 0)).rejects.toThrow(
-      /scheduler\.update exited with world\.phase === 'wave', expected 'serial' \(SCH-4\)/,
+      /scheduler\.update exited with world\.phase === 'wave', expected 'serial'/,
     )
     expect(world.frameReset).toHaveBeenCalledOnce()
   })

@@ -1,12 +1,12 @@
-// The cold-archetype overflow store (archetype-storage.md §10.3). When hotCount reaches
+// The cold-archetype overflow store. When hotCount reaches
 // maxHotArchetypes, new archetypes are marked cold: they have NO dedicated columns; their entities
 // live in a shared SoA block keyed per component type (NOT per archetype). Membership still uses
-// the per-entity bitmask + signature, so has()/matching/iteration are transparent (§10.3).
+// the per-entity bitmask + signature, so has()/matching/iteration are transparent.
 //
-// M3 ships the cold-path SCAFFOLDING with correctness: per-component blocks allocated lazily via
+// This module is the cold-path SCAFFOLDING, built for correctness: per-component blocks allocated lazily via
 // Buffers.column, an (entityIndex, componentId) → row map, and an entityIndex → cold ArchetypeId
 // map so resolveLocation still yields an ArchetypeId. Relation-driven fragmentation is exercised at
-// M8; explicit world.warm promotion is wired here (§10.4).
+// explicit world.warm promotion is wired here.
 
 import type { ComponentId, ComponentDef, Schema } from '@ecsia/schema'
 import type { ArchetypeId } from '@ecsia/schema'
@@ -63,7 +63,7 @@ export function blockFor(cold: ColdStore, c: ComponentId, deps: ColdDeps): Colum
   if (def === undefined) return null
   const rt = def as ComponentRuntime<Schema>
   // Pure tag: no cold block. A rich-only/mixed component DOES get one so its accessor (carrying the
-  // sidecar getters) is resolvable cold; the 0-column block allocates no column storage (rich-fields.md).
+  // sidecar getters) is resolvable cold; the 0-column block allocates no column storage.
   if (rt.columnLayouts.length === 0 && !rt.hasRichFields) return null
   block = buildColumnSet({
     buffers: deps.buffers,

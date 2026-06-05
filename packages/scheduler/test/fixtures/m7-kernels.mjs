@@ -1,4 +1,4 @@
-// M7 worker kernel module (the dispatch mechanism, serialization.md §3.3): the worker imports THIS
+// worker kernel module (the dispatch mechanism): the worker imports THIS
 // module to obtain its system kernels by name + the component defs by name (for id alignment). It is a
 // built .mjs so a raw worker_threads Worker (no TS transform) can load it; it resolves @ecsia/core via
 // the package's node_modules symlink (dist).
@@ -31,7 +31,7 @@ function channelKernel(view, indices) {
 
 // A STRUCTURAL kernel: for each matched entity, spawn a child (OP_CREATE via the reservation
 // Atomics.sub take path) and add Mana to it (OP_ADD with an initial payload). The created handle is
-// immediately usable as a record subject THIS wave (CB-3 create-then-use).
+// immediately usable as a record subject THIS wave ( create-then-use).
 function spawnerKernel(view, indices) {
   const cmd = view.commands
   for (let i = 0; i < indices.length; i++) {

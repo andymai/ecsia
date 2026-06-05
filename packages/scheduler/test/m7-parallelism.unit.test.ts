@@ -1,9 +1,9 @@
-// M7 parallelism-safety UNIT suite (scheduler.md §7, §11; command-buffer.md §7, §8). Each test pins
-// ONE M7 exit-criterion behaviour with a discriminating assertion:
-//   - a 2-worker disjoint-write wave is BIT-IDENTICAL to the M6 serial executor (SCH-3);
-//   - crossOriginIsolated===false startup emits a diagnostic and never silently runs threaded (§7.5);
-//   - each wait tier is unit-selected by a FORCED capability probe (selectWaitTier, §7.3);
-//   - OP_DESTROY of an already-dead entity is a drop-if-dead no-op (CB-SAFE, §8).
+// parallelism-safety UNIT suite. Each test pins
+// ONE exit-criterion behaviour with a discriminating assertion:
+// - a 2-worker disjoint-write wave is BIT-IDENTICAL to the serial executor;
+// - crossOriginIsolated===false startup emits a diagnostic and never silently runs threaded;
+// - each wait tier is unit-selected by a FORCED capability probe (selectWaitTier);
+// - OP_DESTROY of an already-dead entity is a drop-if-dead no-op (CB-SAFE).
 //
 // Worker-pool tests use Node worker_threads (mirroring core/test/sab-smoke.test.ts): a fixed pool
 // spawned over the BUILT worker-entry + a built kernel .mjs (a raw Worker has no TS transform).
@@ -50,7 +50,7 @@ afterEach(async () => {
 })
 
 // --------------------------------------------------------------------------------------------------
-describe('UNIT — multi-worker disjoint wave is BIT-IDENTICAL to the M6 serial executor (SCH-3)', () => {
+describe('UNIT — multi-worker disjoint wave is BIT-IDENTICAL to the serial executor ', () => {
   // The SAME kernels run on N workers (over the shared SABs) and on the main thread (one "worker" =
   // serial). A 2-worker pool and a serial application of the identical effect must agree byte-for-byte.
   test.each([2, 3, 4])('a %i-worker pool produces the identical Health/Mana column state as the serial oracle', async (workerCount) => {
@@ -88,7 +88,7 @@ describe('UNIT — multi-worker disjoint wave is BIT-IDENTICAL to the M6 serial 
       1,
     )
 
-    expect(threaded.phase).toBe('serial') // SCH-4: back to serial after the flush slot.
+    expect(threaded.phase).toBe('serial') // back to serial after the flush slot.
     // BIT-IDENTICAL to the serial oracle: every entity's columns match exactly, in every worker count.
     for (let i = 0; i < tHandles.length; i++) {
       const t = tHandles[i]!
@@ -99,7 +99,7 @@ describe('UNIT — multi-worker disjoint wave is BIT-IDENTICAL to the M6 serial 
 })
 
 // --------------------------------------------------------------------------------------------------
-describe('UNIT — threaded startup without SAB-backed buffers is NEVER silent (§7.5)', () => {
+describe('UNIT — threaded startup without SAB-backed buffers is NEVER silent ', () => {
   test('a threaded pool over a world with no SAB manifest emits a clear diagnostic and stays serial', async () => {
     // Force the no-cross-origin-isolation shape: a NON-threaded world has no SAB-backed columns/regions,
     // so __exportShared returns an empty manifest. The pool must DIAGNOSE rather than silently proceed.
@@ -125,7 +125,7 @@ describe('UNIT — threaded startup without SAB-backed buffers is NEVER silent (
 })
 
 // --------------------------------------------------------------------------------------------------
-describe('UNIT — each wait tier is selected by a forced capability probe (§7.3, SCH-8)', () => {
+describe('UNIT — each wait tier is selected by a forced capability probe ', () => {
   test('tier 1 (waitAsync) when the browser-main waitAsync cap is present', () => {
     expect(selectWaitTier({ waitAsync: true, waitBlocking: true, sabAvailable: true })).toBe('waitAsync')
   })
@@ -139,7 +139,7 @@ describe('UNIT — each wait tier is selected by a forced capability probe (§7.
     expect(selectWaitTier({ waitAsync: false, waitBlocking: false, sabAvailable: false })).toBe('postMessage')
   })
 
-  test('await resolves ONLY when remaining===0 (epoch/spurious-wake guard, SCH-8)', async () => {
+  test('await resolves ONLY when remaining===0 (epoch/spurious-wake guard)', async () => {
     // Drive the tier-3 poll WaveSync without any worker: arm 1, then decrement to 0; await must resolve.
     const counter = makeWaveCounter(1)
     const sync = makeWaveSync('promise-poll')
@@ -163,7 +163,7 @@ describe('UNIT — each wait tier is selected by a forced capability probe (§7.
 })
 
 // --------------------------------------------------------------------------------------------------
-describe('UNIT — OP_DESTROY of an already-dead entity is a drop-if-dead no-op (CB-SAFE §8)', () => {
+describe('UNIT — OP_DESTROY of an already-dead entity is a drop-if-dead no-op (CB-SAFE )', () => {
   // Build a command buffer by hand and apply it via flushAll against a real world.
   function kit() {
     const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
@@ -233,12 +233,12 @@ describe('UNIT — OP_DESTROY of an already-dead entity is a drop-if-dead no-op 
 // --------------------------------------------------------------------------------------------------
 describe('UNIT — single-thread fallback runs main-thread when threaded requested without isolation', () => {
   test('a non-threaded world with a scheduler runs single-threaded and never touches a worker', () => {
-    // The degenerate path: no workers ⇒ flushAll is a no-op, phase never leaves serial (CB-6, PHASE-1).
+    // The degenerate path: no workers ⇒ flushAll is a no-op, phase never leaves serial (PHASE-1).
     const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
     const world = createWorld({ components: [Health], maxEntities: 64 })
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const codecById = new Map<number, ComponentFieldCodec>()
-    // flushAll with zero buffers is a no-op (single-thread degenerate, §7.1).
+    // flushAll with zero buffers is a no-op (single-thread degenerate).
     expect(() => flushAll(worldApplyOf(world, codecById, () => {}), [])).not.toThrow()
     expect(world.phase).toBe('serial')
     warn.mockRestore()

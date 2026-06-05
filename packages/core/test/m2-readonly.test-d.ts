@@ -1,4 +1,4 @@
-// M2 type-level fixture (type-system.md §4.2 / Must-Fix #2): the bare `entity.read(C)` view and the
+// type-level fixture: the bare `entity.read(C)` view and the
 // `entity.<comp>` shorthand are deeply Readonly, so assigning a field is a COMPILE error (TS2540).
 // `entity.write(C)` returns the mutable view, so the SAME assignment compiles.
 //
@@ -17,7 +17,7 @@ declare const r: ReadOf<typeof Position>
 declare const w: WriteOf<typeof Position>
 
 // The read view's field is read-only — assignment must be TS2540.
-// @ts-expect-error read view is Readonly (Must-Fix #2)
+// @ts-expect-error read view is Readonly
 r.x = 5
 
 // The write view's field is mutable — the identical assignment compiles (proves the modifier, not an

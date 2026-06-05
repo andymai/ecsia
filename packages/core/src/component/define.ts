@@ -1,7 +1,7 @@
-// defineComponent / defineTag runtime (component-schema.md §2). Maps a schema to a resolved
+// defineComponent / defineTag runtime. Maps a schema to a resolved
 // FieldDescriptor set + a per-field ColumnLayout set, defaults options (tag → sparse, else
 // packed), and produces a frozen ComponentDef whose `id` is UNREGISTERED until a world interns it
-// (§7). The accessor factory is wired lazily once `id` is known.
+// The accessor factory is wired lazily once `id` is known.
 
 import type {
   AccessorFactory,
@@ -21,8 +21,8 @@ export const UNREGISTERED = -1 as ComponentId
 
 export type DefKind = 'component' | 'relation-presence' | 'relation-overflow'
 
-// The runtime def carries the type-system.md §2.1 fields plus the implementation-only members the
-// component module owns (component-schema.md §2.2): the resolved column layouts, the lazily-wired
+// The runtime def carries the
+// component module owns: the resolved column layouts, the lazily-wired
 // accessor factory, a defKind discriminator, and the derived restrictedToMainThread flag.
 export interface ComponentRuntime<S extends Schema> extends ComponentDef<S> {
   id: ComponentId
@@ -30,7 +30,7 @@ export interface ComponentRuntime<S extends Schema> extends ComponentDef<S> {
   readonly columnLayouts: readonly ColumnLayout[]
   readonly defKind: DefKind
   readonly restrictedToMainThread: boolean
-  /** True iff the component carries >=1 rich (sidecar-backed) field (rich-fields.md §4.6). */
+  /** True iff the component carries >=1 rich (sidecar-backed) field. */
   readonly hasRichFields: boolean
 }
 
@@ -59,7 +59,7 @@ function isFieldSpec(token: unknown): token is { __fieldSpec: true; token: Field
 }
 
 function validateToken(name: string, token: FieldToken): void {
-  // A FieldSpec wrapper carries a user default; validate its inner token (rich-fields.md §3.1 / G-1).
+  // A FieldSpec wrapper carries a user default; validate its inner token.
   if (isFieldSpec(token)) {
     validateToken(name, token.token)
     return
@@ -100,8 +100,8 @@ function validateOptions(options?: ComponentOptions): void {
 }
 
 // `B`/`N` capture the brand/name LITERALS so the returned def's `name` is the literal the query DSL
-// lifts to a precise element key (CompKey, type-system.md §3/§5.2). The runtime `name` is
-// `brand ?? name`. A name (or brand) is REQUIRED (P0.5 Item 6): without it two anonymous defs would
+// lifts to a precise element key (CompKey). The runtime `name` is
+// `brand ?? name`. A name (or brand) is REQUIRED: without it two anonymous defs would
 // both key the element surface as `'Component'` and collide — so the options arg now mandates one and
 // `defineComponent(schema)` is a compile error. defineTag and the relations runtime supply `brand`.
 export function defineComponent<
@@ -155,7 +155,7 @@ export function defineComponent<
   } as ComponentRuntime<S>
 
   // `id` and `accessorFactory` are the only mutable fields — the registry's single commit point
-  // (component-schema.md §2.2). Everything else is read-only; the object stays non-extensible.
+  // Everything else is read-only; the object stays non-extensible.
   Object.defineProperty(def, 'id', { value: UNREGISTERED, enumerable: true, writable: true, configurable: true })
   Object.defineProperty(def, 'accessorFactory', {
     value: null,
@@ -171,7 +171,7 @@ export function defineComponent<
   return Object.preventExtensions(def) as unknown as ComponentDef<S, [B] extends [never] ? N : B>
 }
 
-// A name is REQUIRED (P0.5 Item 6): it keys the tag's element/membership identity, so an anonymous tag
+// A name is REQUIRED: it keys the tag's element/membership identity, so an anonymous tag
 // can no longer collide with another on a default name.
 export function defineTag<const N extends string>(name: N): ComponentDef<Record<never, never>, N> {
   if (name === undefined || (name as string) === '') {
@@ -180,7 +180,7 @@ export function defineTag<const N extends string>(name: N): ComponentDef<Record<
   return defineComponent({}, { storage: 'sparse', brand: name }) as ComponentDef<Record<never, never>, N>
 }
 
-// §7.2: assign a dense ComponentId and wire the accessor factory now that `id` is known. The def
+// Assign a dense ComponentId and wire the accessor factory now that `id` is known. The def
 // is frozen, so `id`/`accessorFactory` are mutated through defineProperty (the registry's single
 // commit point — analogous to the entity-record commit).
 export function registerComponentId<S extends Schema>(def: ComponentDef<S>, id: ComponentId): void {

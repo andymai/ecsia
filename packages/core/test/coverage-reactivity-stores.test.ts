@@ -50,7 +50,7 @@ describe('ChangeVersionStore — disabled no-ops and lazy column (branches 56/64
     expect(cv.versionAt(1000)).toBe(0)
   })
 
-  test('resetAll clears every stamp (§13.4 tick-wrap recovery, lines 78-79)', () => {
+  test('resetAll clears every stamp (lines 78-79)', () => {
     const cv = new ChangeVersionStore(buffers(), 8)
     cv.enabled = true
     cv.stamp(1, 100)
@@ -148,7 +148,7 @@ describe('ObserverRegistry — change dedup, conservative fan-out, dispose (line
     expect(count).toBe(2)
   })
 
-  test('fireAllChangeConservatively fires every change observer for every current member, deduped (§3.6)', () => {
+  test('fireAllChangeConservatively fires every change observer for every current member, deduped ', () => {
     const { reg } = makeRegistry()
     const seen: number[] = []
     reg.observe(onChange(A), (e) => seen.push((e as unknown as { index: number }).index))

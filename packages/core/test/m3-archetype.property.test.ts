@@ -1,20 +1,20 @@
-// M3 archetype-storage invariant suite (archetype-storage.md §11). Property-based (fast-check) plus
+// archetype-storage invariant suite. Property-based (fast-check) plus
 // instrumented-counter assertions. Each property is written to DISCRIMINATE: it would fail if the
 // invariant it guards were broken.
 //
-//   SIG-1   every Signature from any op sequence is sorted-ascending + de-duped.
-//   AR-1    structurally-equal signatures intern to the SAME Archetype (identity ===), any add order.
-//   EDGE-1  2nd+ edgeAdd/edgeRemove for (arch,c) is a cache HIT (instrumented miss counter); first
-//           miss caches the add AND the reverse remove.
-//   ROW-1   after random allocRow/removeRow: rows+columns dense over [0,count), count correct,
-//           fixSibling fires exactly once iff row !== count-1.
-//   MIG-1   migrate commits exactly 2 record words for the migrant + at most 1 (row) for the
-//           shuffle-popped sibling (instrumented commitRecord counter).
-//   MIG-2   migration copy/commit cost is independent of arch.count (size-10 vs size-10000) —
-//           the wall-clock bench is DEFERRED (no bench harness); see note at the MIG-2 block.
-//   BM-2    after EVERY structural op in a random sequence, bitmaskHas(i,c) === sigHas(sig(i),c).
-//   BM-1    any bitmask access with phase !== 'serial' THROWS (fuzz the phase flag).
-//   FRAG-1  a query over a forced-cold archetype yields the same entity set as a kept-hot one.
+// every Signature from any op sequence is sorted-ascending + de-duped.
+// structurally-equal signatures intern to the SAME Archetype (identity ===), any add order.
+// 2nd+ edgeAdd/edgeRemove for (arch,c) is a cache HIT (instrumented miss counter); first
+// miss caches the add AND the reverse remove.
+// after random allocRow/removeRow: rows+columns dense over [0,count), count correct,
+// fixSibling fires exactly once iff row !== count-1.
+// migrate commits exactly 2 record words for the migrant + at most 1 (row) for the
+// shuffle-popped sibling (instrumented commitRecord counter).
+// migration copy/commit cost is independent of arch.count (size-10 vs size-10000) —
+// the wall-clock bench is DEFERRED (no bench harness); see note at the block.
+// after EVERY structural op in a random sequence, bitmaskHas(i,c) === sigHas(sig(i),c).
+// any bitmask access with phase !== 'serial' THROWS (fuzz the phase flag).
+// a query over a forced-cold archetype yields the same entity set as a kept-hot one.
 
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
@@ -33,9 +33,9 @@ interface Harness {
   bitmask: Bitmask
   recordArch: Map<number, number>
   recordRow: Map<number, number>
-  /** commitRecord invocations per entity index (MIG-1). */
+  /** commitRecord invocations per entity index. */
   commits: Map<number, number>
-  /** total commitRecord invocations since last reset (MIG-1/MIG-2). */
+  /** total commitRecord invocations since last reset. */
   totalCommits: { n: number }
   setPhase: (p: 'serial' | 'wave') => void
   /** the entity index encoded in the low 16 bits of a handle (matches handleIndex below). */
@@ -113,10 +113,9 @@ function currentSig(h: Harness, index: number): Signature {
 }
 
 // ==================================================================================================
-// SIG-1
 // ==================================================================================================
 
-describe('SIG-1: every Signature is sorted-ascending + de-duped', () => {
+describe(': every Signature is sorted-ascending + de-duped', () => {
   test('canonicalize of any id multiset is sorted + unique (and stays so under add/remove ops)', () => {
     const id = fc.integer({ min: 1, max: 60 })
     fc.assert(
@@ -160,10 +159,9 @@ describe('SIG-1: every Signature is sorted-ascending + de-duped', () => {
 })
 
 // ==================================================================================================
-// AR-1
 // ==================================================================================================
 
-describe('AR-1: structurally-equal signatures intern to the SAME Archetype (identity ===)', () => {
+describe(': structurally-equal signatures intern to the SAME Archetype (identity ===)', () => {
   test('adding components in any RANDOM order yields the identical Archetype object', () => {
     const h = makeHarness(40)
     fc.assert(
@@ -194,10 +192,9 @@ describe('AR-1: structurally-equal signatures intern to the SAME Archetype (iden
 })
 
 // ==================================================================================================
-// EDGE-1
 // ==================================================================================================
 
-describe('EDGE-1: edge transitions are cached (2nd+ call is a hit; reverse primed on first miss)', () => {
+describe(': edge transitions are cached (2nd+ call is a hit; reverse primed on first miss)', () => {
   test('a repeated (arch,c) edgeAdd/edgeRemove computes the neighbor signature only ONCE', () => {
     fc.assert(
       fc.property(
@@ -243,10 +240,9 @@ describe('EDGE-1: edge transitions are cached (2nd+ call is a hit; reverse prime
 })
 
 // ==================================================================================================
-// ROW-1
 // ==================================================================================================
 
-describe('ROW-1: swap-pop keeps rows+columns dense; fixSibling fires iff row !== count-1', () => {
+describe(': swap-pop keeps rows+columns dense; fixSibling fires iff row !== count-1', () => {
   test('random allocRow/removeRow sequence stays dense and consistent', () => {
     fc.assert(
       fc.property(
@@ -305,10 +301,9 @@ describe('ROW-1: swap-pop keeps rows+columns dense; fixSibling fires iff row !==
 })
 
 // ==================================================================================================
-// MIG-1
 // ==================================================================================================
 
-describe('MIG-1: migrate commits 2 words for the migrant + at most 1 for the shuffle-popped sibling', () => {
+describe(': migrate commits 2 words for the migrant + at most 1 for the shuffle-popped sibling', () => {
   test('a non-tail migrant => 2 commitRecord calls (migrant + sibling); a tail migrant => 1', () => {
     fc.assert(
       fc.property(fc.integer({ min: 2, max: 12 }), fc.integer({ min: 0, max: 11 }), (n, pick) => {
@@ -348,10 +343,10 @@ describe('MIG-1: migrate commits 2 words for the migrant + at most 1 for the shu
 })
 
 // ==================================================================================================
-// MIG-2  (wall-clock bench DEFERRED — no bench harness; asserting O(K) via instrumented copy counts)
+// (wall-clock bench DEFERRED — no bench harness; asserting O(K) via instrumented copy counts)
 // ==================================================================================================
 
-describe('MIG-2: migration copy/commit cost is independent of arch.count (O(K), not O(count))', () => {
+describe(': migration copy/commit cost is independent of arch.count (O(K), not O(count))', () => {
   // NOTE: the wall-clock migration bench from the spec is DEFERRED — there is no bench harness in the
   // repo. Instead we assert the asymptotic claim directly: instrument the TypedArray bulk-copy
   // intrinsics the migration uses (copyWithin for the shuffle-pop, set for the cross-archetype copy)
@@ -408,10 +403,9 @@ describe('MIG-2: migration copy/commit cost is independent of arch.count (O(K), 
 })
 
 // ==================================================================================================
-// BM-2
 // ==================================================================================================
 
-describe('BM-2: bitmaskHas(i,c) === sigHas(currentSignature(i),c) after EVERY structural op', () => {
+describe(': bitmaskHas(i,c) === sigHas(currentSignature(i),c) after EVERY structural op', () => {
   test('random spawn/add/remove/despawn sequence keeps bitmask coherent with the signature', () => {
     fc.assert(
       fc.property(
@@ -454,10 +448,9 @@ describe('BM-2: bitmaskHas(i,c) === sigHas(currentSignature(i),c) after EVERY st
 })
 
 // ==================================================================================================
-// BM-1
 // ==================================================================================================
 
-describe('BM-1: any bitmask access with phase !== serial THROWS (Must-Fix #1 guard)', () => {
+describe(': any bitmask access with phase !== serial THROWS ( guard)', () => {
   test('fuzzing the phase flag: every bitmask method throws iff phase is not serial', () => {
     fc.assert(
       fc.property(fc.array(fc.boolean(), { minLength: 1, maxLength: 10 }), (serialFlags) => {
@@ -485,10 +478,10 @@ describe('BM-1: any bitmask access with phase !== serial THROWS (Must-Fix #1 gua
 })
 
 // ==================================================================================================
-// FRAG-1 (cold-store equivalence)
+// (cold-store equivalence)
 // ==================================================================================================
 
-describe('FRAG-1: a query over a forced-cold archetype yields the same entity set as a hot one', () => {
+describe(': a query over a forced-cold archetype yields the same entity set as a hot one', () => {
   test('cold archetypes match signatureMatches identically and carry the same membership bits', () => {
     fc.assert(
       fc.property(
@@ -516,7 +509,7 @@ describe('FRAG-1: a query over a forced-cold archetype yields the same entity se
           }
 
           // The "query result set" check: seat the same entities through each store and compare the
-          // membership the bitmask reports (cold entities carry the bitmask identically, §10.3).
+          // membership the bitmask reports (cold entities carry the bitmask identically).
           const seatAndMembers = (h: Harness, store: ArchetypeStore): Set<number> => {
             const members = new Set<number>()
             for (let e = 1; e <= 5; e++) {

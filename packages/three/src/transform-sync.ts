@@ -1,4 +1,4 @@
-// Transform sync system (P4 deliverable 2): copy ECS transform columns → bound Object3D each frame.
+// Transform sync system ( deliverable 2): copy ECS transform columns → bound Object3D each frame.
 // This is the per-frame hot bridge, so it iterates with the SoA fast path (`eachChunk`): one reused
 // chunk per matched archetype, raw typed column views, no per-row accessor decode. The system declares
 // ALL transform components as READ access (it never writes the ECS, only the THREE objects), so the

@@ -1,4 +1,4 @@
-// M12 umbrella sanity (public-api.md §10): importing 'ecsia' gives the documented cohesive
+// umbrella sanity: importing 'ecsia' gives the documented cohesive
 // surface — a user assembles a whole world (component/tag/relation/query/system/serialization) from the
 // ONE import, never reaching into a sub-package. This file double-duties as a type-check gate: the named
 // imports below resolve to real values/types through the umbrella's re-exports, so if a re-export is
@@ -48,7 +48,7 @@ import {
   NULL_ENTITY,
   isNoEntity,
 } from 'ecsia'
-// Type-only surface (public-api.md §10): if any of these is not re-exported, this import fails to compile.
+// Type-only surface: if any of these is not re-exported, this import fails to compile.
 import type {
   World,
   WorldOptions,
@@ -75,7 +75,7 @@ import type {
   Schema,
 } from 'ecsia'
 
-describe('M12 umbrella — the documented public surface is importable from ecsia', () => {
+describe(' umbrella — the documented public surface is importable from ecsia', () => {
   test('every documented runtime export is a present binding of the right kind', () => {
     const fns = [
       createWorld,
@@ -110,7 +110,7 @@ describe('M12 umbrella — the documented public surface is importable from ecsi
     expect(new ConfigError('x')).toBeInstanceOf(Error)
     // Constants + sentinels.
     expect(typeof MAX_QUERY_ARITY).toBe('number')
-    expect(MAX_QUERY_ARITY).toBe(8) // public-api.md §4.4 / PA-6
+    expect(MAX_QUERY_ARITY).toBe(8) // /
     expect(Wildcard).toBeDefined()
     // null-handle sentinel + predicate are reachable from the umbrella (no @ecsia/core reach-in needed)
     expect(NO_ENTITY).toBe(0xffffffff)
@@ -201,7 +201,7 @@ function _typeOnly(): void {
   type _W = WriteOf<typeof C>
   type _R = ReadOf<typeof C>
   type _S = SchemaOf<typeof C>
-  // ReadView is the readonly projection; WriteView is mutable (Must-Fix #2, surfaced through the umbrella).
+  // ReadView is the readonly projection; WriteView is mutable (surfaced through the umbrella).
   const _rv: ReadView<{ x: 'f32' }> | null = null
   const _wv: WriteView<{ x: 'f32' }> | null = null
   const _has: Has<typeof C> | null = null

@@ -13,7 +13,7 @@ function fixture() {
   return { world, Position, Velocity, Health }
 }
 
-describe('command-buffer op ordinals (CANON W-7)', () => {
+describe('command-buffer op ordinals ', () => {
   test('CREATE=0 .. SET_PAYLOAD=6', () => {
     expect([Op.CREATE, Op.DESTROY, Op.ADD, Op.REMOVE, Op.ADD_PAIR, Op.REMOVE_PAIR, Op.SET_PAYLOAD]).toEqual([
       0, 1, 2, 3, 4, 5, 6,
@@ -21,7 +21,7 @@ describe('command-buffer op ordinals (CANON W-7)', () => {
   })
 })
 
-describe('access aggregation (§3.3)', () => {
+describe('access aggregation ', () => {
   test('readers/writers maps from declared sets only', () => {
     const { Position, Velocity, Health } = fixture()
     const Movement = defineSystem({ name: 'Movement', read: [Velocity], write: [Position], run() {} })
@@ -33,7 +33,7 @@ describe('access aggregation (§3.3)', () => {
   })
 })
 
-describe('conflict DAG (§4)', () => {
+describe('conflict DAG ', () => {
   test('read-after-write serializes Movement before Combat', () => {
     const { Position, Velocity, Health } = fixture()
     const Movement = defineSystem({ name: 'Movement', read: [Velocity], write: [Position], run() {} })
@@ -94,7 +94,7 @@ describe('conflict DAG (§4)', () => {
   })
 })
 
-describe('WAVE-CONFLICT + waves (§5)', () => {
+describe('WAVE-CONFLICT + waves ', () => {
   test('concurrencyCompatible: disjoint writes ok, read-vs-write not', () => {
     const { Position, Health } = fixture()
     const A = defineSystem({ name: 'A', write: [Position], run() {} })
@@ -116,7 +116,7 @@ describe('WAVE-CONFLICT + waves (§5)', () => {
     expect(plan.waves[0]!.rounds.flat()).toHaveLength(2)
   })
 
-  test('every same-round pair is concurrencyCompatible (SCH-2)', () => {
+  test('every same-round pair is concurrencyCompatible ', () => {
     const { Position, Velocity, Health } = fixture()
     const A = defineSystem({ name: 'A', write: [Position], run() {} })
     const B = defineSystem({ name: 'B', write: [Health], run() {} })
@@ -138,7 +138,7 @@ describe('WAVE-CONFLICT + waves (§5)', () => {
   })
 })
 
-describe('single-thread executor end-to-end (§6)', () => {
+describe('single-thread executor end-to-end ', () => {
   test('Movement (wave 0) before Combat (wave 1); state mutates correctly', () => {
     const { world, Position, Velocity, Health } = fixture()
     const order: string[] = []
@@ -171,7 +171,7 @@ describe('single-thread executor end-to-end (§6)', () => {
     scheduler.update(1)
     expect(order).toEqual(['Movement', 'Combat'])
     expect(world.entity(e).read(Position).x).toBeCloseTo(2)
-    expect(world.phase).toBe('serial') // PHASE-1 (SCH-4)
+    expect(world.phase).toBe('serial') // PHASE-1
 
     scheduler.update(1)
     expect(world.entity(e).read(Position).x).toBeCloseTo(4)
@@ -195,7 +195,7 @@ describe('single-thread executor end-to-end (§6)', () => {
   })
 })
 
-describe('dev-mode access guards (§6.6, Must-Fix #2)', () => {
+describe('dev-mode access guards ', () => {
   test('a write() term for an undeclared component warns', () => {
     const { world, Position } = fixture()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})

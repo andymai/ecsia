@@ -1,16 +1,16 @@
-// The persistent, bounded, tick-keyed STRUCTURAL JOURNAL (the since-T structural source the delta
-// serializer consumes — serialization.md §6.4 / §7.3). The per-frame shape log (log.ts) is RECYCLED
-// at every frame boundary (reactivity.md §3.7), and reactivity.md §13.3 forbids a long-lived "since
-// tick T" serializer from pinning that ring. So — exactly as `changeVersion` is the persistent
-// since-T source for VALUE changes (§6) — this journal is the persistent since-T source for STRUCTURAL
+// The persistent, bounded, tick-keyed STRUCTURAL JOURNAL — the since-T structural source the
+// delta serializer consumes. The per-frame shape log (log.ts) is RECYCLED at every frame
+// boundary, so a "since tick T" serializer cannot pin that ring across frames. Exactly as
+// `changeVersion` is the persistent
+// since-T source for VALUE changes, this journal is the persistent since-T source for STRUCTURAL
 // changes (Create/Destroy/ComponentAdd/ComponentRemove/AddPair/RemovePair/SetPayload).
 //
 // It is appended SYNCHRONOUSLY at the structural commit point (from trackShape/trackShapePair), so the
-// dying entity's FULL handle is still resolvable (Destroy is emitted BEFORE identity invalidation,
-// reactivity.md §4.2). Each record is keyed by the current frame tick; drainSince(T) returns the ops
+// dying entity's FULL handle is still resolvable (Destroy is emitted BEFORE identity
+// invalidation). Each record is keyed by the current frame tick; drainSince(T) returns the ops
 // with tick > T in commit order. The journal is a bounded ring (drop-oldest); when a requested T has
-// been evicted, the caller must resync from a fresh snapshot (the delta-gap rule, serialization.md
-// §6.4). LAZILY enabled: zero memory/zero record cost until a delta serializer attaches (§6.1 opt-in).
+// been evicted, the caller must resync from a fresh snapshot (the delta-gap rule).
+// LAZILY enabled: zero memory/zero record cost until a delta serializer attaches.
 
 import type { ShapeKind } from './log.js'
 
@@ -28,7 +28,7 @@ export interface StructuralRecord {
 const FIELDS_PER_RECORD = 5
 
 export class StructuralJournal {
-  /** False ⇒ zero record cost (no delta serializer attached). Mirrors ChangeVersionStore.enabled (§6.1). */
+  /** False ⇒ zero record cost (no delta serializer attached). Mirrors ChangeVersionStore.enabled. */
   enabled = false
   /** A flat ring: [tick, kind, handle, componentId, target] × capacity. Drop-oldest on overflow. */
   #ring: Uint32Array
@@ -62,7 +62,7 @@ export class StructuralJournal {
 
   /**
    * Records with tick > since, in commit (append) order. Returns `gap: true` if `since` predates the
-   * oldest resident record (the live window evicted it — the caller must resync from a snapshot, §6.4).
+   * oldest resident record (the live window evicted it — the caller must resync from a snapshot).
    */
   drainSince(since: number): { records: StructuralRecord[]; gap: boolean } {
     const out: StructuralRecord[] = []
@@ -84,7 +84,7 @@ export class StructuralJournal {
     return { records: out, gap }
   }
 
-  /** §13.4 tick-wrap recovery: clear the journal at a serial flush (alongside changeVersion.resetAll). */
+  /**: clear the journal at a serial flush (alongside changeVersion.resetAll). */
   resetAll(): void {
     this.#count = 0
     this.#oldestResidentTick = 0

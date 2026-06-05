@@ -1,4 +1,4 @@
-// Construction wiring for the entity layer (entity-model.md §3.1, §4.1, §7): allocate the five
+// Construction wiring for the entity layer: allocate the five
 // identity/record flat arrays through memory.allocU32, sized by maxEntities, and assemble the
 // EntityIndex + EntityRecord + pooled EntityRef. Lives between the world facade and the
 // per-module primitives so world.ts stays a thin delegator.
@@ -14,8 +14,8 @@ import type { EntityRecordArrays } from './record.js'
 import { EntityRef } from './ref.js'
 import type { AccessorResolver } from './ref.js'
 
-// EMPTY_ARCHETYPE_ID is normatively archetype-storage.md §3.1; the empty-signature archetype is
-// dense id 0 (a real archetype, distinct from the ARCHETYPE_NONE sentinel). Storage lands at M3;
+// EMPTY_ARCHETYPE_ID is normatively; the empty-signature archetype is
+// dense id 0 (a real archetype, distinct from the ARCHETYPE_NONE sentinel). Storage lands at;
 // until then a freshly spawned entity records archetype 0 at row 0.
 const EMPTY_ARCHETYPE_ID = 0
 
@@ -38,13 +38,13 @@ export class EntityStore {
   readonly #records: EntityRecord
   readonly #ref: EntityRef
   readonly #maxEntities: number
-  /** Hard mint ceiling: the index space, minus the reserved NO_ENTITY slot when threaded (§2.5). */
+  /** Hard mint ceiling: the index space, minus the reserved NO_ENTITY slot when threaded. */
   readonly #ceiling: number
-  /** Current addressable length; doubles on growth up to `#ceiling` (§7). */
+  /** Current addressable length; doubles on growth up to `#ceiling`. */
   #addressable: number
   #wrapWarned = false
 
-  // Held only so growth (§7) re-reads/re-publishes the layout structs from the same regions.
+  // Held only so growth re-reads/re-publishes the layout structs from the same regions.
   readonly #regions: {
     sparse: U32Region
     dense: U32Region
@@ -59,7 +59,7 @@ export class EntityStore {
     this.#addressable = config.maxEntities
 
     // The index space is [0, maxIndex]; when threaded, maxIndex is reserved for the NO_ENTITY
-    // sentinel so a minted+wrapped handle can never alias 0xffffffff (§2.5 / §3.3).
+    // sentinel so a minted+wrapped handle can never alias 0xffffffff.
     this.#ceiling = config.shared ? config.layout.maxIndex : config.layout.maxIndex + 1
 
     const opts = { shared: config.shared, maxLength: config.layout.capacity }
@@ -79,7 +79,7 @@ export class EntityStore {
   }
 
   /**
-   * Grow every identity/record region to at least `need` elements (doubling, §2.9), then
+   * Grow every identity/record region to at least `need` elements (doubling), then
    * re-publish the widened views to the index/record/ref structs and return the new addressable
    * length. Returns the unchanged length when growth is impossible (capped at `#ceiling`), which
    * makes the allocator throw CapacityExceeded. Serial-phase only.
@@ -94,7 +94,7 @@ export class EntityStore {
     for (const region of Object.values(this.#regions)) region.grow(next)
     this.#addressable = next
     // Length-tracking views over resizable buffers widen in place, but re-publishing keeps the
-    // non-resizable fallback path correct too (§7 grow-and-patch).
+    // non-resizable fallback path correct too.
     this.#index.rebind(this.#indexArrays(), next)
     this.#records.rebind(this.#recordArrays())
     return next
@@ -116,8 +116,8 @@ export class EntityStore {
   }
 
   /**
-   * Storage hook installed at M3: places a freshly-minted handle into its initial archetype (via
-   * allocRow) and commits the record; on despawn it performs the §6.3 removeRow + bitmask clear
+   * Storage hook installed at: places a freshly-minted handle into its initial archetype (via
+   * allocRow) and commits the record; on despawn it performs the + bitmask clear
    * BEFORE identity invalidation. Until installed, spawn falls back to the empty-archetype row 0.
    */
   #lifecycle: { onSpawn(handle: EntityHandle): void; onDespawn(handle: EntityHandle): void } | null = null
@@ -140,7 +140,7 @@ export class EntityStore {
 
   despawn(handle: EntityHandle): void {
     if (!this.#index.isAlive(handle)) return
-    // §6.3: storage runs removeRow + bitmask clear here; identity invalidation (freeEntity) runs
+    // Storage runs removeRow + bitmask clear here; identity invalidation (freeEntity) runs
     // LAST so the above could still resolve the dying entity's location.
     this.#lifecycle?.onDespawn(handle)
     this.#index.freeEntity(handle)
@@ -153,7 +153,7 @@ export class EntityStore {
 
   entity(handle: EntityHandle, opts?: { lenient?: boolean }): EntityRef {
     if (!this.#index.isAlive(handle)) {
-      // §6.4: dead handles throw unless the caller opts into lenient resolution (it then binds
+      // Dead handles throw unless the caller opts into lenient resolution (it then binds
       // the stale handle anyway; the location words are whatever the slot last held).
       if (opts?.lenient !== true) throw new Error(`entity(${handle}): handle is not alive`)
     }
@@ -177,7 +177,7 @@ export class EntityStore {
     }
   }
 
-  /** Install the read/write accessor resolver onto the pooled ref (world wiring, world.md §7). */
+  /** Install the read/write accessor resolver onto the pooled ref (world wiring). */
   setAccessorResolver(resolver: AccessorResolver): void {
     this.#ref.__setResolver(resolver)
   }
@@ -192,8 +192,8 @@ export class EntityStore {
 
   /**
    * The two entity-record region backings (archetypeId, archetypeRow), for the worker bootstrap
-   * manifest (scheduler.md §7). A worker resolves an entity's (archetypeId, row) from these shared
-   * regions — reading ARCHETYPE TABLES ONLY, never the bitmask (Must-Fix #1). Backings are SAB when
+   * manifest. A worker resolves an entity's (archetypeId, row) from these shared
+   * regions — reading ARCHETYPE TABLES ONLY, never the bitmask. Backings are SAB when
    * threaded + isolation present; otherwise plain AB (the worker path then has nothing to share).
    */
   sharedRecordRegions(): { archetypeId: ArrayBufferLike; archetypeRow: ArrayBufferLike } {
@@ -225,7 +225,7 @@ export class EntityStore {
   #warnOnWrap(): void {
     if (this.#wrapWarned || !this.#index.wrapped) return
     this.#wrapWarned = true
-    // Dev-mode-only signal so users can raise generationBits; never a production throw (§2.4).
+    // Dev-mode-only signal so users can raise generationBits; never a production throw.
     if (typeof console !== 'undefined') {
       console.warn(
         `[ecsia] entity generation wrapped (generationBits=${this.layout.generationBits}); stale-handle aliasing window reached — consider raising generationBits`,

@@ -1,8 +1,8 @@
-// System registration & access aggregation (scheduler.md §3). Lowers each declared `SystemDef` into
+// System registration & access aggregation. Lowers each declared `SystemDef` into
 // an immutable `SystemBox`, resolving the declared `{read,write}` ComponentDefs to dense ComponentIds
-// and packing them into fixed-width access signature words for the O(words) disjointness test (§5.2).
+// and packing them into fixed-width access signature words for the O(words) disjointness test.
 //
-// Pair IDs are component IDs (§3.2): a declared read/write of a relation expands to the relation's
+// Pair IDs are component IDs: a declared read/write of a relation expands to the relation's
 // presence id, an ordinary ComponentId in the same dense space. The defs a user passes carry their
 // registered `.id` already, so resolution here is a `.id` read — no registry handle required.
 
@@ -11,7 +11,7 @@ import { DEFAULT_MAX_SPAWNS_PER_WAVE } from './types.js'
 import type { SystemBox, SystemDef } from './types.js'
 
 export interface AccessMaps {
-  /** Who reads each id (scheduler.md §3.3). */
+  /** Who reads each id. */
   readonly readers: Map<ComponentId, Set<SystemId>>
   /** Who writes each id. */
   readonly writers: Map<ComponentId, Set<SystemId>>
@@ -59,8 +59,8 @@ function packWords(ids: readonly ComponentId[], strideWords: number): Uint32Arra
 
 /**
  * Lower the registered SystemDefs into immutable SystemBoxes. `strideWords` is the single canonical
- * fixed-component-id width (= accessStrideWords = ceil(registeredComponentCount/32), §3.3) shared with
- * the bitmask and registry; it does NOT add a separate `+ numRelations` term (CANON C4, world.md §5.3)
+ * fixed-component-id width (= accessStrideWords = ceil(registeredComponentCount/32)) shared with
+ * the bitmask and registry; it does NOT add a separate `+ numRelations` term ( C4)
  * because presence ids are already counted.
  */
 export function lowerSystems(defs: readonly SystemDef[], strideWords: number): SystemBox[] {
@@ -85,7 +85,7 @@ export function lowerSystems(defs: readonly SystemDef[], strideWords: number): S
   })
 }
 
-/** Aggregate the per-id reader/writer sets from the lowered systems' declared access only (§3.3). */
+/** Aggregate the per-id reader/writer sets from the lowered systems' declared access only. */
 export function aggregateAccess(systems: readonly SystemBox[]): AccessMaps {
   const readers = new Map<ComponentId, Set<SystemId>>()
   const writers = new Map<ComponentId, Set<SystemId>>()

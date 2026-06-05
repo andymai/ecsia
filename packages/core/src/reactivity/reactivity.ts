@@ -1,9 +1,9 @@
-// The reactivity facade (reactivity.md): owns the write log + shape log, the per-row changeVersion
-// columns, the deferred observers, and the query-flavor hooks. It fills the M2 trackWrite stub, the
-// M3 enqueueRemoveLog stub, and the M4 LiveQuery.changed()/eachChanged() stubs — wiring the dual
-// mechanism the spec mandates (Must-Fix #2 / R-2):
-//   - the WRITE LOG drives the `.changed` query FILTER (drainChanged);
-//   - the per-row changeVersion drives the PUBLIC changedSince predicate + delta serializer.
+// The reactivity facade: owns the write log + shape log, the per-row changeVersion
+// columns, the deferred observers, and the query-flavor hooks. It fills the trackWrite stub, the
+// enqueueRemoveLog stub, and the LiveQuery.changed()/eachChanged() stubs — wiring the dual
+// mechanism the spec mandates:
+// - the WRITE LOG drives the `.changed` query FILTER (drainChanged);
+// - the per-row changeVersion drives the PUBLIC changedSince predicate + delta serializer.
 // They never read each other's mechanism.
 
 import type { Buffers } from '../memory/index.js'
@@ -31,7 +31,7 @@ export interface ReactivityDeps {
   resolveLocation(index: number): { archetypeId: number; row: number }
   /** The world frame tick (world owns it; reactivity reads it, never holds it). */
   tick(): number
-  /** Advance the world frame tick (world.advanceTick, world.md §8). Called at frameReset. */
+  /** Advance the world frame tick (world.advanceTick). Called at frameReset. */
   advanceTick(): void
   /** Resolve a registered def's dense id. */
   idOf(def: ComponentDef<Schema>): ComponentId
@@ -39,15 +39,15 @@ export interface ReactivityDeps {
   holdsAll(index: number, componentIds: readonly ComponentId[]): boolean
   /** The pooled EntityRef bound to the current (index, generation) for `index` (observer dispatch). */
   refOf(index: number): EntityRef
-  /** index → its current FULL (generational) handle — for the structural journal's portable handles (§7.3). */
+  /** index → its current FULL (generational) handle — for the structural journal's portable handles. */
   resolveHandle(index: number): number
   /** The accessor's shared write-path fast-out cell. Reactivity flips `.active` whenever a write consumer
    * (changed-flavor pointer / change observer) or changeVersion stamping (de)registers, so the setter's
-   * `track()` can skip the handleIndex decode + closure hops when no consumer is present (P7). */
+   * `track()` can skip the handleIndex decode + closure hops when no consumer is present. */
   readonly tracking: { active: boolean }
 }
 
-/** Per-query write-log flavor state (reactivity.md §5.1): a LogPointer + a per-frame dedup bitset. */
+/** Per-query write-log flavor state: a LogPointer + a per-frame dedup bitset. */
 interface ChangedFlavor {
   readonly ptr: LogPointer
   dedup: Uint8Array
@@ -65,7 +65,7 @@ export class Reactivity {
   readonly #structuralJournal: StructuralJournal
   readonly #observers: ObserverRegistry
   readonly #corral: WriteCorral
-  /** One per LiveQuery that declares the `changed` flavor (lazily allocated, §5.1). */
+  /** One per LiveQuery that declares the `changed` flavor (lazily allocated). */
   readonly #changedFlavors = new WeakMap<LiveQuery, ChangedFlavor>()
   /** Strong list of every changed-flavor pointer, so frame-recycle can rewind lagging cursors. */
   readonly #changedPointers: LogPointer[] = []
@@ -83,7 +83,7 @@ export class Reactivity {
   #currentMembers: (() => Iterable<number>) | null = null
   #spilledThisFrame = false
   /** True iff the write log has a consumer (a changed-flavor pointer or a change observer); else the
-   * per-write push is dead (recomputed on (de)registration, not per write). §3.3 fast-out. */
+   * per-write push is dead (recomputed on (de)registration, not per write). */
   #writeLogActive = false
 
   constructor(deps: ReactivityDeps) {
@@ -92,7 +92,7 @@ export class Reactivity {
     this.#indexMask = deps.indexBits >= 32 ? 0xffffffff : ((1 << deps.indexBits) - 1) >>> 0
     this.#componentIdBits = 32 - deps.indexBits
 
-    // §3.5: one-word write entry / two-word shape entry by default; wide worlds add a word each.
+    // One-word write entry / two-word shape entry by default; wide worlds add a word each.
     const writeWords = this.#wide ? 2 : 1
     const shapeWords = this.#wide ? 3 : 2
     this.#writeLog = new LogRing({
@@ -138,7 +138,7 @@ export class Reactivity {
     this.#currentMembers = fn
   }
 
-  // --- entry packing (§3.1 / §4.1) -------------------------------------------
+  // --- entry packing -------------------------------------------
 
   #packWriteEntry(index: number, componentId: number): number[] {
     if (this.#wide) return [index >>> 0, componentId >>> 0]
@@ -184,17 +184,17 @@ export class Reactivity {
     }
   }
 
-  // --- hot-path hooks (§3.3, §4.2, §6.2) -------------------------------------
+  // --- hot-path hooks -------------------------------------
 
-  /** §3.3 + §6.2: push the write entry (when a consumer exists) and stamp changeVersion (when enabled).
+  /** +: push the write entry (when a consumer exists) and stamp changeVersion (when enabled).
    * Single-thread. The write log is read ONLY by changed-flavor query pointers and change observers; with
    * neither present every appended word is dead (rewound at frame-recycle), so the push is a pure cost on
    * the iteration hot path. Gate it on `#writeLogActive` (recomputed on flavor/observer (de)registration) —
    * a semantics-preserving fast-out, since a later-attached changed flavor's pointer starts at the live head
-   * (§13.5 forward-only) and sees only writes after it attaches. Pack the word inline (no per-write array). */
+   * and sees only writes after it attaches. Pack the word inline (no per-write array). */
   trackWrite(index: number, componentId: ComponentId, fieldIndex?: number): void {
     if (this.#writeLogActive) {
-      // Main thread: append directly to the ring. (Worker corrals merge at mergeCorrals — M7.)
+      // Main thread: append directly to the ring. (Worker corrals merge at mergeCorrals — .)
       if (this.#wide) {
         this.#writeLog.pushWord(index >>> 0)
         this.#writeLog.pushWord(componentId as number >>> 0)
@@ -203,19 +203,19 @@ export class Reactivity {
       }
     }
     if (this.#changeVersion.enabled) {
-      // fieldIndex affects only field-granular stamping (Q-CD1, deferred); component-granular default
+      // fieldIndex affects only field-granular stamping (deferred); component-granular default
       // stamps the whole-entity slot regardless of which component/field changed. Keyed by entity INDEX
-      // so the stamp follows the entity across any later relocation (§6.3/§6.4).
+      // so the stamp follows the entity across any later relocation.
       void fieldIndex
       this.#changeVersion.stamp(index, this.#deps.tick())
     }
   }
 
-  /** §4.2 structural commit hook: append one shape entry. Main thread only, O(1). */
+  /**: append one shape entry. Main thread only, O(1). */
   trackShape(index: number, componentId: ComponentId, kind: ShapeKind): void {
     this.#shapeLog.push(this.#packShapeEntry(index, componentId as number, kind))
-    // Persistent since-T mirror for the delta serializer (serialization.md §6.4 / §7.3). Resolve the
-    // FULL handle NOW — for Destroy this hook runs BEFORE identity invalidation (reactivity.md §4.2),
+    // Persistent since-T mirror for the delta serializer. Resolve the
+    // FULL handle NOW — for Destroy this hook runs BEFORE identity invalidation,
     // so the dying handle is still recoverable. No-op until a delta serializer enables journaling.
     if (this.#structuralJournal.enabled) {
       this.#structuralJournal.record(
@@ -228,7 +228,7 @@ export class Reactivity {
     }
   }
 
-  /** §4.2 pair variant: carries the target index in word B/C. */
+  /**: carries the target index in word B/C. */
   trackShapePair(
     index: number,
     pairId: ComponentId,
@@ -248,10 +248,10 @@ export class Reactivity {
   }
 
   /**
-   * §6.5 SET_PAYLOAD: a non-exclusive overflow pair's payload changed on an already-live pair. This is
+   * _PAYLOAD: a non-exclusive overflow pair's payload changed on an already-live pair. This is
    * NOT a membership change (no shape-log entry, no add/remove observer), but it IS a structural delta
-   * the since-T stream must carry, so we record it in the persistent journal only (serialization.md §6.5
-   * — overflow payload changes are explicit OP_PAIR_PAYLOAD records).
+   * the since-T stream must carry, so we record it in the persistent journal only
+   * (overflow payload changes are explicit OP_PAIR_PAYLOAD records).
    */
   trackShapeSetPayload(index: number, pairId: ComponentId, targetIndex: number): void {
     if (this.#structuralJournal.enabled) {
@@ -266,16 +266,16 @@ export class Reactivity {
   }
 
   /**
-   * The M3 enqueueRemoveLog stub body: storage calls this for each component in fromArch \ toArch at
+   * The enqueueRemoveLog stub body: storage calls this for each component in fromArch \ toArch at
    * a migration, and for each held component at despawn (BEFORE removeRow + identity invalidation,
-   * R-8). It emits a shape-log Remove entry — the single source for onRemove dispatch + Removed
+   * ). It emits a shape-log Remove entry — the single source for onRemove dispatch + Removed
    * delta maintenance.
    */
   enqueueRemoveLog(index: number, componentId: ComponentId): void {
     this.trackShape(index, componentId, ShapeKind.Remove)
   }
 
-  // --- public predicate + delta (§6.3) ---------------------------------------
+  // --- public predicate + delta ---------------------------------------
 
   /** Enable per-row changeVersion stamping (a `.changed` predicate consumer / serializer exists). */
   enableChangeVersion(): void {
@@ -284,33 +284,33 @@ export class Reactivity {
   }
 
   /**
-   * Enable the persistent structural journal (the since-T STRUCTURAL source, §6.4). A delta serializer
+   * Enable the persistent structural journal (the since-T STRUCTURAL source). A delta serializer
    * that includes the structural section calls this once at construction — it is the structural twin of
-   * `enableChangeVersion`. Until then, zero record cost (§6.1 opt-in).
+   * `enableChangeVersion`. Until then, zero record cost.
    */
   enableStructuralJournal(): void {
     this.#structuralJournal.enabled = true
   }
 
   /**
-   * §6.4 / §7.3: the structural ops committed with tick > since, in commit order, as portable full-handle
+   * /: the structural ops committed with tick > since, in commit order, as portable full-handle
    * records. `gap` is true when `since` predates the bounded journal's live window (the caller must
-   * resync from a fresh snapshot — the no-partial-apply delta-gap rule, §6.4).
+   * resync from a fresh snapshot — the no-partial-apply delta-gap rule).
    */
   drainStructuralSince(since: number): { records: StructuralRecord[]; gap: boolean } {
     return this.#structuralJournal.drainSince(since)
   }
 
-  /** §6.3: "did any component on `handle` change since tick `since`?" (strict >). */
+  /**: "did any component on `handle` change since tick `since`?" (strict >). */
   changedSince(handle: EntityHandle, since: number): boolean {
     const index = handle & this.#indexMask
     return this.#changeVersion.changedSince(index, since)
   }
 
   /**
-   * §6.3 / Q-CD3: rows of `archetypeId` whose ENTITY's stamp is > since (the delta-serializer scan).
+   * /: rows of `archetypeId` whose ENTITY's stamp is > since (the delta-serializer scan).
    * `indexOfRow` maps a live row of the archetype to its entity index — the stamp is keyed by entity
-   * index (it follows the entity across relocations, §6.4), so we resolve each row's current occupant.
+   * index (it follows the entity across relocations), so we resolve each row's current occupant.
    */
   *changedRows(_archetypeId: number, since: number, count: number, indexOfRow: (row: number) => number): Iterable<number> {
     for (let row = 0; row < count; row++) {
@@ -322,9 +322,9 @@ export class Reactivity {
     return this.#deps.tick()
   }
 
-  // --- observers (§7) --------------------------------------------------------
+  // --- observers --------------------------------------------------------
 
-  /** Recompute the write-log fast-out flag after any consumer (de)registers (§3.3). Also refreshes the
+  /** Recompute the write-log fast-out flag after any consumer (de)registers. Also refreshes the
    * accessor's shared `tracking.active` cell: true iff trackWrite would do real work (a write-log
    * consumer exists OR changeVersion stamping is enabled). When false the setter skips the whole chain. */
   #refreshWriteLogActive(): void {
@@ -345,16 +345,16 @@ export class Reactivity {
     }
   }
 
-  /** §7.4: is there a remove-observer on `componentId` (gates deferred row reclaim)? */
+  /**: is there a remove-observer on `componentId` (gates deferred row reclaim)? */
   hasRemoveObserver(componentId: number): boolean {
     return this.#observers.hasKindFor('remove', componentId)
   }
 
-  // --- query-flavor hooks (§5, §10 ReactivityQueryHooks) ---------------------
+  // --- query-flavor hooks ---------------------
 
   /**
-   * §5.1: allocate the `changed` flavor's LogPointer + dedup bitset for `q`. `added`/`removed` lists
-   * are owned by the LiveQuery itself (M4) and filled by maintenance; this hook wires only `changed`.
+   *: allocate the `changed` flavor's LogPointer + dedup bitset for `q`. `added`/`removed` lists
+   * are owned by the LiveQuery itself and filled by maintenance; this hook wires only `changed`.
    */
   attachChangedFlavor(q: LiveQuery, componentIds: Iterable<number>): void {
     this.enableChangeVersion()
@@ -371,8 +371,8 @@ export class Reactivity {
   }
 
   /**
-   * §5.3 DRAIN_CHANGED: drain `q`'s write-log pointer, returning this frame's changed indices (deduped,
-   * intersected with `q.current` and the query's filtered components). Write-log driven (R-2) — never
+   * _CHANGED: drain `q`'s write-log pointer, returning this frame's changed indices (deduped,
+   * intersected with `q.current` and the query's filtered components). Write-log driven — never
    * consults changeVersion.
    */
   drainChanged(q: LiveQuery): Uint32Array {
@@ -396,7 +396,7 @@ export class Reactivity {
 
     this.#writeLog.consume(flavor.ptr, (source, base) => {
       if (source.length === 1 && source[0] === OVERFLOW_SENTINEL) {
-        // §3.6 conservative: treat every current match as changed.
+        // Treat every current match as changed.
         for (const index of current) {
           if (index < flavor.dedup.length && flavor.dedup[index] === 1) continue
           if (index < flavor.dedup.length) flavor.dedup[index] = 1
@@ -420,19 +420,19 @@ export class Reactivity {
     return max
   }
 
-  // --- lifecycle (§10.1 frame-loop call order) -------------------------------
+  // --- lifecycle -------------------------------
 
-  /** §3.7: start of frame — advance the world tick, snapshot peak, recycle the rings. */
+  /**: start of frame — advance the world tick, snapshot peak, recycle the rings. */
   frameReset(): void {
     this.#deps.advanceTick()
     if (this.#deps.tick() === 0xffffffff) {
-      this.#changeVersion.resetAll() // §13.4 wrap recovery
+      this.#changeVersion.resetAll() //
       this.#structuralJournal.resetAll()
     }
     this.#spilledThisFrame = false
     this.#writeLog.frameReset(this.#minWriteCursor())
     this.#shapeLog.frameReset(this.#minShapeCursor())
-    // §3.7: when the ring recycled to slot 0 (all consumers caught up), rewind every caught-up
+    // When the ring recycled to slot 0 (all consumers caught up), rewind every caught-up
     // consumer's cursor to 0 too, so it scans the new frame's entries from the head. A still-lagging
     // consumer (cursor below the now-zero head is impossible) keeps its cursor.
     this.#rewindCaughtUp(this.#writeLog.header[0] as number, [this.#observerWritePtr, ...this.#changedPointers])
@@ -447,7 +447,7 @@ export class Reactivity {
     }
   }
 
-  /** §9.2: merge per-worker write corrals into the shared ring (deterministic). No-op single-thread. */
+  /**: merge per-worker write corrals into the shared ring (deterministic). No-op single-thread. */
   mergeCorrals(): void {
     const c = this.#corral
     for (let i = 0; i < c.count; i++) {
@@ -457,13 +457,13 @@ export class Reactivity {
   }
 
   /**
-   * §9.1/§9.2 + R-4: merge ONE worker's staged value writes into the shared write log. `pairs` is a
+   * /+: merge ONE worker's staged value writes into the shared write log. `pairs` is a
    * flat `[index, componentId, index, componentId, …]` buffer (the worker's raw corral payload); the
    * caller drives this in ASCENDING worker-index order so the merged stream is deterministic. We
    * (re)pack each pair through the module's own packWrite so single/wide layout stays the single
    * source of truth — the worker never duplicates the packing scheme. Writes flow into the SAME ring
    * the main thread appends to, so `.changed` filters and onChange observers fire for worker writes
-   * exactly as for single-thread writes. §6.4 replay-stamp: when changeVersion is enabled we also
+   * exactly as for single-thread writes.: when changeVersion is enabled we also
    * stamp each row here (the worker hot path stays atomic-free; the stamp lands at the serial merge).
    */
   mergeWorkerWrites(pairs: Int32Array | Uint32Array, count: number): void {
@@ -478,11 +478,11 @@ export class Reactivity {
   }
 
   /**
-   * §5.2 MAINTAIN_STRUCTURAL: drain the shape log, re-testing each affected entity against the queries
-   * referencing the changed component. In single-thread mode M4 already maintains `current`
+   * _STRUCTURAL: drain the shape log, re-testing each affected entity against the queries
+   * referencing the changed component. In single-thread mode already maintains `current`
    * synchronously at the commit point, so this re-runs the same idempotent re-test off the log (the
-   * drain is the spec's serial mechanism; the synchronous path is the M4 optimization that agrees with
-   * it). Add/remove coalesce within the frame because the drain happens once (R-9).
+   * drain is the spec's serial mechanism; the synchronous path is the optimization that agrees with
+   * it). Add/remove coalesce within the frame because the drain happens once.
    */
   maintainStructural(): void {
     const hook = this.#maintainHook
@@ -497,7 +497,7 @@ export class Reactivity {
     })
   }
 
-  /** §7.3 OBSERVER_DRAIN: fire deferred observers from the saved shape/write pointers. */
+  /** _DRAIN: fire deferred observers from the saved shape/write pointers. */
   observerDrain(): void {
     if (!this.#observers.hasObservers) {
       this.#observerShapePtr.cursor = this.#shapeLogHead()
@@ -505,7 +505,7 @@ export class Reactivity {
       return
     }
     this.#observers.resetChangeDedup()
-    // §7.4 frozen snapshot: capture BOTH log heads at drain entry. A structural (add/remove) handler may
+    // Capture BOTH log heads at drain entry. A structural (add/remove) handler may
     // call entity.write(C), which appends to the write log; bounding the change consume to this snapshot
     // defers that observer-issued write to the NEXT drain — no intra-drain write-cascade (review #2).
     const writeHeadSnapshot = this.#writeLogHead()
@@ -533,7 +533,7 @@ export class Reactivity {
     }, writeHeadSnapshot)
   }
 
-  /** §8.2 FLUSH_LOGS: drain/merge spill (consumers already drained it), schedule next-frame resize. */
+  /** _LOGS: drain/merge spill (consumers already drained it), schedule next-frame resize. */
   flushLogs(): void {
     if (this.#writeLog.spill.length > 0 || this.#shapeLog.spill.length > 0) this.#spilledThisFrame = true
     this.#writeLog.observePeak()
@@ -560,7 +560,7 @@ export class Reactivity {
     let min = this.#writeLog.header[0] as number
     if (this.#observerWritePtr.cursor < min) min = this.#observerWritePtr.cursor
     // changed-flavor pointers are drained lazily; they pin the ring until read so the recycle never
-    // overruns an unread consumer (§3.7 "ring is not recycled past a lagging pointer"). In the common
+    // overruns an unread consumer ("ring is not recycled past a lagging pointer"). In the common
     // case every system reads its filter within the frame, so they equal head and the ring recycles.
     for (const ptr of this.#changedPointers) if (ptr.cursor < min) min = ptr.cursor
     return min

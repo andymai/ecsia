@@ -1,18 +1,17 @@
-// M9 — relation observers + safe relation mutation inside observers (reactivity.md §7, §7.4; M8 +
-// M9 integration). Two things this proves/wires:
-//   1. A relation addPair/removePair issued INSIDE an observer handler is STAGED to the world's
-//      deferred command buffer and applied at the NEXT serial flush — never mutating the relation
-//      structure mid-drain (R-3). This is the relation leg of the deferred observer command buffer.
-//   2. AddPair / RemovePair shape entries flow through the SAME deferred observer drain: an onChange
-//      handler observing a component on the subject still fires correctly while the relation op the
-//      handler issues is deferred.
+// — relation observers + safe relation mutation inside observers (// integration). Two things this proves/wires:
+// 1. A relation addPair/removePair issued INSIDE an observer handler is STAGED to the world's
+// deferred command buffer and applied at the NEXT serial flush — never mutating the relation
+// structure mid-drain. This is the relation leg of the deferred observer command buffer.
+// 2. AddPair / RemovePair shape entries flow through the SAME deferred observer drain: an onChange
+// handler observing a component on the subject still fires correctly while the relation op the
+// handler issues is deferred.
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, onChange } from '@ecsia/core'
 import type { EntityHandle } from '@ecsia/core'
 import { createRelations, Wildcard } from '../src/index.js'
 
-describe('§7.4 — addPair issued inside an observer is staged, applied at the next flush', () => {
+describe(', applied at the next flush', () => {
   test('the pair is NOT present immediately after the handler; it is present after the next drain', () => {
     const Tag = defineComponent({ n: 'i32' }, { name: 'tag' })
     const world = createWorld({ components: [Tag] })
@@ -33,7 +32,7 @@ describe('§7.4 — addPair issued inside an observer is staged, applied at the 
     ;(world.entity(s).write(Tag) as { n: number }).n = 1
 
     world.observerDrain()
-    expect(presentRightAfterHandler).toBe(0) // deferred — NOT applied mid-drain (R-3)
+    expect(presentRightAfterHandler).toBe(0) // deferred — NOT applied mid-drain
     expect(rel.hasPair(s, Likes, t)).toBe(false)
 
     // Next serial flush applies the staged addPair.

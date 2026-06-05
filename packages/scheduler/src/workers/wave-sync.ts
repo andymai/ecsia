@@ -1,4 +1,4 @@
-// The Atomics wave-completion fence (scheduler.md §7.1) and the three-tier wait (§7.3). The main
+// The Atomics wave-completion fence and the three-tier wait. The main
 // thread dispatches a round's batches, then waits until every worker has decremented the SAB counter
 // to zero. The tier is chosen ONCE at world creation by the capability probe (selectWaitTier, seams.ts).
 //
@@ -25,7 +25,7 @@ export function workerHead(c: WaveCounter, workerIndex: number): number {
   return Atomics.load(c.view, 4 + workerIndex)
 }
 
-/** Worker-side completion (scheduler.md §7.1): the last decrementer wakes the waiter. */
+/** Worker-side completion: the last decrementer wakes the waiter. */
 export function completeWave(c: WaveCounter): void {
   if (Atomics.sub(c.view, REMAINING, 1) === 1) Atomics.notify(c.view, REMAINING)
 }
@@ -40,7 +40,7 @@ export function waveErrored(c: WaveCounter): boolean {
 
 /**
  * Build a WaveSync for the chosen tier. `await` MUST loop on Atomics.load(remaining) even after a
- * wake (spurious wakeups + the epoch guard), resolving only when remaining === 0 (SCH-8).
+ * wake (spurious wakeups + the epoch guard), resolving only when remaining === 0.
  */
 export function makeWaveSync(tier: WaveSyncTier): WaveSync {
   function begin(c: WaveCounter, batchCount: number): void {

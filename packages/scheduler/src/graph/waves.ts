@@ -1,7 +1,7 @@
-// Wave extraction + type-level conflict detection v1 + batch packing (scheduler.md §5). The reduced
+// Wave extraction + type-level conflict detection v1 + batch packing. The reduced
 // DAG is layered into waves (Kahn by in-degree); within a wave, two systems may run concurrently iff
 // their access is DISJOINT at component-type granularity (WAVE-CONFLICT). This is the explicit
-// REJECTION of becsy lane-merging: readers of a component run concurrently (§5.6).
+// REJECTION of becsy lane-merging: readers of a component run concurrently.
 
 import type { SystemId } from '@ecsia/schema'
 import type { SystemBox } from '../planner/index.js'
@@ -28,7 +28,7 @@ export interface SchedulePlan {
 }
 
 /**
- * Rule WAVE-CONFLICT (v1, scheduler.md §5.2, T5): A and B are concurrency-compatible iff write-sets
+ * Rule WAVE-CONFLICT (v1, T5): A and B are concurrency-compatible iff write-sets
  * are disjoint AND neither writes what the other reads. Pure read–read overlap is allowed.
  * O(accessStrideWords) per pair — never per-entity, never per-archetype. This is the single seam a v2
  * column-level build narrows.
@@ -45,7 +45,7 @@ export function concurrencyCompatible(a: SystemBox, b: SystemBox): boolean {
   return true
 }
 
-/** §5.1: topological layering by in-degree (Kahn). Deterministic intra-wave order: SystemId asc. */
+/**: topological layering by in-degree (Kahn). Deterministic intra-wave order: SystemId asc. */
 function extractWaves(dag: DAG): SystemId[][] {
   const n = dag.n
   const indeg = new Int32Array(n)
@@ -57,7 +57,7 @@ function extractWaves(dag: DAG): SystemId[][] {
   const waves: SystemId[][] = []
   let placed = 0
   while (ready.length > 0) {
-    ready.sort((a, b) => a - b) // deterministic order within a wave (§5.5)
+    ready.sort((a, b) => a - b) // deterministic order within a wave
     const wave = ready.map((i) => i as unknown as SystemId)
     waves.push(wave)
     placed += wave.length
@@ -71,14 +71,14 @@ function extractWaves(dag: DAG): SystemId[][] {
     ready = next
   }
   if (placed !== n) {
-    // A cycle slipped through — impossible after dag.ts cycle detection, but assert for safety (SCH-1).
+    // A cycle slipped through — impossible after dag.ts cycle detection, but assert for safety.
     throw new Error(`wave extraction dropped systems (${placed}/${n}); a cycle escaped detection`)
   }
   return waves
 }
 
 /**
- * §5.3: partition a wave's systems into sequential rounds via greedy graph coloring over the
+ *: partition a wave's systems into sequential rounds via greedy graph coloring over the
  * incompatibility graph (`A—B` iff !concurrencyCompatible). Worker-ineligible systems are pinned to a
  * main-thread slot (workerIndex -1); each round holds at most one main-thread slot.
  */
@@ -117,7 +117,7 @@ function packWave(wave: readonly SystemId[], systems: readonly SystemBox[], work
           break
         }
       } else if (!round.hasMainThreadSlot) {
-        // Ineligible system: only the single main-thread slot per round (§5.3 pinning).
+        // Ineligible system: only the single main-thread slot per round.
         round.hasMainThreadSlot = true
         round.members.push({ systemId: id, workerIndex: -1 })
         round.boxes.push(sb)
@@ -144,7 +144,7 @@ function packWave(wave: readonly SystemId[], systems: readonly SystemBox[], work
   }
 }
 
-/** Build the immutable SchedulePlan from the reduced DAG (scheduler.md §5.4). */
+/** Build the immutable SchedulePlan from the reduced DAG. */
 export function buildPlan(
   systems: readonly SystemBox[],
   dag: DAG,

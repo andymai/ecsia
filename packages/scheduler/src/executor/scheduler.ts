@@ -1,4 +1,4 @@
-// The world↔scheduler wiring seam (scheduler.md §12; the locked dependency direction schema ← core ←
+// The world↔scheduler wiring seam (the locked dependency direction schema ← core ←
 // scheduler). The scheduler DRIVES the world externally: `createScheduler(world, systems).update(dt)`.
 // @ecsia/core NEVER imports @ecsia/scheduler — so rather than a core→scheduler import, the scheduler
 // holds the World and calls its public lifecycle verbs (frameReset / mergeCorrals /
@@ -19,14 +19,14 @@ import type { RoundDispatcher } from './update-threaded.js'
 import { IS_DEV } from '@ecsia/core'
 
 export interface SchedulerHandle {
-  /** The immutable plan (frozen; rebuilt wholesale on re-plan, never patched — §4.4). */
+  /** The immutable plan (frozen; rebuilt wholesale on re-plan, never patched — ). */
   readonly plan: SchedulePlan
-  /** Run one wave-scheduled tick on the main thread (scheduler.md §6.2). */
+  /** Run one wave-scheduled tick on the main thread. */
   update(dt?: number): void
   /**
-   * Run one wave-scheduled tick THREADED (scheduler.md §6.2 + §7, PHASE-2): each round's worker batches
+   * Run one wave-scheduled tick THREADED (PHASE-2): each round's worker batches
    * are dispatched to `pool` (the WorkerPool), the rest run on the main thread. Reproduces the
-   * single-thread observable result through the SAME frame loop (§2.2/§6.5). The `pool`'s PoolSystem
+   * single-thread observable result through the SAME frame loop. The `pool`'s PoolSystem
    * registration order MUST match the plan's SystemId order (the test rig wires this).
    */
   updateThreaded(pool: RoundDispatcher, dt?: number): Promise<void>
@@ -37,10 +37,10 @@ export interface CreateSchedulerOptions {
    * registry.nextComponentId after createWorld registration (user components + reserved ids + one
    * presence id per relation); accessStrideWords = ceil(registeredComponentCount / 32). When omitted,
    * the stride is derived from the max declared component id (correct for the type-level disjointness
-   * test; widen-only). Pass it to align the access words with the bitmask stride for M7 worker work.
+   * test; widen-only). Pass it to align the access words with the bitmask stride for worker work.
    */
   readonly registeredComponentCount?: number
-  /** Worker pool size for plan shape (matches WorldOptions.scheduler.workers). Default: 0 (single-thread; worker bodies land at M7). */
+  /** Worker pool size for plan shape (matches WorldOptions.scheduler.workers). Default: 0 (single-thread; worker bodies land at ). */
   readonly workers?: number
   /** Dev guards on/off. Default: NODE_ENV !== 'production'. */
   readonly dev?: boolean
@@ -60,7 +60,7 @@ function strideFor(systems: readonly SystemBox[], registeredComponentCount: numb
 /**
  * Build the immutable plan from lowered, ordering-resolved SystemBoxes. The full pipeline:
  * aggregate access → derive weighted conflict edges → cycle-detect + transitively reduce → extract
- * waves + pack batches (WAVE-CONFLICT). Fails fast on a cyclic dependency (CycleError, §4.5).
+ * waves + pack batches (WAVE-CONFLICT). Fails fast on a cyclic dependency (CycleError).
  */
 export function buildSchedulePlan(
   systems: readonly SystemBox[],

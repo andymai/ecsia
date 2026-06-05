@@ -1,16 +1,16 @@
-// M7 INTEGRATION — the threaded frame loop drives a real world through scheduler.updateThreaded()
+// INTEGRATION — the threaded frame loop drives a real world through scheduler.updateThreaded()
 // (the public frame loop, NOT a hand-driven pool.runRound) and REPRODUCES the single-thread executor's
-// observable result over the SAME plan (scheduler.md §2.2/§6.5, SCH-3). This is the missing end-to-end
-// wiring the M7 headline requires: the WorkerPool is invoked by the frame loop, not only by tests.
+// observable result over the SAME plan. This is the missing end-to-end
+// wiring the headline requires: the WorkerPool is invoked by the frame loop, not only by tests.
 //
 // Two equivalences are asserted:
-//   1. COLUMN STATE: every entity's Health/Mana column equals the single-thread run's, plus the alive
-//      set after a structural (spawner) wave.
-//   2. REACTIVITY DELTA STREAM (CB-7 / SCH-3, the previously-untested ordering): the ordered
-//      shape/change observer stream from the threaded run equals the single-thread run's for the same
-//      plan+input — observed exactly once, in deterministic order. A WARMUP frame (run before the
-//      measured frames, with the capture buffers cleared after it) drains the identical pre-registration
-//      seeding history from both worlds, so the compared stream is purely the schedule's per-frame delta.
+// 1. COLUMN STATE: every entity's Health/Mana column equals the single-thread run's, plus the alive
+// set after a structural (spawner) wave.
+// 2. REACTIVITY DELTA STREAM (the previously-untested ordering): the ordered
+// shape/change observer stream from the threaded run equals the single-thread run's for the same
+// plan+input — observed exactly once, in deterministic order. A WARMUP frame (run before the
+// measured frames, with the capture buffers cleared after it) drains the identical pre-registration
+// seeding history from both worlds, so the compared stream is purely the schedule's per-frame delta.
 
 import { fileURLToPath } from 'node:url'
 import { describe, expect, test, afterEach } from 'vitest'
@@ -69,7 +69,7 @@ function seedWorld(threaded: boolean, workers: number, n: number, seedMana = tru
 // a double-emit (an extra entry) still diverges.
 const norm = (d: Delta[]): Delta[] => d.slice().sort((a, b) => a.kind.localeCompare(b.kind) || a.index - b.index || a.component - b.component)
 
-describe('M7 threaded frame loop reproduces the single-thread result via scheduler.updateThreaded (SCH-3)', () => {
+describe(' threaded frame loop reproduces the single-thread result via scheduler.updateThreaded ', () => {
   test('disjoint-write wave: column state AND ordered reactivity delta stream match the single-thread run', async () => {
     const N = 48
     const FRAMES = 3
@@ -117,7 +117,7 @@ describe('M7 threaded frame loop reproduces the single-thread result via schedul
     // COLUMN STATE equivalence (every entity's Health/Mana equals the serial run, every frame).
     // NOTE: worker VALUE writes go straight to the shared SAB column (the disjoint-write fast path);
     // their .changed/onChange reactivity flows through the write-corral merge, which is exercised by
-    // the STRUCTURAL delta stream in the spawner test below (the command-buffer apply path, CB-7).
+    // the STRUCTURAL delta stream in the spawner test below (the command-buffer apply path).
     for (let i = 0; i < N; i++) {
       expect((thr.world.entity(thr.handles[i]!).read(thr.Health) as { hp: number }).hp).toBe(
         (ref.world.entity(ref.handles[i]!).read(ref.Health) as { hp: number }).hp,
@@ -177,7 +177,7 @@ describe('M7 threaded frame loop reproduces the single-thread result via schedul
     expect(thrGrew).toBe(refGrew)
     expect(thrGrew).toBe(N)
 
-    // REACTIVITY (STRUCTURAL) DELTA STREAM equivalence (CB-7 / SCH-3): the command-buffer apply path
+    // REACTIVITY (STRUCTURAL) DELTA STREAM equivalence: the command-buffer apply path
     // drives the SAME spawn/add lifecycle hooks the main-thread direct-apply does, so the onAdd(Mana)
     // shape stream is observed exactly once, in deterministic (merge) order. The threaded ordered
     // add-stream (sorted by index) must equal the single-thread run's — a reorder or double-emit

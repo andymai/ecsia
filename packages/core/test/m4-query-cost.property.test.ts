@@ -1,17 +1,17 @@
-// M4 query PROPERTY suite, part 2: hash canonicality, the sparse-set churn invariants, and the
+// query PROPERTY suite, part 2: hash canonicality, the sparse-set churn invariants, and the
 // instrumented O(A) match-cost counter (independent of N). Each property DISCRIMINATES — it fails if
 // the guarded invariant is broken.
 //
-//   HASH-ORDER   term sets differing ONLY in order hash IDENTICALLY (sort makes the hash
-//                order-independent — queries.md §4.1).
-//   HASH-DISC    sets differing in any without role, optional role, or pair-target hash DIFFERENTLY
-//                (no collisions over a fuzzed corpus — §4.1 / §4.2).
-//   SS-CHURN     SparseSetU32 add/remove/has invariants under random churn: dense iteration matches a
-//                reference Set, no duplicate in dense[0..size), has() is correct (§7.1).
-//   OACOST       the per-archetype matcher reads each archetype's signature words a CONSTANT number
-//                of times regardless of entity count N — instrumented via a counting sigWords proxy on
-//                a standalone QueryEngine. The cross-library wall-clock bench (vs bitECS/miniplex) is
-//                DEFERRED (no bench harness in this repo); see the note on the OACOST block.
+// HASH-ORDER term sets differing ONLY in order hash IDENTICALLY (sort makes the hash
+// order-independent — ).
+// HASH-DISC sets differing in any without role, optional role, or pair-target hash DIFFERENTLY
+// (no collisions over a fuzzed corpus —).
+// SS-CHURN SparseSetU32 add/remove/has invariants under random churn: dense iteration matches a
+// reference Set, no duplicate in dense[0..size), has() is correct.
+// OACOST the per-archetype matcher reads each archetype's signature words a CONSTANT number
+// of times regardless of entity count N — instrumented via a counting sigWords proxy on
+// a standalone QueryEngine. The cross-library wall-clock bench (vs bitECS/miniplex) is
+// DEFERRED (no bench harness in this repo); see the note on the OACOST block.
 
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
@@ -80,7 +80,7 @@ describe('HASH-ORDER canonical hash is order-independent', () => {
     const { ctx } = compileCtx(defs)
     const A = defs[0] as ComponentDef<Schema>
     const h = (t: QueryTerm[]) => compileQuery(t, ctx).hash
-    // read == write == bare (same matching constraint, §4.1).
+    // read == write == bare (same matching constraint).
     expect(h([read(A)])).toBe(h([write(A)]))
     expect(h([read(A)])).toBe(h([A]))
     // has (membership-only) is distinct from read (value), and without/optional are all distinct.
@@ -163,7 +163,7 @@ describe('HASH-DISC distinct constraints hash differently (no collisions)', () =
     const { ctx } = compileCtx(defs)
     const A = defs[0] as ComponentDef<Schema>
     const h = (t: QueryTerm[]) => compileQuery(t, ctx).hash
-    // Pair(R1, p1) vs Pair(R1, p2): target folded into the key (§4.2) → distinct.
+    // Pair(R1, p1) vs Pair(R1, p2): target folded into the key → distinct.
     expect(h([read(A), pairTerm(1, 5)])).not.toBe(h([read(A), pairTerm(1, 6)]))
     // Pair(R1, p1) vs Pair(R2, p1): different relation → distinct.
     expect(h([pairTerm(1, 5)])).not.toBe(h([pairTerm(2, 5)]))

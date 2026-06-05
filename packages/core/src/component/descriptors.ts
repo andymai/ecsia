@@ -1,5 +1,5 @@
-// Field-token → FieldDescriptor resolution (component-schema.md §3). The value-level bodies for
-// the type-system.md §1.4 table: ctor, bytesPerElem, stride, shareable, encode/decode, choices,
+// Field-token → FieldDescriptor resolution: the value-level bodies for each token —
+// ctor, bytesPerElem, stride, shareable, encode/decode, choices,
 // default, needsExplicitInit. eid encode/decode forward to the normative memory-buffers helpers.
 
 import type {
@@ -68,8 +68,8 @@ function isZeroEquivalentDefault(d: unknown): boolean {
 
 export function resolveDescriptor(name: string, token: FieldToken, userDefault?: unknown): FieldDescriptor {
   // The free-form 'string' rich token MUST be matched before the scalar dispatch below (it is a
-  // `typeof === 'string'` value that scalarRow would reject as an unknown scalar token, rich-fields.md
-  // §3). Sidecar-backed: no column (ctor null), not shareable, identity encode/decode never invoked.
+  // `typeof === 'string'` value that scalarRow would reject as an unknown scalar token).
+  // Sidecar-backed: no column (ctor null), not shareable, identity encode/decode never invoked.
   if (token === 'string') {
     return {
       name,
@@ -150,7 +150,7 @@ export function resolveDescriptor(name: string, token: FieldToken, userDefault?:
     }
   }
 
-  // object token (§3.8): no column, not shareable.
+  // object token: no column, not shareable.
   if (isObjectToken(token)) {
     return {
       name,

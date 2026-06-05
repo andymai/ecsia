@@ -1,6 +1,6 @@
 // Coverage: graph/edges.ts (offer self-edge guard, resolveOrdering unregistered throw, class-hint
 // resolution + missing-writer/reader continues, deny suppression) and graph/dag.ts (cycle reporting:
-// edgeCause empty fallback, name fallback, cause-less edge formatting). scheduler.md §4.
+// edgeCause empty fallback, name fallback, cause-less edge formatting).
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent } from '@ecsia/core'

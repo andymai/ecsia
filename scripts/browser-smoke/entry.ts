@@ -1,11 +1,11 @@
 // Browser-scoped smoke entry. esbuild bundles this (build.mjs) into a single browser ESM module the
 // Playwright-driven page loads. It exercises the SHIPPED dist umbrella in a real browser:
 //
-//   • kernel ops: createWorld / defineComponent / spawnWith / query each / scheduler update
-//   • SharedArrayBuffer alloc + grow (the resizable-SAB path) — ONLY when the page is cross-origin
-//     isolated (COOP/COEP). The probe must SELECT the SAB backing there.
-//   • crossOriginIsolated assertion: in the isolated server variant it MUST be true; in the
-//     --no-isolation variant the probe MUST FALL BACK LOUDLY (no SAB path, ArrayBuffer backing).
+// • kernel ops: createWorld / defineComponent / spawnWith / query each / scheduler update
+// • SharedArrayBuffer alloc + grow (the resizable-SAB path) — ONLY when the page is cross-origin
+// isolated (COOP/COEP). The probe must SELECT the SAB backing there.
+// • crossOriginIsolated assertion: in the isolated server variant it MUST be true; in the
+// --no-isolation variant the probe MUST FALL BACK LOUDLY (no SAB path, ArrayBuffer backing).
 //
 // HONEST SCOPING: this browser lane does NOT exercise a threaded worker pool. ecsia's WorkerPool is
 // node:worker_threads based; a browser Web-Worker pool is future work (see README note). The browser

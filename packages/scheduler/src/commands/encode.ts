@@ -1,4 +1,4 @@
-// The worker-side encode API (command-buffer.md §5): the methods a system calls mid-wave. NONE
+// The worker-side encode API: the methods a system calls mid-wave. NONE
 // mutates shared structure — each appends one record to the owning worker's buffer (and, for create,
 // consumes a reserved handle). The ergonomic surface (entity.add, world.spawn inside a worker) routes
 // here via the worker's structuralOp seam (workers/worker-context.ts).
@@ -18,7 +18,7 @@ export interface ComponentEncodeInfo {
 }
 
 export interface CommandEncoder {
-  /** Reserve-and-return a usable handle NOW; emits OP_CREATE. Mid-wave safe (§6). */
+  /** Reserve-and-return a usable handle NOW; emits OP_CREATE. Mid-wave safe. */
   create(): EntityHandle
   destroy(h: EntityHandle): void
   add(h: EntityHandle, def: ComponentDef<Schema>, init?: Record<string, unknown>): void

@@ -1,10 +1,10 @@
-// M4 query subsystem — cold-transparency and constraint-less spawn coherence (queries.md §6.3, §12).
+// query subsystem — cold-transparency and constraint-less spawn coherence.
 // These tests DISCRIMINATE the two coherence gaps a reviewer found:
-//   - the [Symbol.iterator] surface must yield the SAME set as each() over a COLD matching archetype
-//     (Q-C1 cold transparency on the iterator), and cold value props must resolve through the cold
-//     blocks (not surface as undefined);
-//   - a constraint-less query created BEFORE a plain world.spawn() must see the component-less entity,
-//     matching a query created AFTER the spawn (seed/incremental symmetry).
+// - the [Symbol.iterator] surface must yield the SAME set as each() over a COLD matching archetype
+// ( cold transparency on the iterator), and cold value props must resolve through the cold
+// blocks (not surface as undefined);
+// - a constraint-less query created BEFORE a plain world.spawn() must see the component-less entity,
+// matching a query created AFTER the spawn (seed/incremental symmetry).
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, optional, read, has } from '@ecsia/core'
@@ -25,7 +25,7 @@ function coldKit(): {
   return { world, Position, Velocity }
 }
 
-describe('Q-C1 cold transparency on the iterator surface', () => {
+describe(' cold transparency on the iterator surface', () => {
   test('[...query] equals query.each() over a COLD matching archetype', () => {
     const { world, Position } = coldKit()
     const e0 = world.spawnWith(Position)
@@ -97,7 +97,7 @@ describe('Q-C1 cold transparency on the iterator surface', () => {
   })
 })
 
-describe('constraint-less query before-spawn / after-spawn symmetry (§6.3)', () => {
+describe('constraint-less query before-spawn / after-spawn symmetry ', () => {
   test('a pure-optional query created BEFORE a plain spawn sees the component-less entity', () => {
     const Position = defineComponent({ x: 'f32' }, { name: 'position' })
     const world = createWorld({ components: [Position] as readonly ComponentDef<Schema>[] })

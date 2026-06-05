@@ -1,6 +1,6 @@
-// The World keystone (world.md). M0 lands the scaffold: option resolution, the phase/tick
-// contracts, and the module-wiring seam. Later milestones fill the seven owning modules in the
-// fixed order registry → buffers → storage → reactivity → queries → scheduler → serialization (§7).
+// The World keystone: option resolution, the phase/tick contracts, and the module-wiring seam.
+// The seven owning modules attach in the fixed order
+// registry → buffers → storage → reactivity → queries → scheduler → serialization.
 
 import { resolveOptions } from './config.js'
 import type { ResolvedWorldOptions, WorldOptions } from './config.js'
@@ -52,12 +52,12 @@ import type { ComponentRuntime } from './component/index.js'
 import { IS_DEV } from './env.js'
 import { isSharedBacking } from './memory/buffers.js'
 
-/** world.md §4: 'serial' during the serial slot (and always, single-threaded); 'wave' only while the scheduler dispatches worker waves. */
+/**: 'serial' during the serial slot (and always, single-threaded); 'wave' only while the scheduler dispatches worker waves. */
 export type WorldPhase = 'serial' | 'wave'
 
 /**
- * The ComponentId-keyed structural-apply verbs the command-buffer flush path drives (command-buffer.md
- * §9). Built from the world's storage + registry; every call runs serial/main-thread.
+ * The ComponentId-keyed structural-apply verbs the command-buffer flush path drives.
+ * Built from the world's storage + registry; every call runs serial/main-thread.
  */
 export interface WorldApplySurface {
   defOf(id: ComponentId): ComponentDef<Schema> | undefined
@@ -66,7 +66,7 @@ export interface WorldApplySurface {
   /** Overwrite `def`'s fields on `handle`'s current row + emit the `.changed` write-log entry. */
   writePayload(handle: EntityHandle, def: ComponentDef<Schema>, values: Record<string, unknown>): void
   /**
-   * Relation apply (relations.md §5.6). Filled by `__installRelations` (M8); undefined in a
+   * Relation apply. Filled by `__installRelations`; undefined in a
    * relation-free world. The scheduler's command-apply path calls these for OP_ADD_PAIR /
    * OP_REMOVE_PAIR — it does NOT import relations (the acyclic boundary holds).
    */
@@ -75,18 +75,18 @@ export interface WorldApplySurface {
 }
 
 /**
- * The minimal core surface the relations runtime drives (relations.md). The world exposes it through
+ * The minimal core surface the relations runtime drives. The world exposes it through
  * `__installRelations` so `@ecsia/relations` attaches WITHOUT @ecsia/core ever importing it (the
- * acyclic dependency direction, M8 seam). Everything here is serial / main-thread (Must-Fix #1).
+ * acyclic dependency direction, seam). Everything here is serial / main-thread.
  */
 export interface RelationsHost {
-  /** Mint the next dense ComponentId (relations.md §2.2 allocSyntheticComponentId). */
+  /** Mint the next dense ComponentId. */
   allocSyntheticId(): ComponentId
   /** Intern a synthetic ComponentDef (presence/overflow) at a minted id so storage can build its columns. */
   registerSynthetic(def: ComponentDef<Schema>, id: ComponentId): void
   /** id → registered def (real or synthetic). */
   defOf(id: ComponentId): ComponentDef<Schema> | undefined
-  /** ONE migration adding several ids (relations P1 atomicity; archetype-storage §5.6a). */
+  /** ONE migration adding several ids (relations atomicity; archetype-storage ). */
   migrateAddingMany(handle: EntityHandle, defs: readonly ComponentDef<Schema>[]): void
   migrateRemovingMany(handle: EntityHandle, defs: readonly ComponentDef<Schema>[]): void
   /** O(1) membership of a (possibly synthetic) component id via the per-entity bitmask. */
@@ -97,31 +97,31 @@ export interface RelationsHost {
   isAlive(handle: EntityHandle): boolean
   handleIndex(handle: EntityHandle): number
   handleOfIndex(index: number): EntityHandle
-  /** Re-enter the despawn protocol for a cascaded victim (relations.md §7.1). */
+  /** Re-enter the despawn protocol for a cascaded victim. */
   despawn(handle: EntityHandle): void
   /**
-   * M9 deferral seam (reactivity.md §7.4): while an observer drain is running, structural relation
+   * deferral seam: while an observer drain is running, structural relation
    * ops issued by a handler must STAGE to the world's deferred command buffer rather than mutate the
    * world mid-drain. The relations runtime calls this at the top of addPair/removePair; if it returns
    * true the op was staged (the runtime returns immediately) — else the runtime applies it directly.
    */
   deferRelationOp(op: 'add' | 'remove', subject: EntityHandle, relation: RelationDef<Schema | void>, target: EntityHandle, payload?: Record<string, unknown>): boolean
-  /** Push a write-log entry for a `.changed`-tracked pair-payload write (relations.md §4.4/§5.4). */
+  /** Push a write-log entry for a `.changed`-tracked pair-payload write. */
   trackWrite(index: number, componentId: ComponentId): void
-  /** Push an ADD_PAIR / REMOVE_PAIR shape-log entry (reactivity.md §4.2; world.md §9.4). */
+  /** Push an ADD_PAIR / REMOVE_PAIR shape-log entry. */
   trackShapePair(index: number, pairId: ComponentId, targetIndex: number, add: boolean): void
   /**
    * Journal a SET_PAYLOAD structural op for a non-exclusive overflow pair whose payload changed on an
-   * already-live pair (serialization.md §6.5: overflow payload changes are explicit OP_PAIR_PAYLOAD
+   * already-live pair (overflow payload changes are explicit OP_PAIR_PAYLOAD
    * records, since they do not live in an archetype column the changed-row scan covers).
    */
   trackShapeSetPayload(index: number, pairId: ComponentId, targetIndex: number): void
   /** The SAB-capable buffers registry, for the non-exclusive overflow payload ColumnSet. */
   readonly buffers: BuffersType
   readonly accessorWorld: AccessorWorld
-  /** Register a preDespawn hook fired BEFORE the row is torn down (relations.md §7.1 / §7.4 ordering). */
+  /** Register a preDespawn hook fired BEFORE the row is torn down. */
   setPreDespawn(hook: (dying: EntityHandle) => void): void
-  /** Inject the Pair(...) term resolver into the query compiler (queries.md §10; Q-R2). */
+  /** Inject the Pair(...) term resolver into the query compiler. */
   setPairResolver(resolve: (relationId: number, target: number | symbol) => ResolvedPair): void
   /** Fill the OP_ADD_PAIR / OP_REMOVE_PAIR apply seam so the scheduler can drive relations. */
   setApplyPair(
@@ -130,7 +130,7 @@ export interface RelationsHost {
   ): void
   /**
    * Install the relation snapshot/apply provider the serialization module reads through `world.__serialize`
-   * (serialization.md §4.6, §8.3). Lets @ecsia/serialization enumerate live pairs and re-establish them
+   * Lets @ecsia/serialization enumerate live pairs and re-establish them
    * WITHOUT importing @ecsia/relations directly off the world — the relations runtime hands the provider
    * in, core relays it, the acyclic boundary holds.
    */
@@ -145,36 +145,36 @@ export interface World {
   /** Structural-change phase. Owned by the world; the scheduler is the only component that flips it to 'wave'. */
   readonly phase: WorldPhase
   /**
-   * Phase-flip seam (scheduler.md §2.1 PHASE-2). The world OWNS the field and seeds it to 'serial';
+   * Phase-flip seam. The world OWNS the field and seeds it to 'serial';
    * the scheduler is the SOLE caller of this, flipping to 'wave' across worker dispatch and back to
    * 'serial' for the merge/apply flush slot. @ecsia/core never calls it (the acyclic boundary holds —
    * the scheduler drives the world externally). Not for user code.
    */
   __setPhase(phase: WorldPhase): void
   /**
-   * Command-buffer apply seam (command-buffer.md §7.4 `spawnReserved`). Place a handle that was
-   * already made alive by `reserveEntityBlock` (entity-model.md §5.1) into the EMPTY archetype and
+   * Command-buffer apply seam (`spawnReserved`). Place a handle that was
+   * already made alive by `reserveEntityBlock` into the EMPTY archetype and
    * emit its Create shape entry — the deferred analogue of `world.spawn()` whose identity was minted
    * before the wave. Serial-phase only. Called ONLY by the scheduler's flush path. Not for user code.
    */
   __spawnReserved(handle: EntityHandle): void
   /**
-   * Command-buffer apply surface (command-buffer.md §9), exposed as ONE seam so the scheduler's flush
+   * Command-buffer apply surface, exposed as ONE seam so the scheduler's flush
    * path drives the same storage primitives a main-thread direct-apply would, keyed by ComponentId.
    * Serial-phase only; called ONLY by the scheduler. Not for user code.
    */
   readonly __apply: WorldApplySurface
   /**
-   * Relations attach seam (relations.md M8). `@ecsia/relations` calls this ONCE to obtain the core
+   * Relations attach seam. `@ecsia/relations` calls this ONCE to obtain the core
    * surface it drives (synthetic id minting, migrate-many, preDespawn hook, pair-resolver injection,
    * OP_ADD_PAIR apply). @ecsia/core never imports @ecsia/relations — the host is handed OUT, keeping
    * the dependency direction acyclic. Not for user code; call createRelations(world) instead.
    */
   __installRelations(): RelationsHost
-  /** Export the SAB buffer-set manifest for one-time worker transfer (memory-buffers.md §6.3). */
+  /** Export the SAB buffer-set manifest for one-time worker transfer. */
   __exportShared(): SharedHandleManifest
   /**
-   * Column re-backing journal (memory-buffers.md §7.6 / serialization.md §3.4). The scheduler reads
+   * Column re-backing journal. The scheduler reads
    * `.generation` once per wave (a cheap monotonic int) and only `.drain()`s when it advanced — the
    * notices it gets are the new SAB backings the worker pool must re-wrap at the wave fence before the
    * next dispatch. In-place `.grow()` never bumps the generation (length-tracking views auto-widen).
@@ -182,36 +182,35 @@ export interface World {
    */
   __columnGrowth(): ColumnGrowthLog
   /**
-   * Serialization seam (serialization.md M10). @ecsia/serialization reads archetype columns + the
+   * Serialization seam. @ecsia/serialization reads archetype columns + the
    * registry + the relation provider through this, and drives deserialize-side spawn/migrate. Serial /
    * main-thread only; @ecsia/core never imports @ecsia/serialization (acyclic boundary). Not for user code.
    */
   readonly __serialize: SerializationSurface
   /**
-   * Read-only introspection seam (P5 / @ecsia/devtools). Exposes the FULL archetype census (cold +
+   * Read-only introspection seam (@ecsia/devtools). Exposes the FULL archetype census (cold +
    * empty included) and the live-query enumeration — the two data an inspector needs that `__serialize`
    * (snapshot-shaped: hot, non-empty only) and the public query surface do not reach. Pure reads, serial
    * / main-thread; @ecsia/core never imports @ecsia/devtools (acyclic boundary). Not for user code.
    */
   readonly __inspect: InspectSurface
   /**
-   * Merge ONE worker's staged value writes into the reactivity write log (reactivity.md §9.1/§9.2,
-   * R-4). `pairs` is the worker's raw `[index, componentId, …]` corral payload and `count` the number
+   * Merge ONE worker's staged value writes into the reactivity write log (   * ). `pairs` is the worker's raw `[index, componentId, …]` corral payload and `count` the number
    * of `(index, componentId)` entries. The scheduler drives this in ASCENDING worker-index order in
    * the serial flush slot so onChange observers + `.changed` filters fire for worker writes
    * deterministically. Serial-phase only; called ONLY by the scheduler. Not for user code.
    */
   __mergeWorkerWrites(pairs: Int32Array | Uint32Array, count: number): void
-  /** Current frame tick. Advanced by reactivity at frame reset (world.md §8). */
+  /** Current frame tick. Advanced by reactivity at frame reset. */
   readonly tick: number
-  /** Alias for `tick` (world.md §8). */
+  /** Alias for `tick`. */
   currentTick(): number
 
-  /** Create a new entity with the empty signature. Main-thread/serial. O(1) (entity-model.md §6.2). */
+  /** Create a new entity with the empty signature. Main-thread/serial. O(1). */
   spawn(): EntityHandle
   /**
    * Create a new entity and add the given components in ONE migration (EMPTY → target signature),
-   * never N (archetype-storage.md §5.6; entity-model.md §6.1). Main-thread/serial.
+   * never N. Main-thread/serial.
    *
    * Each argument is either a bare `ComponentDef` (membership only) or a `[def, values]` tuple that
    * also INITIALIZES the component: `spawnWith([Position, { x: 1, y: 2 }], Velocity)` spawns the entity,
@@ -219,36 +218,36 @@ export interface World {
    * accessor path (so onChange/write-log fire). The value object is type-inferred from the def's schema.
    */
   spawnWith<const T extends readonly SpawnArg[]>(...specs: { [I in keyof T]: SpawnArgFor<T[I]> }): EntityHandle
-  /** Add a component to a live entity (single migration via the cached edge, §5.4). Main-thread/serial. */
+  /** Add a component to a live entity (single migration via the cached edge). Main-thread/serial. */
   add(handle: EntityHandle, def: ComponentDef<Schema>): void
   /** Remove a component from a live entity (single migration via the cached edge). Main-thread/serial. */
   remove(handle: EntityHandle, def: ComponentDef<Schema>): void
-  /** Explicit cold→hot archetype promotion at a serial flush point (archetype-storage.md §10.4). */
+  /** Explicit cold→hot archetype promotion at a serial flush point. */
   warm(...defs: readonly ComponentDef<Schema>[]): void
-  /** Destroy an entity. Main-thread/serial. Idempotent on dead handles (entity-model.md §6.3). */
+  /** Destroy an entity. Main-thread/serial. Idempotent on dead handles. */
   despawn(handle: EntityHandle): void
-  /** O(1) liveness/staleness check. Never consults the bitmask (Must-Fix #1). */
+  /** O(1) liveness/staleness check. Never consults the bitmask. */
   isAlive(handle: EntityHandle): boolean
   /**
-   * O(1) component membership point-test via the per-entity bitmask (archetype-storage.md §6.4).
-   * Main-thread/serial only (BM-1). Returns false for a dead handle (liveness checked first,
+   * O(1) component membership point-test via the per-entity bitmask.
+   * Main-thread/serial only. Returns false for a dead handle (liveness checked first,
    * without reading the bitmask).
    */
   has(handle: EntityHandle, def: ComponentDef<Schema>): boolean
   /**
    * Resolve the pooled EntityRef for `handle`; throws on a dead handle unless `{ lenient: true }`
-   * (entity-model.md §6.4). `spawnWith(...defs)` is the other §6.1 public-surface member; it is
-   * intentionally deferred to storage (M3), which owns target-signature computation and the
+   * `spawnWith(...defs)` is the other; it is
+   * intentionally deferred to storage, which owns target-signature computation and the
    * single migration — the handle mint here is meaningless without an archetype to land in.
    */
   entity(handle: EntityHandle, opts?: { lenient?: boolean }): EntityRef
 
-  /** Pre-reserve a block of live handles for a worker to consume mid-wave (entity-model.md §5.1). Serial-phase only. */
+  /** Pre-reserve a block of live handles for a worker to consume mid-wave. Serial-phase only. */
   reserveEntityBlock(workerIndex: number, count: number): EntityReservation
-  /** Reclaim the unconsumed tail of a reservation, LIFO, at bumped generation (entity-model.md §5.1). */
+  /** Reclaim the unconsumed tail of a reservation, LIFO, at bumped generation. */
   returnReservedIds(reservation: EntityReservation, consumedCount: number): void
 
-  /** Frozen handle codec layout, also valid to hand to workers (entity-model.md §2.2). */
+  /** Frozen handle codec layout, also valid to hand to workers. */
   readonly handleLayout: HandleLayout
   encodeHandle(index: number, generation: number): EntityHandle
   decodeHandle(handle: EntityHandle): { index: EntityIndex; generation: EntityGeneration }
@@ -256,40 +255,40 @@ export interface World {
 
   /**
    * Push (entityIndex, componentId[, fieldIndex]) to the reactivity write log for the `.changed`
-   * filter (world.md §9.1; Must-Fix #2). STUBBED as a no-op until M5 — the canonical signature and
-   * accessor-setter call sites are in place now so M5 only fills the body.
+   * filter. STUBBED as a no-op until — the canonical signature and
+   * accessor-setter call sites are in place now so only fills the body.
    */
   trackWrite(index: number, componentId: ComponentId, fieldIndex?: number): void
 
   /**
-   * Register a deferred observer (reactivity.md §7). Fires ONLY at the serial observer slot
-   * (observerDrain), NEVER synchronously mid-system (R-3). Mutations inside the handler stage to the
-   * command buffer and apply at the next serial flush (R-3 re-entrancy safety).
+   * Register a deferred observer. Fires ONLY at the serial observer slot
+   * (observerDrain), NEVER synchronously mid-system. Mutations inside the handler stage to the
+   * command buffer and apply at the next serial flush ( re-entrancy safety).
    */
   observe(term: ObserverTerm, handler: ObserverHandler): ObserverHandle
 
   /**
-   * Did any component on `handle` change strictly after tick `since`? (reactivity.md §6.3). Driven by
-   * the per-row changeVersion stamps, NOT the write log (R-2). Lazily enabled the first time a
+   * Did any component on `handle` change strictly after tick `since`?. Driven by
+   * the per-row changeVersion stamps, NOT the write log. Lazily enabled the first time a
    * `.changed` query flavor or this predicate is used.
    */
   changedSince(handle: EntityHandle, since: number): boolean
-  /** The rows of `archetypeId` whose changeVersion stamp is > since (the delta serializer scan, §6.3). */
+  /** The rows of `archetypeId` whose changeVersion stamp is > since (the delta serializer scan). */
   changedRows(archetypeId: number, since: number): Iterable<number>
 
-  /** Advance the frame tick (reactivity.frameReset calls this; world owns the counter, world.md §8). */
+  /** Advance the frame tick (reactivity.frameReset calls this; world owns the counter). */
   advanceTick(): void
-  /** §9.2 — merge per-worker write corrals into the ring (no-op single-threaded). */
+  /** (no-op single-threaded). */
   mergeCorrals(): void
-  /** §5.2 — drain the shape log, re-testing affected entities against referencing queries. */
+  /**, re-testing affected entities against referencing queries. */
   maintainStructural(): void
-  /** §7.3 — fire deferred observers at the serial observer slot. */
+  /** */
   observerDrain(): void
-  /** §8.2 — drain/merge spill, schedule next-frame ring resize. */
+  /** /merge spill, schedule next-frame ring resize. */
   flushLogs(): void
 
   /**
-   * Compile (or fetch the cached) LiveQuery for `terms` and return it (queries.md §4, §9). Identical
+   * Compile (or fetch the cached) LiveQuery for `terms` and return it. Identical
    * term sets share one LiveQuery by canonical hash (order-independent, pair-target-encoded). The
    * arity-cap overload family (1..8 inferred, 9+ → LooseQueryElement) is the WorldQuery type.
    */
@@ -297,7 +296,7 @@ export interface World {
 
   /**
    * Reset every live query's per-frame transient flavor (added/removed) lists. The kernel-only frame
-   * loop calls this at frame start (queries.md §8.2 / world.md §3.4); the scheduler drives it at M6.
+   * loop calls this at frame start; the scheduler drives it at.
    */
   frameReset(): void
 }
@@ -308,16 +307,16 @@ interface WorldState {
 }
 
 /**
- * The only world constructor (world.md §2.1). Resolves and validates options fail-fast, then
+ * The only world constructor. Resolves and validates options fail-fast, then
  * (at later milestones) probes capabilities, allocates bounded buffers, and wires the owning
  * modules. Returns a frozen World facade.
  */
 export function createWorld(options: WorldOptions = {}): World {
   const resolved = resolveOptions(options)
 
-  // --- Module wiring seam (world.md §7) ---
+  // --- Module wiring seam ---
   // registry → buffers → storage → reactivity → queries → scheduler → serialization.
-  // M1 lands the entity layer; later layers fill in around it.
+  // The entity layer lands first; later layers fill in around it.
   const state: WorldState = { phase: 'serial', tick: 0 }
 
   const handleLayout = makeHandleLayout(resolved.generationBits)
@@ -327,7 +326,7 @@ export function createWorld(options: WorldOptions = {}): World {
     shared: resolved.threaded,
   })
 
-  // --- buffers (world.md §7 step 2): one capability probe, one SAB-vs-AB decision (B-1) ---
+  // --- buffers: one capability probe, one SAB-vs-AB decision ---
   const workerMode: WorkerMode = resolved.threaded
     ? resolved.scheduler.workers === 'no-sab'
       ? 'no-sab'
@@ -339,18 +338,18 @@ export function createWorld(options: WorldOptions = {}): World {
   const buffers = new Buffers({ capabilities, maxEntities: resolved.maxEntities })
 
   // The accessor seam: a setter calls world.trackWrite. handleIndex strips the generation so the LOW
-  // handle bits index the write log (world.md §9.1, W-8). Routes to the reactivity module once built
+  // handle bits index the write log. Routes to the reactivity module once built
   // (late-bound so the acyclic construction order registry → buffers → storage → reactivity holds).
   let reactivity: Reactivity | null = null
   const trackWrite = (index: number, componentId: ComponentId, fieldIndex?: number): void => {
     reactivity?.trackWrite(index, componentId, fieldIndex)
   }
   // The shared "any write consumer exists" cell the accessor setters read to fast-out the trackWrite
-  // chain (P7). Reactivity owns recomputing `.active` on every flavor/observer/changeVersion
+  // chain. Reactivity owns recomputing `.active` on every flavor/observer/changeVersion
   // (de)registration; until reactivity is wired it stays false (no consumers can exist yet).
   const tracking = { active: false }
-  // The rich-field sidecar (rich-fields.md §4). Created BEFORE accessorWorld so the accessor's rich
-  // getters/setters can delegate through the seam (G-8). Main-thread-only; never shared with workers.
+  // The rich-field sidecar. Created BEFORE accessorWorld so the accessor's rich
+  // getters/setters can delegate through the seam. Main-thread-only; never shared with workers.
   const sidecar = new SidecarStore()
   // During an observer drain the rich getter must read the DYING entity's value (RF-REMOVE-READ); the
   // sidecar disambiguates via its pending-clear table, so route reads through readForObserver while a
@@ -365,11 +364,11 @@ export function createWorld(options: WorldOptions = {}): World {
     generationOf: (index) => entities.decodeHandle(entities.handleOfIndex(index)).generation as number,
   }
 
-  // --- registry (world.md §7 step 1): mint dense user ids, wire accessor factories ---
+  // --- registry: mint dense user ids, wire accessor factories ---
   const registry = new ComponentRegistry()
   registry.register(resolved.components as readonly ComponentDef<Schema>[])
 
-  // Declare a sidecar column per rich field of every registered component (rich-fields.md §4.6). This
+  // Declare a sidecar column per rich field of every registered component. This
   // is the single place the sidecar learns about a rich column; ensureColumn is idempotent.
   for (const def of resolved.components as readonly ComponentDef<Schema>[]) {
     const id = registry.idOf(def)
@@ -381,16 +380,16 @@ export function createWorld(options: WorldOptions = {}): World {
     }
   }
 
-  // --- bitmask + storage (world.md §7 steps 2-3): the per-entity membership index and the
-  // archetype tables. The bitmask stride = ceil(nextComponentId/32) (CANON C4); both derive from
-  // the SAME registered-component count so sigWords and bitmask layouts align (archetype-storage.md
-  // §3.3 / §6.1). Structural mutation is serial; the bitmask asserts world.phase === 'serial'.
+  // --- bitmask + storage: the per-entity membership index and the
+  // archetype tables. The bitmask stride = ceil(nextComponentId/32); both derive from the SAME
+  // registered-component count so sigWords and bitmask layouts align. Structural mutation is
+  // serial; the bitmask asserts world.phase === 'serial'.
   const bitmask = new Bitmask(buffers, registry.nextComponentId, resolved.maxEntities, () => state.phase)
   const stride = bitmask.stride
   const records = entities.records
   const handleIndexOf = (handle: number): number => handleIndex(handle as EntityHandle, handleLayout) as number
 
-  // Relations attach late (M8): the pair-resolver feeds the query compiler, the preDespawn hook runs
+  // Relations attach late: the pair-resolver feeds the query compiler, the preDespawn hook runs
   // before storage tears the row down, and the apply-pair fns back __apply for the scheduler. All are
   // mutable so the relations runtime injects them post-construction without a core→relations import.
   let pairResolver: ((relationId: number, target: number | symbol) => ResolvedPair) | null = null
@@ -425,9 +424,9 @@ export function createWorld(options: WorldOptions = {}): World {
     handleIndex: handleIndexOf,
   })
 
-  // --- queries (world.md §7 step 5): the canonical-hash dedup cache + per-archetype matching, kept
+  // --- queries: the canonical-hash dedup cache + per-archetype matching, kept
   // current by the archetypeCreated hook. fixedBitCount = stride*32 (ids below it pack into the
-  // signature words; larger pair ids are residual — queries.md §3.5).
+  // signature words; larger pair ids are residual — ).
   engine = new QueryEngine({
     buffers,
     bitmask,
@@ -458,9 +457,9 @@ export function createWorld(options: WorldOptions = {}): World {
     },
   })
 
-  // Rich-field despawn clear (rich-fields.md §4.3 / §4.3a). Walk the dying entity's signature for rich
+  // Rich-field despawn clear. Walk the dying entity's signature for rich
   // fields and decide whether to DEFER the clear: when any held component has a remove-observer, the
-  // R-8 deferred row reclaim keeps numeric values readable in onRemove, so the sidecar must stash the
+  // deferred row reclaim keeps numeric values readable in onRemove, so the sidecar must stash the
   // dying rich values for the same observer window (RF-REMOVE-READ). The decision mirrors storage's
   // `defer` gate exactly so rich and numeric parity holds.
   const sidecarOnDespawn = (handle: EntityHandle): void => {
@@ -489,7 +488,7 @@ export function createWorld(options: WorldOptions = {}): World {
   entities.setLifecycle({
     onSpawn: (handle) => storage.onSpawn(handle),
     onDespawn: (handle) => {
-      // relations.md §7.4 ordering: preDespawn (cascade + pair teardown) runs WHILE `dying` is still
+      // PreDespawn (cascade + pair teardown) runs WHILE `dying` is still
       // alive/resolvable, BEFORE storage.onDespawn shuffle-pops the row and the entity layer frees it.
       preDespawnHook?.(handle)
       // The rich clear runs BEFORE storage.onDespawn so the dying entity's signature is still resolvable
@@ -499,9 +498,9 @@ export function createWorld(options: WorldOptions = {}): World {
     },
   })
 
-  // --- reactivity (world.md §7 step 4): the write/shape rings, changeVersion stamps, deferred
+  // --- reactivity: the write/shape rings, changeVersion stamps, deferred
   // observers, and the query-flavor hooks. Wired AFTER storage + queries so trackWrite/trackShape and
-  // observer dispatch can resolve locations and re-test entities (reactivity.md §15 dependencies).
+  // observer dispatch can resolve locations and re-test entities.
   reactivity = new Reactivity({
     buffers,
     maxEntities: resolved.maxEntities,
@@ -529,9 +528,9 @@ export function createWorld(options: WorldOptions = {}): World {
     resolveHandle: (index) => entities.handleOfIndex(index) as number,
     tracking,
   })
-  // The shape-log drain re-runs the same idempotent single-entity maintenance the M4 synchronous
+  // The shape-log drain re-runs the same idempotent single-entity maintenance the synchronous
   // hook performs; the conservative overflow path needs a "current matches" source for change
-  // observers (§3.6).
+  // observers.
   reactivity.setMaintainHook((index, c) => engine?.maintainEntity(index, c as ComponentId))
   reactivity.setCurrentMembersSource(() => collectCurrentMembers(engine as QueryEngine))
   ;(engine as QueryEngine).setReactivity({
@@ -539,12 +538,12 @@ export function createWorld(options: WorldOptions = {}): World {
     drainChanged: (q) => (reactivity as Reactivity).drainChanged(q),
   })
 
-  // --- M9 deferred-observer command buffer (reactivity.md §7.4) ---
+  // --- deferred-observer command buffer ---
   // While observerDrain runs, the world's structural verbs (spawn/spawnWith/add/remove/despawn and
   // the relations apply-pair seam) STAGE here instead of direct-applying, so an observer handler that
-  // mutates structure cannot corrupt the wave the drain is replaying (R-3). The staged ops apply at
+  // mutates structure cannot corrupt the wave the drain is replaying. The staged ops apply at
   // the start of the NEXT drain — i.e. the next serial flush. applyAddPair/applyRemovePair are the
-  // SAME relation seams the scheduler's command-apply path drives (filled by __installRelations, M8).
+  // SAME relation seams the scheduler's command-apply path drives (filled by __installRelations).
   const observerCommands = new ObserverCommandBuffer()
   const observerApply: ObserverCommandApply = {
     placeReserved(handle, defs) {
@@ -565,11 +564,11 @@ export function createWorld(options: WorldOptions = {}): World {
     removePair: (subject, relationId, target) => applyRemovePair?.(subject, relationId, target),
   }
 
-  // --- serialization surface (serialization.md M10) -------------------------
+  // --- serialization surface -------------------------
   // Reads archetype columns/signatures + the registry + the relation provider; drives deserialize-side
   // spawn/migrate. The user-component metadata is the registered defs in dense-id order. Synthetic ids
   // (pair/presence/overflow) are intentionally excluded from `components()` — they are reconstructed by
-  // re-minting on the receiver (serialization.md §3.2), never shipped as schema.
+  // re-minting on the receiver, never shipped as schema.
   const userComponents = resolved.components as readonly ComponentDef<Schema>[]
   const componentIdByName = new Map<string, ComponentId>()
   for (const def of userComponents) {
@@ -577,7 +576,7 @@ export function createWorld(options: WorldOptions = {}): World {
     if (id !== undefined) componentIdByName.set(def.name, id)
   }
 
-  // Rich-field enumeration for the serialization sidecar section (rich-fields.md §7.1 / G-4). Built once
+  // Rich-field enumeration for the serialization sidecar section. Built once
   // from the registered defs in (componentId, fieldIndex) order; the snapshot/delta writers join this
   // with each entity's signature — they MUST NOT read `archetypeView().components`, which strips rich
   // fields (and drops rich-only components entirely).
@@ -593,7 +592,7 @@ export function createWorld(options: WorldOptions = {}): World {
   }
 
   const computeSchemaHash = (): number => {
-    // FNV-1a over the canonical (componentName, fieldName, token)* + relation names (§3.2). The receiver
+    // FNV-1a over the canonical (componentName, fieldName, token)* + relation names. The receiver
     // recomputes it from ITS defineComponent set and must match — a fail-fast guard against stale code.
     let h = 0x811c9dc5
     const fnv = (s: string): void => {
@@ -616,11 +615,11 @@ export function createWorld(options: WorldOptions = {}): World {
 
   const archetypeView = (arch: Archetype): SerializeArchetype => {
     const components: SerializeComponentColumns[] = []
-    // Iterate the signature in canonical (sorted) order so column order is deterministic (§4.4).
+    // Iterate the signature in canonical (sorted) order so column order is deterministic.
     for (let i = 0; i < arch.signature.length; i++) {
       const c = arch.signature[i] as number as ComponentId
       const set = arch.columnSets.get(c)
-      if (set === undefined) continue // tag / pair / no column (§4.5)
+      if (set === undefined) continue // tag / pair / no column
       const def = registry.defOf(c)
       if (def === undefined) continue
       const fields: FieldDescriptor[] = []
@@ -698,7 +697,7 @@ export function createWorld(options: WorldOptions = {}): World {
       sidecar.write(key, index, gen, value)
       // Mark the loaded value changed identically to a live write so a delta from THIS receiver re-emits
       // it (parity with the column path, which writes through tracked accessor setters). Whole-entity
-      // changeVersion stamp; fieldIndex forwarded but discarded downstream as for numeric fields (§5.3).
+      // changeVersion stamp; fieldIndex forwarded but discarded downstream as for numeric fields.
       trackWrite(index, componentId as ComponentId, fieldIndex)
     },
     enableStructuralJournal() {
@@ -765,7 +764,7 @@ export function createWorld(options: WorldOptions = {}): World {
     capabilities: () => capabilities,
   }
 
-  // --- introspection surface (P5 / @ecsia/devtools) -------------------------
+  // --- introspection surface (@ecsia/devtools) -------------------------
   // The FULL archetype census (cold + empty, which __serialize.archetypes() filters out) and the live
   // query enumeration (the QueryEngine's `liveQueries` getter is core-private). Pure reads.
   const inspect: InspectSurface = {
@@ -917,7 +916,7 @@ export function createWorld(options: WorldOptions = {}): World {
     },
     spawn() {
       if (observerCommands.deferring) {
-        // §7.4: a spawn inside an observer reserves a live handle NOW (so the handler can configure it)
+        // A spawn inside an observer reserves a live handle NOW (so the handler can configure it)
         // but defers archetype placement to the next flush — the command-buffer reserved-spawn model.
         const handle = reserveEntityBlock(entities.index, -1, 1).handles[0] as EntityHandle
         observerCommands.stageSpawnWith(handle, [])
@@ -981,7 +980,7 @@ export function createWorld(options: WorldOptions = {}): World {
       return entities.isAlive(handle)
     },
     has(handle, def) {
-      // Liveness first, WITHOUT the bitmask (Must-Fix #1); a dead handle is never a member.
+      // Liveness first, WITHOUT the bitmask; a dead handle is never a member.
       if (!entities.isAlive(handle)) return false
       return storage.has(handle, def)
     },
@@ -1032,11 +1031,11 @@ export function createWorld(options: WorldOptions = {}): World {
       ;(reactivity as Reactivity).maintainStructural()
     },
     observerDrain() {
-      // R-3 re-entrancy guard: a drain must never re-enter itself (the flush below can trigger query
+      // re-entrancy guard: a drain must never re-enter itself (the flush below can trigger query
       // maintenance / structural ops that must not recursively re-drain). If already draining, return.
       if (!observerCommands.enterDrain()) return
       try {
-        // §7.4 "applied at the NEXT serial flush": apply the ops staged by the PREVIOUS drain's
+        // "applied at the NEXT serial flush": apply the ops staged by the PREVIOUS drain's
         // observers before reading this drain's frozen log snapshot. For 'frame-end' cadence this is the
         // next frame; for 'per-system' it is the next wave's slot. Applying here (not synchronously
         // mid-handler) is what makes a spawned entity observable by onAdd NEXT drain, deterministically.
@@ -1051,7 +1050,7 @@ export function createWorld(options: WorldOptions = {}): World {
         }
       } finally {
         observerCommands.exitDrain()
-        // rich-fields.md §4.3a: flush the deferred rich-field clears now that onRemove handlers have run
+        // Flush the deferred rich-field clears now that onRemove handlers have run
         // — the same post-observer point storage's deferred row reclaim ceases to be readable. After this
         // the dying entity's rich values are gone (RF-REMOVE-READ window closes); a recycled index reads
         // the default via the generation guard regardless.
@@ -1067,7 +1066,7 @@ export function createWorld(options: WorldOptions = {}): World {
       return (engine as QueryEngine).query(terms)
     }) as unknown as WorldQuery,
     frameReset() {
-      // §10.1: reactivity.frameReset advances the world tick + recycles the rings; then the query
+      // Reactivity.frameReset advances the world tick + recycles the rings; then the query
       // engine clears its per-frame added/removed delta lists.
       ;(reactivity as Reactivity).frameReset()
       ;(engine as QueryEngine).frameReset()
@@ -1077,7 +1076,7 @@ export function createWorld(options: WorldOptions = {}): World {
   return Object.freeze(world)
 }
 
-/** Collect the union of every live query's current matching indices (the §3.6 conservative source). */
+/** Collect the union of every live query's current matching indices. */
 function collectCurrentMembers(engine: QueryEngine): Iterable<number> {
   const seen = new Set<number>()
   for (const lq of engine.liveQueries) {

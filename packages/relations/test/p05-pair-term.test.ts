@@ -1,4 +1,4 @@
-// P0.5 Wave-1: the relation-pair query-term constructor rel.Pair(R, target|Wildcard) is now typed as a
+// the relation-pair query-term constructor rel.Pair(R, target|Wildcard) is now typed as a
 // PairDef<R> (a QueryTerm), so a user can write query(rel.Pair(...)) WITHOUT an `as never` cast. This
 // file deliberately uses no cast — if the typing regresses to `unknown`, this test stops compiling.
 
@@ -7,7 +7,7 @@ import { createWorld, defineComponent } from '@ecsia/core'
 import { createRelations, Wildcard } from '../src/index.js'
 import type { PairDef, RelationDef } from '@ecsia/schema'
 
-describe('P0.5 rel.Pair query-term constructor (typed, no cast)', () => {
+describe('rel.Pair query-term constructor (typed, no cast)', () => {
   test('rel.Pair returns a typed PairDef usable directly in query()', () => {
     const Name = defineComponent({ v: 'f32' }, { name: 'name' })
     const world = createWorld({ components: [Name] })

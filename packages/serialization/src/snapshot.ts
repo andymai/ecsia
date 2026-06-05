@@ -1,8 +1,8 @@
-// The snapshot serializer (serialization.md §4): a self-describing little-endian image of the whole
+// The snapshot serializer: a self-describing little-endian image of the whole
 // world at one tick — header + registry + structure + SoA + relations. SoA columns are written with
 // ONE contiguous byte copy per column from the archetype's column slice (rejecting the bitECS
-// per-entity gather / per-call slice, §4.3). Relations serialize as the logical
-// (subject, relationId, target, payload) triple — never the synthetic pair id (§8.3).
+// per-entity gather / per-call slice). Relations serialize as the logical
+// (subject, relationId, target, payload) triple — never the synthetic pair id.
 
 import type { World } from '@ecsia/core'
 import type { EntityHandle } from '@ecsia/schema'
@@ -24,18 +24,18 @@ import { encodeRichValue, richKindOrdinal, type OnUnserializable } from './rich.
 export interface SnapshotOptions {
   /** Serialize relations (default true). */
   readonly includeRelations?: boolean
-  /** Initial reusable-output byte size; doubles on overflow (§9.1). */
+  /** Initial reusable-output byte size; doubles on overflow. */
   readonly initialOutputBytes?: number
-  /** Policy for a rich value JSON cannot encode (rich-fields.md §7.4). Default: SKIP + dev-warn. */
+  /** Policy for a rich value JSON cannot encode. Default: SKIP + dev-warn. */
   readonly onUnserializable?: OnUnserializable
 }
 
 /**
  * A reusable whole-world snapshot serializer (v2 wire). Rich fields ('string' / object<T>) ride a JSON
- * sidecar section (rich-fields.md §7.2); only WRITTEN values are emitted (default slots re-default on
+ * sidecar section; only WRITTEN values are emitted (default slots re-default on
  * load). Non-serializable rich values follow the `onUnserializable` policy (SKIP + dev-warn by default).
  *
- * LIMITATION — RF-NOREMAP (rich-fields.md §7.5): an `EntityHandle` stored INSIDE an `object<T>` rich
+ * LIMITATION — RF-NOREMAP: an `EntityHandle` stored INSIDE an `object<T>` rich
  * field is serialized as a raw number and is NOT remapped on deserialize — the JSON path cannot
  * introspect an opaque object graph for handles. After a round-trip such a handle refers to the
  * PRODUCER's index space and is almost certainly invalid. To carry an entity reference that survives the
@@ -45,7 +45,7 @@ export interface SnapshotOptions {
 export interface SnapshotSerializer {
   /** Serialize the whole world; returns a view onto the reusable buffer, valid until the next call. */
   snapshot(): Uint8Array
-  /** As above but a fresh detached buffer safe to transfer/persist (§9.3). */
+  /** As above but a fresh detached buffer safe to transfer/persist. */
   snapshotCopy(): Uint8Array
 }
 
@@ -69,8 +69,8 @@ export function createSnapshotSerializer(world: World, opts: SnapshotOptions = {
     for (const a of archs) aliveCount += a.count
 
     // --- SECTION 0: HEADER (36 bytes in v2; offsets + flags back-patched) ---
-    // v2 grows the header from 32→36 bytes with a back-patched `richSectionOffset` word (rich-fields.md
-    // §7.2 / G-5) so the RICH section is directly seekable, independent of the relations-present split.
+    // v2 grows the header from 32→36 bytes with a back-patched `richSectionOffset` word so the
+    // RICH section is directly seekable, independent of the relations-present split.
     cur.u32(SNAPSHOT_MAGIC) // 0
     cur.u16(SERIALIZATION_FORMAT_VERSION) // 4
     cur.u8(1) // 6 ENDIAN = little
@@ -105,7 +105,7 @@ export function createSnapshotSerializer(world: World, opts: SnapshotOptions = {
       cur.u8((r.exclusive ? 1 : 0) | (r.hasPayload ? 2 : 0))
       cur.u32(r.presenceId as number)
     }
-    // staticString choices tables (§4.1): emitted per component field that is a staticString.
+    // staticString choices tables: emitted per component field that is a staticString.
     const stringTables: { componentId: number; fieldIndex: number; choices: readonly string[] }[] = []
     for (const c of comps) {
       const fields = s.fieldsOf(c.id)
@@ -159,7 +159,7 @@ export function createSnapshotSerializer(world: World, opts: SnapshotOptions = {
           cur.u8(stride)
           const slice = (col.view as unknown as { subarray(s: number, e: number): ArrayBufferView }).subarray(0, elems)
           cur.u32(elems * col.layout.elementBytes)
-          cur.copyBytes(slice) // ONE copy from the contiguous column slice (§4.3)
+          cur.copyBytes(slice) // ONE copy from the contiguous column slice
           cur.alignTo4()
         }
       }
@@ -179,8 +179,8 @@ export function createSnapshotSerializer(world: World, opts: SnapshotOptions = {
 
     // --- SECTION 5: RICH (JSON sidecar) — present iff the world has rich fields with present values ---
     // Enumerated by joining each alive entity's signature with s.richFields() (NOT a.components, which
-    // strips rich fields — G-4). Only present (written) values are emitted; a default/empty slot is
-    // skipped and the receiver re-defaults it (§4.4). Sparse by construction.
+    // strips rich fields — ). Only present (written) values are emitted; a default/empty slot is
+    // skipped and the receiver re-defaults it. Sparse by construction.
     const richFields = s.richFields()
     if (richFields.length > 0) {
       // Group rich fields by component id for an O(1) per-entity lookup against its signature.
@@ -206,7 +206,7 @@ export function createSnapshotSerializer(world: World, opts: SnapshotOptions = {
             const fields = byComponent.get(cid)
             if (fields === undefined) continue
             for (const rf of fields) {
-              // Emit only WRITTEN slots (§7.2): a never-written / default slot is skipped and re-defaulted
+              // Emit only WRITTEN slots: a never-written / default slot is skipped and re-defaulted
               // on the receiver. This distinguishes "wrote the empty string '' " (present) from "never
               // touched the field" (absent) — both of which read back as '' through richValueOf.
               if (!s.richIsPresent(handle as EntityHandle, rf.componentId, rf.fieldIndex)) continue

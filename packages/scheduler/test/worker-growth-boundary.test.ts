@@ -3,16 +3,16 @@
 // single-thread replay of the identical seeding + plan, and must be byte-identical.
 //
 // A threaded column reserves INITIAL_ROWS(64) × GROWTH_RESERVE_FACTOR(16) = 1024 rows of resizable-SAB
-// address space (memory-buffers.md §7.7; floored by MIN_RESERVE_ROWS=1024). Growth has two flavors:
+// address space (floored by MIN_RESERVE_ROWS=1024). Growth has two flavors:
 //
-//   IN-PLACE  (≤1024 rows, within the reservation): `sab.grow()` widens the SAME SharedArrayBuffer.
-//             Worker views are length-tracking (world-view.ts `wrap` — no length arg), so they auto-widen
-//             and NO re-backing notice is emitted (the growth generation does NOT advance). ASSERTED below.
-//   RE-BACKING (>1024 rows): the reservation is exhausted, so buffers.ts #growFallback allocates a NEW
-//             SharedArrayBuffer, copies, and re-binds the MAIN thread's ViewHolders. It ALSO records a
-//             re-backing notice (buffers.ts columnGrowth journal); the pool drains it at the wave fence
-//             and broadcasts the new SAB to every worker (pool.#drainColumnGrowth → worker applyColumnGrowth)
-//             BEFORE the next dispatch, so the worker re-wraps and stays serial-equivalent past 1024.
+// IN-PLACE (≤1024 rows, within the reservation): `sab.grow()` widens the SAME SharedArrayBuffer.
+// Worker views are length-tracking (world-view.ts `wrap` — no length arg), so they auto-widen
+// and NO re-backing notice is emitted (the growth generation does NOT advance). ASSERTED below.
+// RE-BACKING (>1024 rows): the reservation is exhausted, so buffers.ts #growFallback allocates a NEW
+// SharedArrayBuffer, copies, and re-binds the MAIN thread's ViewHolders. It ALSO records a
+// re-backing notice (buffers.ts columnGrowth journal); the pool drains it at the wave fence
+// and broadcasts the new SAB to every worker (pool.#drainColumnGrowth → worker applyColumnGrowth)
+// BEFORE the next dispatch, so the worker re-wraps and stays serial-equivalent past 1024.
 //
 // Wiring mirrors m7-threaded-update.integration.test.ts: a real WorkerPool over the built worker-entry +
 // a kernel .mjs. The boundary matrix (group 1) crosses 1024 at pool-start, between waves (main-thread
@@ -309,10 +309,10 @@ describe('both growth flavors forced', () => {
   })
 
   // RE-BACKING with an EXPLICIT SENTINEL read-back. The worker pool runs Regen+Copy. We:
-  //   1. seed 1000 (under boundary), run a wave to capture the worker manifest at the OLD backing,
-  //   2. spawn to 1040 from the main thread → the Health column RE-BACKS onto a NEW SAB,
-  //   3. write a distinctive SENTINEL into a HIGH Health row (index 1039) on the main thread, post-grow,
-  //   4. run a wave whose Copy kernel does Mana := Health.
+  // 1. seed 1000 (under boundary), run a wave to capture the worker manifest at the OLD backing,
+  // 2. spawn to 1040 from the main thread → the Health column RE-BACKS onto a NEW SAB,
+  // 3. write a distinctive SENTINEL into a HIGH Health row (index 1039) on the main thread, post-grow,
+  // 4. run a wave whose Copy kernel does Mana := Health.
   // If the worker re-wrapped onto the NEW backing it reads the sentinel and writes it into that entity's
   // Mana. If it kept the OLD (abandoned, 1024-row) backing, row 1039 is out of range → it reads/writes
   // garbage and Mana never equals the sentinel. We assert Mana[1039] === sentinel EXACTLY.

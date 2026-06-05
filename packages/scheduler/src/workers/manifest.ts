@@ -1,11 +1,10 @@
-// The workerData payload posted ONCE per worker at pool startup (serialization.md §3.1 WorldBootstrap,
-// scheduler.md §7.6). Carries the shared buffer set (by reference — SABs are sharable, NOT transferred)
+// The workerData payload posted ONCE per worker at pool startup (). Carries the shared buffer set (by reference — SABs are sharable, NOT transferred)
 // plus the per-worker control SABs the dispatch loop uses. No component VALUES are ever serialized
-// (zero-copy, §3.3): the worker reads live SAB columns.
+// (zero-copy): the worker reads live SAB columns.
 
 import type { SharedHandleManifest } from '@ecsia/core'
 
-/** Dense component-id assignment so the worker aligns ids identically (serialization.md §3.2). */
+/** Dense component-id assignment so the worker aligns ids identically. */
 export interface ComponentManifestEntry {
   readonly name: string
   readonly id: number
@@ -34,7 +33,7 @@ export interface WorkerBootstrap {
   /** Wake SAB: the worker Atomics.waits on [0]; the main thread bumps it + notifies to dispatch. */
   readonly wakeSab: SharedArrayBuffer
   /**
-   * Re-backing signal SAB (serialization.md §3.4 / memory-buffers.md §7.6). Word [0] = the column
+   * Re-backing signal SAB. Word [0] = the column
    * re-backing generation the main thread last published. When the worker is woken and finds [0] !=
    * its last-applied generation, the wake is a NOTICE round: it `await`s the queued `columns-added`
    * postMessage (the only transport that can carry a new SharedArrayBuffer reference), re-wraps the
@@ -43,7 +42,7 @@ export interface WorkerBootstrap {
    */
   readonly noticeSab: SharedArrayBuffer
   /**
-   * Per-worker write-corral SAB (reactivity.md §9.1, R-4): the worker stages value writes here as
+   * Per-worker write-corral SAB: the worker stages value writes here as
    * `[count, index0, componentId0, index1, componentId1, …]`. Word [0] is the entry count; the main
    * thread reads it after the fence and merges into the shared write log in worker-index order. No
    * atomics on the worker push path — it is single-writer, drained only after the wave fence.
@@ -60,7 +59,7 @@ export interface DispatchMessage {
 }
 
 /**
- * The re-backing broadcast (serialization.md §3.4). Posted to each worker at the wave fence carrying
+ * The re-backing broadcast. Posted to each worker at the wave fence carrying
  * the NEW SharedArrayBuffer backings (by reference — SABs cannot ride a SAB) so the worker re-wraps
  * its stale column views. `generation` matches `noticeSab[0]`; the worker ACKs via the wave fence.
  */

@@ -1,4 +1,4 @@
-// Watch mode (P5 §2): per-frame deltas built on the PUBLIC observer/reactivity API (onAdd / onRemove /
+// Watch mode: per-frame deltas built on the PUBLIC observer/reactivity API (onAdd / onRemove /
 // onChange via world.observe) plus cheap state sampling (aliveCount + archetype census). The watcher
 // installs one add/remove/change observer over the world's registered components; observers fire at the
 // serial drain, so accumulated counts are read + reset each time the caller signals a frame boundary via
@@ -25,7 +25,7 @@ export interface WorldWatcher {
 }
 
 /**
- * Watch `world` for per-frame deltas (§2). Registers add/remove/change observers across the world's
+ * Watch `world` for per-frame deltas. Registers add/remove/change observers across the world's
  * registered components and samples aliveCount + archetype count at each `tick()`. The returned watcher's
  * `dispose()` removes all observers.
  */

@@ -1,4 +1,4 @@
-// Conflict-edge derivation (scheduler.md §4.1–§4.3). Produces the resolved max-weight directed edge
+// Conflict-edge derivation. Produces the resolved max-weight directed edge
 // set `A → B` ("A must run before B") from four sources: EXPLICIT before/after (5), DENY suppression
 // (4, removes IMPLICIT only), CLASS_HINT coarse helpers (3), and the auto IMPLICIT conflict edges (1).
 
@@ -12,7 +12,7 @@ export interface Edge {
   readonly from: SystemId
   readonly to: SystemId
   readonly weight: EdgeWeight
-  /** Human-readable cause used in cycle reporting (§4.5). */
+  /** Human-readable cause used in cycle reporting. */
   readonly cause: string
 }
 
@@ -74,7 +74,7 @@ export function resolveOrdering(
 }
 
 /**
- * Collect the unordered pairs the user denied any implicit ordering between (§4.2). Endpoints resolve
+ * Collect the unordered pairs the user denied any implicit ordering between. Endpoints resolve
  * by SystemDef identity first, then by `name` (unique per world) — name-matching tolerates the common
  * spread-copy pattern `defineSystem({ ...a, order: [inAnyOrderWith(a, b)] })` where the registered def
  * is a copy of the hint endpoint.
@@ -112,7 +112,7 @@ function writes(systems: readonly SystemBox[], id: SystemId, c: number): boolean
   return (words[c >>> 5]! & (1 << (c & 31))) !== 0
 }
 
-/** §4.3: IMPLICIT conflict edges. Reader–reader pairs never conflict; direction = registration order. */
+/**: IMPLICIT conflict edges. Reader–reader pairs never conflict; direction = registration order. */
 function deriveImplicit(
   systems: readonly SystemBox[],
   access: AccessMaps,
@@ -150,7 +150,7 @@ function deriveImplicit(
   }
 }
 
-/** §4.2: CLASS_HINT coarse helpers add weight-3 edges to all current writers/readers of `c`. */
+/**: CLASS_HINT coarse helpers add weight-3 edges to all current writers/readers of `c`. */
 function applyClassHints(systems: readonly SystemBox[], access: AccessMaps, b: EdgeBuilders): void {
   for (const sb of systems) {
     for (const hint of sb.def.order ?? []) {
@@ -183,7 +183,7 @@ function applyClassHints(systems: readonly SystemBox[], access: AccessMaps, b: E
   }
 }
 
-/** §4.2: EXPLICIT before/after edges (weight 5). */
+/**: EXPLICIT before/after edges (weight 5). */
 function applyExplicit(systems: readonly SystemBox[], b: EdgeBuilders): void {
   for (const sb of systems) {
     for (const after of sb.after) {

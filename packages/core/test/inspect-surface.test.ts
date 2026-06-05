@@ -1,4 +1,4 @@
-// The read-only __inspect seam (P5 / @ecsia/devtools): the FULL archetype census (cold + empty) + the
+// The read-only __inspect seam (@ecsia/devtools): the FULL archetype census (cold + empty) + the
 // live-query enumeration that __serialize does not reach.
 
 import { describe, expect, test } from 'vitest'

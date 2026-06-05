@@ -1,4 +1,4 @@
-// World inspector (P5 §1): a pure read over the world's `__serialize` (component/rich/relation metadata)
+// World inspector: a pure read over the world's `__serialize` (component/rich/relation metadata)
 // + `__inspect` (the FULL archetype census + live-query enumeration) + `world.options` (capacity). The
 // result is a plain WorldReport — everything assertable headless, nothing live.
 
@@ -13,7 +13,7 @@ import type {
 import { renderTerm, componentNameMap } from './names.js'
 
 /**
- * Inspect `world` and return a plain, serializable report (§1). Reads ONLY the world's serialization +
+ * Inspect `world` and return a plain, serializable report. Reads ONLY the world's serialization +
  * introspection seams (`__serialize` / `__inspect`) and `options` — no structural mutation, no live
  * handles in the output. Safe to call at any serial point.
  */

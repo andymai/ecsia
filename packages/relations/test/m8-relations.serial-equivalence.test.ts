@@ -1,11 +1,11 @@
-// M8 relations — SERIAL-EQUIVALENCE property (carry from M7, relations.md §5.6 / command-buffer §8.3).
+// relations — SERIAL-EQUIVALENCE property (carry from, / command-buffer ).
 // Worker-staged OP_ADD_PAIR / OP_REMOVE_PAIR with FUZZED dead subjects/targets, applied through the
 // real scheduler command-buffer flush, must produce the IDENTICAL relation state as a SERIAL direct
 // application of the same logical ops (drop-if-dead enforced identically on both sides).
 //
 // This is the relation-specific extension of the generic validate-then-apply invariant: ADD_PAIR drops
 // if EITHER subject or target is dead at apply time; REMOVE_PAIR drops if the subject is dead. The
-// command-apply path (un-stubbed at M8) routes to the same addPair/removePair createRelations installed
+// command-apply path (un-stubbed at ) routes to the same addPair/removePair createRelations installed
 // into world.__apply, so the multi-worker merge is serial-equivalent to a single-threaded apply.
 //
 // The relations runtime imports @ecsia/core only; this TEST may import @ecsia/scheduler (tests are not
@@ -106,7 +106,7 @@ function fingerprint(kit: Kit): { pairs: string[]; presence: boolean[]; alive: b
   return { pairs, presence, alive }
 }
 
-describe('SERIAL-EQUIVALENCE — worker-staged OP_ADD_PAIR/OP_REMOVE_PAIR vs serial apply (CB-2 / §5.6)', () => {
+describe('SERIAL-EQUIVALENCE — worker-staged OP_ADD_PAIR/OP_REMOVE_PAIR vs serial apply ', () => {
   test('a fuzzed multi-worker relation workload (with dead subjects/targets) matches the serial result', () => {
     fc.assert(
       fc.property(
@@ -115,8 +115,8 @@ describe('SERIAL-EQUIVALENCE — worker-staged OP_ADD_PAIR/OP_REMOVE_PAIR vs ser
           const N = 6
 
           // --- SERIAL reference: apply the SAME logical ops directly, in fixed worker-index then
-          //     append order (the deterministic merge order flushAll enforces). drop-if-dead applies
-          //     here too because addPair/removePair guard on isAlive(subject)/isAlive(target). ---
+          // append order (the deterministic merge order flushAll enforces). drop-if-dead applies
+          // here too because addPair/removePair guard on isAlive(subject)/isAlive(target). ---
           const ref = makeKit(N)
           for (const ops of perWorker) {
             for (const op of ops) {
@@ -159,7 +159,7 @@ describe('SERIAL-EQUIVALENCE — worker-staged OP_ADD_PAIR/OP_REMOVE_PAIR vs ser
         const kit = makeKit(N)
         // Worker 0 destroys the first `victims` entities (as targets); worker 1 (applied AFTER) tries to
         // add a Likes pair to each. Every such ADD_PAIR must drop — a relation to a dead target is
-        // meaningless (command-buffer §8.3) — so NO survivor holds a Likes pair to a destroyed target.
+        // meaningless (command-buffer ) — so NO survivor holds a Likes pair to a destroyed target.
         const w0 = makeCommandBuffer(0, 512, false)
         const w1 = makeCommandBuffer(1, 512, false)
         const enc0 = encoderOver(w0, () => {})

@@ -1,8 +1,8 @@
-// Field-word codec for OP_ADD / OP_SET_PAYLOAD / OP_ADD_PAIR payloads (command-buffer.md §4.3, §4.4).
+// Field-word codec for OP_ADD / OP_SET_PAYLOAD / OP_ADD_PAIR payloads.
 // Each component/relation field contributes `stride` u32 words to a record's payload tail; f64
 // contributes two words (low, high). The codec is derived ONCE per component from its FieldDescriptor
 // list (declaration order). Encode widens a JS value to its u32 slot bit-pattern; decode narrows back.
-// Object<T> fields are NOT encodable (restrictedToMainThread, §4.3) — a component carrying one is
+// Object<T> fields are NOT encodable (restrictedToMainThread) — a component carrying one is
 // worker-ineligible upstream, so this path never sees it.
 
 import type { ComponentDef, FieldDescriptor, Schema } from '@ecsia/schema'

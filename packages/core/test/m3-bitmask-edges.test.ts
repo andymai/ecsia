@@ -1,4 +1,4 @@
-// M3 bitmask serial-only enforcement (BM-1) + edge-graph / multi-id migration unit tests, driven
+// bitmask serial-only enforcement + edge-graph / multi-id migration unit tests, driven
 // against the exported Bitmask and ArchetypeStore directly (no full world) so the phase gate and
 // the edge cache can be observed in isolation.
 
@@ -10,7 +10,7 @@ import type { RecordSurface, Signature } from '../src/internal.js'
 
 const newBuffers = (): Buffers => new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 16 })
 
-describe('Bitmask BM-1: every access asserts world.phase === serial', () => {
+describe('Bitmask: every access asserts world.phase === serial', () => {
   test('bitmaskHas / bitmaskApplyDelta / entityShapeWords throw during a wave', () => {
     let phase: 'serial' | 'wave' = 'serial'
     const bm = new Bitmask(newBuffers(), 4, 1 << 16, () => phase)
@@ -76,15 +76,15 @@ function makeStore(componentCount: number, maxHotArchetypes = 1024): {
   return { store, recordArch, recordRow }
 }
 
-describe('ArchetypeStore edge graph (AR-1, EDGE-1)', () => {
-  test('AR-1: getOrCreateArchetype interns structurally-equal signatures', () => {
+describe('ArchetypeStore edge graph ', () => {
+  test(': getOrCreateArchetype interns structurally-equal signatures', () => {
     const { store } = makeStore(3)
     const a = store.getOrCreateArchetype(canonicalize([1, 2]) as Signature)
     const b = store.getOrCreateArchetype(canonicalize([2, 1]) as Signature)
     expect(a).toBe(b)
   })
 
-  test('EDGE-1: edgeAdd caches both the add edge and the reverse remove edge on first miss', () => {
+  test(': edgeAdd caches both the add edge and the reverse remove edge on first miss', () => {
     const { store } = makeStore(3)
     const empty = store.emptyArchetype
     const withC1 = store.edgeAdd(empty, 1 as ComponentId)
@@ -98,7 +98,7 @@ describe('ArchetypeStore edge graph (AR-1, EDGE-1)', () => {
   })
 })
 
-describe('multi-id atomic migration (§5.6a)', () => {
+describe('multi-id atomic migration ', () => {
   test('migrateAddingMany lands a pair of ids in ONE target archetype', () => {
     const { store, recordArch } = makeStore(4)
     const handle = 0x000a // index 10

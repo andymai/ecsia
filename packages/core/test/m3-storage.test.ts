@@ -1,4 +1,4 @@
-// M3 storage kernel suite (archetype-storage.md §11 invariants + bitmask §6). Exercises signature
+// storage kernel suite (bitmask ). Exercises signature
 // canonicalization/interning, the lazy edge graph, swap-pop removal, migration cost/correctness,
 // spawnWith single-migration, multi-id atomic migration, the per-entity bitmask (serial-only +
 // coherence), and the cold-archetype fragmentation cap.
@@ -11,8 +11,8 @@ import type { Signature } from '../src/internal.js'
 
 const sig = (ids: number[]): Signature => canonicalize(ids as unknown as ComponentId[])
 
-describe('Signature (archetype-storage.md §3.2, §3.8, §5.2 — SIG-1)', () => {
-  test('canonicalize sorts ascending and de-dups (SIG-1)', () => {
+describe('Signature ', () => {
+  test('canonicalize sorts ascending and de-dups ', () => {
     const s = sig([5, 1, 3, 1, 5, 2])
     expect([...s]).toEqual([1, 2, 3, 5])
   })
@@ -46,8 +46,8 @@ describe('Signature (archetype-storage.md §3.2, §3.8, §5.2 — SIG-1)', () =>
   })
 })
 
-describe('Archetype interning + edge graph (AR-1, EDGE-1)', () => {
-  test('AR-1: spawnWith two component orders interns the SAME archetype object', () => {
+describe('Archetype interning + edge graph ', () => {
+  test(': spawnWith two component orders interns the SAME archetype object', () => {
     const A = defineComponent({ x: 'f32' }, { name: 'c1' })
     const B = defineComponent({ y: 'f32' }, { name: 'c2' })
     const w = createWorld({ components: [A, B] })
@@ -76,7 +76,7 @@ describe('Archetype interning + edge graph (AR-1, EDGE-1)', () => {
   })
 })
 
-describe('migration correctness (MIG-1, ROW-1) + spawnWith', () => {
+describe('migration correctness + spawnWith', () => {
   test('spawnWith is a SINGLE migration: values written then read back', () => {
     const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c4' })
     const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'c5' })
@@ -92,7 +92,7 @@ describe('migration correctness (MIG-1, ROW-1) + spawnWith', () => {
     expect((w.entity(e).read(Velocity) as { dx: number }).dx).toBe(-1)
   })
 
-  test('column growth past the 1024 reserve keeps per-field views correctly mapped (GROW-1)', () => {
+  test('column growth past the 1024 reserve keeps per-field views correctly mapped ', () => {
     // INITIAL_ROWS (64) × GROWTH_RESERVE_FACTOR (16) = 1024 reserved rows; spawning the 1025th entity
     // exhausts the resizable reservation and forces the fallback grow (column re-alloc + view rebind).
     // The rebind must re-point ONLY the grown field's view — a whole-instance rebind aliases the
@@ -126,7 +126,7 @@ describe('migration correctness (MIG-1, ROW-1) + spawnWith', () => {
     expect((w.entity(e).read(Position) as { x: number }).x).toBe(7)
   })
 
-  test('swap-pop keeps sibling rows resolvable after a middle entity migrates (ROW-1/MIG-1)', () => {
+  test('swap-pop keeps sibling rows resolvable after a middle entity migrates ', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'c8' })
     const Q = defineComponent({ q: 'i32' }, { name: 'c9' })
     const w = createWorld({ components: [P, Q] })
@@ -171,7 +171,7 @@ describe('migration correctness (MIG-1, ROW-1) + spawnWith', () => {
   })
 })
 
-describe('tag components contribute no ColumnSet (§3.4)', () => {
+describe('tag components contribute no ColumnSet ', () => {
   test('an entity holding only a tag is in a non-empty archetype with no readable columns', () => {
     const Alive = defineTag('Alive')
     const w = createWorld({ components: [Alive] })
@@ -184,8 +184,8 @@ describe('tag components contribute no ColumnSet (§3.4)', () => {
   })
 })
 
-describe('bitmask membership index (§6 — BM-1, BM-2, BM-3)', () => {
-  test('BM-2 coherence: bitmask membership matches the entity signature after each op', () => {
+describe('bitmask membership index ', () => {
+  test(' coherence: bitmask membership matches the entity signature after each op', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'c15' })
     const Q = defineComponent({ q: 'i32' }, { name: 'c16' })
     const w = createWorld({ components: [P, Q] })
@@ -221,7 +221,7 @@ describe('bitmask membership index (§6 — BM-1, BM-2, BM-3)', () => {
   })
 })
 
-describe('cold-archetype fragmentation cap (FRAG-1, §10.3)', () => {
+describe('cold-archetype fragmentation cap ', () => {
   test('with maxHotArchetypes=2 the 3rd distinct signature is cold but still queryable via has()', () => {
     const A = defineComponent({ a: 'f32' }, { name: 'c19' })
     const B = defineComponent({ b: 'f32' }, { name: 'c20' })

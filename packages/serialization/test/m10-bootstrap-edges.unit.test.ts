@@ -1,4 +1,4 @@
-// Bootstrap manifest / attach edge coverage (serialization.md §3). Exercises ONLY the main-thread
+// Bootstrap manifest / attach edge coverage. Exercises ONLY the main-thread
 // constructible parts: the serial-phase guard, the manifest+registry shape, the schemaHash recompute
 // gate in attachWorld, the not-shared rejection, and applyColumnsAdded's re-wrap. NO worker is spawned
 // — the worker-side views are fabricated locally to drive the pure re-wrap logic.
@@ -9,7 +9,7 @@ import type { ColumnKey, ColumnLayout, ComponentDef, Schema } from '@ecsia/core'
 import { bootstrapForWorker, attachWorld, applyColumnsAdded } from '../src/index.js'
 import type { WorldBootstrap, WorkerWorldView, ColumnsAdded } from '../src/bootstrap.js'
 
-describe('bootstrapForWorker — serial-phase guard + manifest shape (§3)', () => {
+describe('bootstrapForWorker — serial-phase guard + manifest shape ', () => {
   it('throws off the serial slot', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const world = createWorld({ components: [P as ComponentDef<Schema>] })
@@ -35,7 +35,7 @@ describe('bootstrapForWorker — serial-phase guard + manifest shape (§3)', () 
   })
 })
 
-describe('attachWorld — gating (§3.3 / §3.5)', () => {
+describe('attachWorld — gating ', () => {
   it('refuses a non-shared bootstrap (shared backing required)', () => {
     const fake: WorldBootstrap = {
       shared: false,
@@ -50,7 +50,7 @@ describe('attachWorld — gating (§3.3 / §3.5)', () => {
 
   it('refuses a shared bootstrap whose registry hash does not match its components (stale worker code)', () => {
     // shared:true with a registry whose recomputed FNV-1a hash will NOT equal the stamped schemaHash
-    // (we stamp a deliberately wrong value) → the §3.3 stale-code gate must throw.
+    // (we stamp a deliberately wrong value) → the
     const fake: WorldBootstrap = {
       shared: true,
       handleLayout: { indexBits: 22, generationBits: 10 } as never,
@@ -85,7 +85,7 @@ describe('attachWorld — gating (§3.3 / §3.5)', () => {
   })
 })
 
-describe('applyColumnsAdded — re-wraps newly-broadcast column SABs (§3.4)', () => {
+describe('applyColumnsAdded — re-wraps newly-broadcast column SABs ', () => {
   it('adds a live typed-array view over the new backing into the worker view', () => {
     const view: WorkerWorldView = {
       columns: new Map(),

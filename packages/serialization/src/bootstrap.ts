@@ -1,7 +1,7 @@
-// The zero-copy worker bootstrap (serialization.md §3 — Layer 1). NO value serialization: the worker
+// The zero-copy worker bootstrap. NO value serialization: the worker
 // gets (a) the SAME SAB-backed buffer set by reference and (b) a replicated registry so it maps
 // ComponentDef → ComponentId → ColumnKey identically. The bootstrap manifest carries HANDLES, never
-// component value bytes — the transport separation is structural (S-1): bootstrapForWorker returns no
+// component value bytes — the transport separation is structural: bootstrapForWorker returns no
 // byte arrays, snapshot/delta return no SAB handles.
 
 import type {
@@ -19,14 +19,14 @@ import type {
 import { elementCtor } from '@ecsia/core'
 
 export interface SerializedRegistry {
-  /** Stable schema hash; the worker recomputes from the handed registry and MUST match (§3.3). */
+  /** Stable schema hash; the worker recomputes from the handed registry and MUST match. */
   readonly schemaHash: number
   readonly components: ReadonlyArray<{
     readonly name: string
     readonly id: number
     readonly fieldCount: number
     readonly storage: StorageStrategy
-    /** Field (name, token) in declaration order — lets attachWorld recompute schemaHash from the manifest (§3.3). */
+    /** Field (name, token) in declaration order — lets attachWorld recompute schemaHash from the manifest. */
     readonly fields: ReadonlyArray<{ readonly name: string; readonly token: string }>
   }>
   readonly relations: ReadonlyArray<{ readonly name: string; readonly id: number; readonly exclusive: boolean; readonly hasPayload: boolean; readonly presenceId: number }>
@@ -34,7 +34,7 @@ export interface SerializedRegistry {
 }
 
 export interface WorldBootstrap {
-  /** True iff buffers are SAB-backed and sharable by reference (memory-buffers §6.2). */
+  /** True iff buffers are SAB-backed and sharable by reference (memory-buffers ). */
   readonly shared: boolean
   readonly handleLayout: HandleLayout
   readonly capabilities: RuntimeCapabilities
@@ -54,7 +54,7 @@ export interface WorkerWorldView {
   tick: number
 }
 
-/** A post-bootstrap lazily-created-archetype broadcast (§3.4): new column SABs to re-wrap before next wave. */
+/** A post-bootstrap lazily-created-archetype broadcast: new column SABs to re-wrap before next wave. */
 export interface ColumnsAdded {
   readonly kind: 'columns-added'
   readonly columns: ReadonlyArray<{ key: ColumnKey; backing: SharedArrayBuffer; layout: ColumnLayout }>
@@ -91,7 +91,7 @@ export function bootstrapForWorker(world: World): WorldBootstrap {
   const caps = s.capabilities()
   return {
     // `shared` iff the buffer set is SAB-backed; exportSharedHandles only emits SAB backings, so a
-    // non-empty manifest means the worker can re-wrap by reference (the zero-copy path, §3).
+    // non-empty manifest means the worker can re-wrap by reference (the zero-copy path).
     shared: caps.sabAvailable && (manifest.columns.length > 0 || manifest.regions.length > 0),
     handleLayout: world.handleLayout,
     capabilities: caps,
@@ -105,8 +105,8 @@ export function attachWorld(bootstrap: WorldBootstrap): WorkerWorldView {
   if (!bootstrap.shared) {
     throw new Error("attachWorld requires a shared (SharedArrayBuffer) bootstrap; use the non-shared (workers:'no-sab') path instead")
   }
-  // §3.3 / §10: single-arg. Recompute the local schema hash from the registry the worker was handed
-  // (the dense component/relation id assignment is the producer-specific datum, §3.2) and assert it
+  // /: single-arg. Recompute the local schema hash from the registry the worker was handed
+  // (the dense component/relation id assignment is the producer-specific datum) and assert it
   // matches the producer's — a fail-fast guard against a worker re-wrapping a mismatched buffer set.
   const localSchemaHash = computeRegistryHash(bootstrap.registry)
   if (localSchemaHash !== bootstrap.registry.schemaHash) {
@@ -133,7 +133,7 @@ export function attachWorld(bootstrap: WorldBootstrap): WorkerWorldView {
 }
 
 /**
- * Recompute the schema hash from the handed registry (§3.3). Mirrors the world's FNV-1a over
+ * Recompute the schema hash from the handed registry. Mirrors the world's FNV-1a over
  * (componentName, fieldName, fieldToken)* + relation names exactly, so it reproduces the producer's
  * canonical `schemaHash` — the single-arg `attachWorld` gate against a stale-code worker.
  */
@@ -156,7 +156,7 @@ function computeRegistryHash(registry: SerializedRegistry): number {
   return h >>> 0
 }
 
-/** Re-wrap newly-broadcast column SABs before the next wave (§3.4 / G-7). */
+/** Re-wrap newly-broadcast column SABs before the next wave. */
 export function applyColumnsAdded(view: WorkerWorldView, notice: ColumnsAdded): void {
   for (const c of notice.columns) {
     const Ctor = elementCtor(c.layout.element)

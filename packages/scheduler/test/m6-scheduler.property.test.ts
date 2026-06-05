@@ -1,17 +1,17 @@
-// M6 scheduler PROPERTY suite (fast-check). Every property is written to DISCRIMINATE — it would
+// scheduler PROPERTY suite (fast-check). Every property is written to DISCRIMINATE — it would
 // fail if the invariant it guards were broken — and each is checked against an INDEPENDENT oracle,
 // never against the implementation's own helpers.
 //
-//   DET-1   Determinism: a random DAG of systems with random {read,write} sets yields a REPEATABLE
-//           plan (wave/round/batch layout byte-stable) across independent builds.
-//   TOPO-1  Topological soundness: the executed wave order is a valid topological order of the
-//           REDUCED DAG — no system runs before one it write-before-reads (oracle: recompute the
-//           must-precede relation from the raw access sets and assert wave levels respect it).
-//   CONF-1  Conflict correctness: two systems in the SAME round have disjoint write-sets AND neither
-//           reads the other's writes — checked against an INDEPENDENT set-based conflict oracle.
-//   CYC-1   Cycle detection soundness: any injected back-edge cycle is detected (no false negatives).
-//   CYC-2   Cycle detection completeness: a purely-forward explicit-edge graph is NEVER reported
-//           cyclic (no false positives), and neither is any access-only graph.
+// Determinism: a random DAG of systems with random {read,write} sets yields a REPEATABLE
+// plan (wave/round/batch layout byte-stable) across independent builds.
+// Topological soundness: the executed wave order is a valid topological order of the
+// REDUCED DAG — no system runs before one it write-before-reads (oracle: recompute the
+// must-precede relation from the raw access sets and assert wave levels respect it).
+// Conflict correctness: two systems in the SAME round have disjoint write-sets AND neither
+// reads the other's writes — checked against an INDEPENDENT set-based conflict oracle.
+// Cycle detection soundness: any injected back-edge cycle is detected (no false negatives).
+// Cycle detection completeness: a purely-forward explicit-edge graph is NEVER reported
+// cyclic (no false positives), and neither is any access-only graph.
 
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
@@ -81,7 +81,7 @@ function specsConflict(a: SysSpec, b: SysSpec): boolean {
   return false
 }
 
-describe('DET-1 — deterministic, repeatable plan across independent builds (§5.5)', () => {
+describe(' — deterministic, repeatable plan across independent builds ', () => {
   test('two independent builds of the same systems produce the identical wave/round/batch layout', () => {
     fc.assert(
       fc.property(sysSpecs, (specs) => {
@@ -114,7 +114,7 @@ describe('DET-1 — deterministic, repeatable plan across independent builds (§
   })
 })
 
-describe('TOPO-1 — wave levels are a valid topological order of the reduced DAG (SCH-1)', () => {
+describe(' — wave levels are a valid topological order of the reduced DAG ', () => {
   test('no system runs before one it conflict-precedes; every edge crosses to a strictly later wave', () => {
     fc.assert(
       fc.property(sysSpecs, (specs) => {
@@ -133,12 +133,12 @@ describe('TOPO-1 — wave levels are a valid topological order of the reduced DA
         }
 
         // (c) ORACLE: for every conflicting ordered pair (a<b by id), the implicit direction is
-        //     a→b (registration order), so a's wave must be <= b's wave — never strictly after.
+        // a→b (registration order), so a's wave must be <= b's wave — never strictly after.
         for (let a = 0; a < specs.length; a++) {
           for (let b = a + 1; b < specs.length; b++) {
             if (specsConflict(specs[a]!, specs[b]!)) {
               expect(level.get(a)!).toBeLessThanOrEqual(level.get(b)!)
-              // and they are never in the SAME round/wave concurrently (CONF-1 covers same-round,
+              // and they are never in the SAME round/wave concurrently ( covers same-round,
               // but conflicting pairs must be different waves OR different rounds — assert different
               // wave here since the implicit edge forces a strict ordering).
               expect(level.get(a)!).toBeLessThan(level.get(b)!)
@@ -151,7 +151,7 @@ describe('TOPO-1 — wave levels are a valid topological order of the reduced DA
   })
 })
 
-describe('CONF-1 — same-round pairs are disjoint per the independent oracle (SCH-2)', () => {
+describe(' — same-round pairs are disjoint per the independent oracle ', () => {
   test('every pair of systems sharing a round has NO write/write and NO read/write conflict', () => {
     fc.assert(
       fc.property(sysSpecs, fc.integer({ min: 0, max: 4 }), (specs, workers) => {
@@ -203,7 +203,7 @@ function buildOrdered(n: number, afterOf: Map<number, number[]>, closeCycle: boo
   return defs
 }
 
-describe('CYC-1 — every injected cycle is detected (no false negatives, SCH-9)', () => {
+describe(' — every injected cycle is detected (no false negatives)', () => {
   test('a forced back-edge closing a forward chain always throws CycleError', () => {
     fc.assert(
       fc.property(fc.integer({ min: 2, max: 6 }), (n) => {
@@ -249,7 +249,7 @@ describe('CYC-1 — every injected cycle is detected (no false negatives, SCH-9)
   })
 })
 
-describe('CYC-2 — acyclic graphs are never reported cyclic (no false positives)', () => {
+describe(' — acyclic graphs are never reported cyclic (no false positives)', () => {
   test('a purely-forward explicit-edge graph never throws', () => {
     fc.assert(
       fc.property(

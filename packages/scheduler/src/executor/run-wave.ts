@@ -1,11 +1,11 @@
-// The single-threaded executor (scheduler.md §6) — the NORMATIVE semantics. Runs waves IN ORDER on
+// The single-threaded executor — the NORMATIVE semantics. Runs waves IN ORDER on
 // the main thread; each wave's rounds run sequentially and (single-thread) each round's batches run
 // sequentially in batch-index order. Because batches in a round are conflict-free by construction
-// (WAVE-CONFLICT, §5.2), the observable result equals the threaded path (§6.5).
+// (WAVE-CONFLICT), the observable result equals the threaded path.
 //
-// Rule PHASE-1 (§6.4): in single-thread mode (workers === 0) runWave does NOT flip world.phase to
+// Rule PHASE-1: in single-thread mode (workers === 0) runWave does NOT flip world.phase to
 // 'wave'. It stays 'serial' for the entire update, so every structural op a system performs takes the
-// synchronous direct-apply fast path (command-buffer.md §2.2) and there are no command buffers to
+// synchronous direct-apply fast path and there are no command buffers to
 // flush. The post-wave serial slot's flushAll/mergeCorrals are no-ops — zero cost single-threaded.
 
 import type { Tick } from '@ecsia/schema'
@@ -41,7 +41,7 @@ function runSystem(env: ExecutorEnv, sb: SystemBox, dt: number): void {
   sb.run(ctx)
 }
 
-/** Run one wave, then the serial flush slot after it (scheduler.md §6.3). */
+/** Run one wave, then the serial flush slot after it. */
 export function runWave(env: ExecutorEnv, wave: ScheduleWave, dt: number): void {
   // ---- WAVE PHASE ---- (single-thread: world.phase stays 'serial', PHASE-1)
   for (const round of wave.rounds) {

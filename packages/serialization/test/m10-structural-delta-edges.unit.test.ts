@@ -1,4 +1,4 @@
-// Structural-delta + observer-log edge coverage (serialization.md §6.2/§6.4, §7). Drives the since-T
+// Structural-delta + observer-log edge coverage. Drives the since-T
 // structural journal through every op kind (Create/Destroy/ComponentAdd/ComponentRemove/PairAdd/
 // PairRemove) end-to-end: a delta carries them, applyDelta replays them via applyStructuralOps, and the
 // stale mirror converges on the producer. Also exercises the observer-log decoder's per-op branches.
@@ -18,7 +18,7 @@ import {
   DeltaOp,
 } from '../src/index.js'
 
-describe('structural ops — serial-phase guards (§7.3)', () => {
+describe('structural ops — serial-phase guards ', () => {
   it('encodeStructuralOps and applyStructuralOps both throw off the serial slot', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const world = createWorld({ components: [P as ComponentDef<Schema>] })
@@ -31,7 +31,7 @@ describe('structural ops — serial-phase guards (§7.3)', () => {
   })
 })
 
-describe('since-T delta carries every structural op kind and the mirror converges (§6.4)', () => {
+describe('since-T delta carries every structural op kind and the mirror converges ', () => {
   function setup() {
     const A = defineComponent({ x: 'f32' }, { name: 'a' })
     const B = defineComponent({ y: 'f32' }, { name: 'b' })
@@ -95,7 +95,7 @@ describe('since-T delta carries every structural op kind and the mirror converge
   })
 })
 
-describe('observer-log decoder — every op branch yields the right record shape (§7.4)', () => {
+describe('observer-log decoder — every op branch yields the right record shape ', () => {
   it('decodes Create, ComponentAdd(+fields), ComponentRemove, PairAdd, and PairRemove records', () => {
     const A = defineComponent({ x: 'f32' }, { name: 'a' })
     const world = createWorld({ components: [A as ComponentDef<Schema>] })
@@ -143,7 +143,7 @@ describe('observer-log decoder — every op branch yields the right record shape
   })
 })
 
-describe('delta — sinceTick advances; eid value changes remap on apply (§6.3/§6.4)', () => {
+describe('delta — sinceTick advances; eid value changes remap on apply ', () => {
   it('the sinceTick baseline advances to the target tick after each delta()', () => {
     const A = defineComponent({ x: 'f32' }, { name: 'a' })
     const src = createWorld({ components: [A as ComponentDef<Schema>] })
@@ -184,7 +184,7 @@ describe('delta — sinceTick advances; eid value changes remap on apply (§6.3/
   })
 })
 
-describe('delta structural section — overflow-payload PairAdd / SetPayload carry the payload (§6.5)', () => {
+describe('delta structural section — overflow-payload PairAdd / SetPayload carry the payload ', () => {
   it('a since-T overflow PairAdd then a payload change reconstruct the payload on the mirror', () => {
     const A = defineComponent({ x: 'f32' }, { name: 'a' })
     const src = createWorld({ components: [A as ComponentDef<Schema>] })

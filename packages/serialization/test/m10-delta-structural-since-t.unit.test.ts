@@ -1,11 +1,11 @@
-// M10 HIGH gap — the STRUCTURAL-since-T delta (serialization.md §6.2 / §6.4). A delta taken at tick T
+// HIGH gap — the STRUCTURAL-since-T delta. A delta taken at tick T
 // and applied to a stale receiver copy must reconstruct SHAPE changes that happened in (T, now], not
 // just value writes:
-//   - entities SPAWNED since T appear on the receiver (remapped, with their values),
-//   - entities DESPAWNED since T are gone,
-//   - components ADDED / REMOVED since T are reflected,
-//   - relations ADDED / REMOVED since T are reflected,
-//   - every eid field and pair target is remapped across the structural delta.
+// - entities SPAWNED since T appear on the receiver (remapped, with their values),
+// - entities DESPAWNED since T are gone,
+// - components ADDED / REMOVED since T are reflected,
+// - relations ADDED / REMOVED since T are reflected,
+// - every eid field and pair target is remapped across the structural delta.
 // `DeltaOptions.includeStructural` defaults TRUE; setting it false yields a value-only delta (the
 // structural section is suppressed, so a spawn-since-T is NOT reconstructed).
 //
@@ -39,7 +39,7 @@ function mirror(src: ReturnType<typeof createWorld>, makeReceiverDefs: () => Rec
   return { dst, R, work: new Map(remap) }
 }
 
-describe('M10 delta — entities SPAWNED since T appear on the stale mirror (§6.4)', () => {
+describe(' delta — entities SPAWNED since T appear on the stale mirror ', () => {
   it('a spawn-with-values since T is reconstructed and remapped', () => {
     const P = defineComponent({ x: 'f32', y: 'f32' }, { name: 'p' }) as ComponentDef<Schema>
     const src = createWorld({ components: [P] })
@@ -91,7 +91,7 @@ describe('M10 delta — entities SPAWNED since T appear on the stale mirror (§6
   })
 })
 
-describe('M10 delta — entities DESPAWNED since T are gone on the stale mirror (§6.4)', () => {
+describe(' delta — entities DESPAWNED since T are gone on the stale mirror ', () => {
   it('a despawn since T removes the entity but leaves siblings alive', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' }) as ComponentDef<Schema>
     const src = createWorld({ components: [P] })
@@ -131,7 +131,7 @@ describe('M10 delta — entities DESPAWNED since T are gone on the stale mirror 
   })
 })
 
-describe('M10 delta — components ADDED / REMOVED since T are reflected (§6.4)', () => {
+describe(' delta — components ADDED / REMOVED since T are reflected ', () => {
   it('a component ADD since T appears with its post-add values', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' }) as ComponentDef<Schema>
     const Q = defineComponent({ hp: 'i32' }, { name: 'q' }) as ComponentDef<Schema>
@@ -179,7 +179,7 @@ describe('M10 delta — components ADDED / REMOVED since T are reflected (§6.4)
   })
 })
 
-describe('M10 delta — relations ADDED / REMOVED since T are reflected with remapped eids (§6.4 / §8.3)', () => {
+describe(' delta — relations ADDED / REMOVED since T are reflected with remapped eids ', () => {
   it('an ADD_PAIR since T reconstructs the pair on remapped receiver handles', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' }) as ComponentDef<Schema>
     const src = createWorld({ components: [P] })
@@ -261,7 +261,7 @@ describe('M10 delta — relations ADDED / REMOVED since T are reflected with rem
   })
 })
 
-describe('M10 delta — includeStructural defaults TRUE; false yields a value-only delta (§6.2)', () => {
+describe(' delta — includeStructural defaults TRUE; false yields a value-only delta ', () => {
   it('default (no opts): a spawn-since-T IS reconstructed', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' }) as ComponentDef<Schema>
     const src = createWorld({ components: [P] })

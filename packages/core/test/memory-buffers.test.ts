@@ -6,7 +6,7 @@ import type { ColumnKey, RegionKey } from '@ecsia/core'
 
 const k = (s: string): ColumnKey => s as ColumnKey
 
-describe('buffer layer — backing selection (memory-buffers.md §4.3)', () => {
+describe('buffer layer — backing selection ', () => {
   test('single → resizable-ab when resizable AB is available', () => {
     expect(selectBacking('single', false, false, true)).toBe('resizable-ab')
     expect(selectBacking('single', false, false, false)).toBe('grow-patch-ab')
@@ -31,8 +31,8 @@ describe('buffer layer — backing selection (memory-buffers.md §4.3)', () => {
   })
 })
 
-describe('field-type → ColumnLayout table (memory-buffers.md §3.2)', () => {
-  test('eid → i32, -1 sentinel fill (C-2)', () => {
+describe('field-type → ColumnLayout table ', () => {
+  test('eid → i32, -1 sentinel fill ', () => {
     const layout = tokenToColumnLayout('eid', -1)
     expect(layout?.element).toBe('i32')
     expect(layout?.stride).toBe(1)
@@ -62,7 +62,7 @@ describe('field-type → ColumnLayout table (memory-buffers.md §3.2)', () => {
   })
 })
 
-describe('V-1 length-tracking growth (memory-buffers.md §7.1, §7.2)', () => {
+describe(' length-tracking growth ', () => {
   const buffers = (): Buffers =>
     new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 20 })
 
@@ -97,7 +97,7 @@ describe('V-1 length-tracking growth (memory-buffers.md §7.1, §7.2)', () => {
     expect(col.view).toBe(before)
   })
 
-  test('eid column fills fresh AND grown rows with -1 (C-2)', () => {
+  test('eid column fills fresh AND grown rows with -1 ', () => {
     const b = buffers()
     const col = b.column(k('0:3.0'), makeColumnLayout('i32', 1, -1), 4)
     const view = col.view as Int32Array
@@ -114,7 +114,7 @@ describe('V-1 length-tracking growth (memory-buffers.md §7.1, §7.2)', () => {
   })
 })
 
-describe('region allocation (memory-buffers.md §5.4)', () => {
+describe('region allocation ', () => {
   test('fixed region holds maxEntities-sized capacity and a fill', () => {
     const b = new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 20 })
     const reg = b.region('entity.archetypeId' as RegionKey, 'u32', 8, { fixed: true, fill: 7 })

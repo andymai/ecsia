@@ -13,7 +13,7 @@ import {
   DeltaOp,
 } from '../src/index.js'
 
-describe('M10 delta — version-stamp driven (§6 / S-3)', () => {
+describe(' delta — version-stamp driven ', () => {
   it('carries only rows changed since the baseline tick, and applies them on the receiver', () => {
     const P = defineComponent({ x: 'f32' }, { brand: 'P' })
     const src = createWorld({ components: [P] })
@@ -43,7 +43,7 @@ describe('M10 delta — version-stamp driven (§6 / S-3)', () => {
   })
 })
 
-describe('M10 structural stream — values on add (§7 / S-7)', () => {
+describe(' structural stream — values on add ', () => {
   it('a late joiner reconstructs full state from the stream alone', () => {
     const P = defineComponent({ x: 'f32', y: 'f32' }, { brand: 'P' })
     const src = createWorld({ components: [P] })
@@ -53,7 +53,7 @@ describe('M10 structural stream — values on add (§7 / S-7)', () => {
 
     const stream = encodeStructuralOps(src)
 
-    // The observer-log decoder exposes the ComponentAdd record WITH field values (S-7).
+    // The observer-log decoder exposes the ComponentAdd record WITH field values.
     const records = [...createObserverLog(src).drain(stream)]
     const add = records.find((r) => r.op === DeltaOp.ComponentAdd)
     expect(add).toBeDefined()
@@ -95,7 +95,7 @@ describe('M10 structural stream — values on add (§7 / S-7)', () => {
   })
 })
 
-describe('M10 bootstrap — transport separation (§3 / S-1)', () => {
+describe(' bootstrap — transport separation ', () => {
   it('bootstrapForWorker returns a manifest + registry, never component value bytes', () => {
     const P = defineComponent({ x: 'f32' }, { brand: 'P' })
     const src = createWorld({ components: [P] })

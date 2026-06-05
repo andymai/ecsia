@@ -1,7 +1,7 @@
 // The single length-tracking-view primitive the entity-identity flat arrays need
-// (memory-buffers.md §5.5, §7.1). This is the minimal slice of the memory layer for M1: it
+// This is the minimal slice of the memory layer the entity layer needs: it
 // owns the one branch that decides SharedArrayBuffer vs ArrayBuffer and constructs the view
-// WITH NO LENGTH ARGUMENT so it widens automatically on `.grow()` (Invariant V-1).
+// WITH NO LENGTH ARGUMENT so it widens automatically on `.grow()`.
 
 export interface AllocU32Options {
   /** When true and the runtime allows it, back the array with a SharedArrayBuffer. */
@@ -17,7 +17,7 @@ export interface U32Region {
   /**
    * Length-tracking on a resizable backing (re-derives its length on `.grow()`), or fixed-size
    * over a non-resizable backing. Never constructed with an explicit length argument over a
-   * resizable buffer (memory-buffers.md V-1).
+   * resizable buffer.
    */
   readonly view: Uint32Array
   readonly backing: ArrayBufferLike
@@ -32,9 +32,9 @@ const BYTES = Uint32Array.BYTES_PER_ELEMENT
 
 // Shareable iff the SharedArrayBuffer ctor exists AND cross-origin isolation is not explicitly off.
 // Node/worker_threads report `crossOriginIsolated === undefined` and CAN share SABs, so the gate is
-// `!== false` (matching the Buffers capability probe, memory-buffers.md §4.2 step 2/3) rather than
+// `!== false` (matching the Buffers capability probe, /3) rather than
 // `=== true` — otherwise the entity-record regions would be AB in Node while columns are SAB, and a
-// worker could not read an entity's (archetypeId, row) from the shared record region (M7).
+// worker could not read an entity's (archetypeId, row) from the shared record region.
 const canShare = (): boolean =>
   typeof SharedArrayBuffer !== 'undefined' && (globalThis as { crossOriginIsolated?: boolean }).crossOriginIsolated !== false
 
@@ -101,7 +101,7 @@ export function allocU32(length: number, opts: AllocU32Options = {}): U32Region 
     shared = wantShared
   }
 
-  // No length argument: the view length-tracks the (possibly resizable) backing (V-1).
+  // No length argument: the view length-tracks the (possibly resizable) backing.
   return {
     view: new Uint32Array(backing),
     backing,

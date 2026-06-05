@@ -1,14 +1,14 @@
 // createStableIndex — a tiny core util mapping a user-meaningful stable id (typically a 'string' rich
-// field) to the entity currently holding it (rich-fields.md §8). Built on world.observe(onAdd/onRemove);
+// field) to the entity currently holding it. Built on world.observe(onAdd/onRemove);
 // ids are NOT baked into entity identity. The index rebuilds itself after a snapshot load because the
-// deserialize path re-adds components, firing onAdd for every re-created entity (§8.3).
+// deserialize path re-adds components, firing onAdd for every re-created entity.
 //
 // onRemove fires at observerDrain AFTER the entity is despawned + its index generation bumped, so a
 // rich-field read on the dying entity would hit the generation guard and return the DEFAULT. The
 // byIndex cache (populated at onAdd) is the only reliable id source in onRemove — this is why the util
-// sidesteps RF-REMOVE-READ entirely (DL-4). The cache is keyed by entity INDEX (generation-stripped),
+// sidesteps RF-REMOVE-READ entirely. The cache is keyed by entity INDEX (generation-stripped),
 // because the handle an onRemove observer sees carries the bumped generation and would not match the
-// onAdd handle (§8.2 corrected).
+// onAdd handle.
 
 import type { ComponentDef, EntityHandle, FieldValue, Schema, SchemaOf } from '@ecsia/schema'
 import { onAdd, onRemove } from '../reactivity/index.js'
@@ -33,7 +33,7 @@ export interface StableIndex<K> {
 /**
  * Build a world-level `idField → entity` index over a component carrying a stable id field. Maintained
  * via onAdd/onRemove: when the component is added, its id field is read and the entity recorded; when
- * removed (or the entity despawned), the mapping is dropped. Last writer wins on collision (§8.2 / O-3).
+ * removed (or the entity despawned), the mapping is dropped. Last writer wins on collision.
  */
 export function createStableIndex<C extends ComponentDef<Schema>, F extends keyof SchemaOf<C> & string>(
   world: StableIndexWorld,

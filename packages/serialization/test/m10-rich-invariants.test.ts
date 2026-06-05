@@ -1,12 +1,12 @@
-// P1 rich-fields SERIALIZATION invariant suite (rich-fields.md §10/§11) — the discriminating leg that
+// rich-fields SERIALIZATION invariant suite — the discriminating leg that
 // complements m10-rich-snapshot / m10-rich-delta / m10-rich-version-gating with:
-//   • RF-ROUNDTRIP: rich-only AND mixed components in ONE snapshot round-trip (parity), plus a
-//     delta-WITH-STRUCTURE round-trip where a rich value changed since T lands on a NEW entity.
-//   • RF-SHADOW-FREE / epsilon: the no-shadow instrumentation pattern — the delta's emitted changed-row
-//     set equals world.changedRows (version-stamp driven, NOT a value diff), and the epsilon shadow is
-//     SERIALIZER-INSTANCE-owned (two serializers over the same world diverge: the no-epsilon one emits a
-//     sub-epsilon row the epsilon one drops; core itself never sees the shadow).
-//   • Epsilon: sub-epsilon dropped, supra-epsilon kept, rich never epsilon-filtered.
+// • RF-ROUNDTRIP: rich-only AND mixed components in ONE snapshot round-trip (parity), plus a
+// delta-WITH-STRUCTURE round-trip where a rich value changed since T lands on a NEW entity.
+// • RF-SHADOW-FREE / epsilon: the no-shadow instrumentation pattern — the delta's emitted changed-row
+// set equals world.changedRows (version-stamp driven, NOT a value diff), and the epsilon shadow is
+// SERIALIZER-INSTANCE-owned (two serializers over the same world diverge: the no-epsilon one emits a
+// sub-epsilon row the epsilon one drops; core itself never sees the shadow).
+// • Epsilon: sub-epsilon dropped, supra-epsilon kept, rich never epsilon-filtered.
 
 import { describe, it, expect } from 'vitest'
 import { createWorld, defineComponent, object } from '@ecsia/core'

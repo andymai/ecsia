@@ -1,4 +1,4 @@
-// P0.5 Wave-1: the pooled EntityRef is a singleton rebound by world.entity(). A held ref that is used
+// the pooled EntityRef is a singleton rebound by world.entity(). A held ref that is used
 // after a despawn, a structural move, or another world.entity() call silently read/wrote the wrong row.
 // The RANDOM-ACCESS read()/write() accessors now fail loud on a stale/recycled/moved binding.
 //
@@ -14,7 +14,7 @@ function setup() {
   return { world, Position, Velocity }
 }
 
-describe('P0.5 EntityRef stale-binding guard (random-access path)', () => {
+describe('EntityRef stale-binding guard (random-access path)', () => {
   test('fresh single-statement read/write still works', () => {
     const { world, Position } = setup()
     const h = world.spawnWith(Position)

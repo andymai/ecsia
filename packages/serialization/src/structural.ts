@@ -1,10 +1,10 @@
-// The structural delta stream (serialization.md §7): a byte-packed, op-enum-tagged record stream that
-// carries structure WITH initial values on add (rejecting the bitECS value-less add, §7.2) so a late
+// The structural delta stream: a byte-packed, op-enum-tagged record stream that
+// carries structure WITH initial values on add (rejecting the bitECS value-less add) so a late
 // joiner reconstructs full state from the stream alone. Records: [op][...]. On apply, EntityCreate
 // spawns + records the producer→local handle in `remap`; ComponentAdd migrates + writes the carried
-// values; PairAdd re-mints the receiver-local pair id. Both eids of a pair remap (§8.3).
+// values; PairAdd re-mints the receiver-local pair id. Both eids of a pair remap.
 //
-// The DeltaOp ordinals are the SHARED structural-op numbering (world.md §9.4): identical across the
+// The DeltaOp ordinals are the SHARED structural-op numbering: identical across the
 // command-buffer Op, reactivity ShapeKind, and this DeltaOp — one apply-path numbering.
 
 import type { ComponentId, EntityHandle, FieldDescriptor, RelationId } from '@ecsia/schema'
@@ -24,13 +24,13 @@ export interface DeltaRecord {
   readonly payload?: Record<string, unknown> | undefined
 }
 
-// --- encode: a FULL-STATE structural stream (baseline reconstruction, §7 late-joiner source) -------
+// --- encode: a FULL-STATE structural stream (baseline reconstruction) -------
 // For every live entity: EntityCreate, then one ComponentAdd-with-values per column-bearing component,
 // then PairAdd for every live pair. A receiver with NO prior state reconstructs the whole world.
 //
-// This is the FULL-state late-joiner baseline (§7), NOT a windowed since-T stream — it intentionally
+// This is the FULL-state late-joiner baseline, NOT a windowed since-T stream — it intentionally
 // takes no (sinceTick, targetTick]. The windowed since-T structural section of a delta is produced by
-// writeDeltaStructuralSection below (driven by the structural journal's drainSince, §6.4); this function
+// writeDeltaStructuralSection below (driven by the structural journal's drainSince); this function
 // is the from-nothing reconstruction source and emits every live entity unconditionally.
 export function encodeStructuralOps(world: World): Uint8Array {
   if (world.phase !== 'serial') {
@@ -76,13 +76,13 @@ export function encodeStructuralOps(world: World): Uint8Array {
   return cur.bytesCopy()
 }
 
-// --- delta structural section: encode the since-T journal records into an OPEN cursor (§6.2 SECTION S)
-// The interleaved structural section of a delta (serialization.md §6.2/§6.4). The records come from the
+// --- delta structural section: encode the since-T journal records into an OPEN cursor
+// The interleaved structural section of a delta. The records come from the
 // core structural journal (drainStructuralSince) — the persistent since-T source that survives the
-// per-frame shape-log recycle (the journal is the structural twin of changeVersion; §6.4). Each record
-// is written as a §7.2 op. For ComponentAdd we read the entity's CURRENT field words (values-on-add,
-// §7.2 / S-7) so a stale receiver reconstructs the post-add state. PairAdd/PairRemove map the synthetic
-// pair id back to the logical relationId (§6.5 / §8.3); both eids stay full handles, remapped on apply.
+// per-frame shape-log recycle (the journal is the structural twin of changeVersion). Each record
+// is written with the component's CURRENT field words (values-on-add) so a stale receiver
+// reconstructs the post-add state. PairAdd/PairRemove map the synthetic
+// pair id back to the logical relationId; both eids stay full handles, remapped on apply.
 export function writeDeltaStructuralSection(cur: WriteCursor, world: World, records: readonly SerializeStructuralRecord[]): void {
   const s = world.__serialize
   const rel = s.relations()
@@ -121,7 +121,7 @@ export function writeDeltaStructuralSection(cur: WriteCursor, world: World, reco
         cur.u32(rec.handle >>> 0)
         cur.u16(relationId as number)
         cur.u32(rec.target >>> 0)
-        // Values-on-add (§6.5 / §7.2): read the pair's CURRENT payload at emit time so a stale receiver
+        // Values-on-add: read the pair's CURRENT payload at emit time so a stale receiver
         // reconstructs the post-add (or post-set) state. undefined for a tag relation.
         const payload = rel?.pairPayloadOf(rec.handle as EntityHandle, relationId, rec.target as EntityHandle)
         writePairPayload(cur, payload)
@@ -173,7 +173,7 @@ function writeComponentFieldValues(
 
 const SCRATCH_F64 = new Float64Array(1)
 
-// --- apply: replay records into the receiver world through validate-then-apply (§7.3) --------------
+// --- apply: replay records into the receiver world through validate-then-apply --------------
 export function applyStructuralOps(world: World, bytes: Uint8Array, remap: Map<EntityHandle, EntityHandle>): void {
   if (world.phase !== 'serial') {
     throw new Error('applyStructuralOps must run while the world is in its serial phase (outside scheduler.update / worker waves)')
@@ -192,7 +192,7 @@ export function applyStructuralOps(world: World, bytes: Uint8Array, remap: Map<E
       }
       case DeltaOp.EntityDestroy: {
         const old = cur.u32()
-        // Apply the destroy on the receiver via the remap (the producer handle → local handle, §6.4).
+        // Apply the destroy on the receiver via the remap (the producer handle → local handle).
         const local = remap.get(old as EntityHandle)
         if (local !== undefined) s.despawn(local)
         break
@@ -296,7 +296,7 @@ function applyComponentAdd(
   }
 }
 
-// --- createObserverLog: a decoder cursor over a byte stream (the SAB-ring view, §7.4) --------------
+// --- createObserverLog: a decoder cursor over a byte stream (the SAB-ring view) --------------
 export interface ObserverLog {
   drain(bytes: Uint8Array): Iterable<DeltaRecord>
 }

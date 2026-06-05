@@ -1,5 +1,5 @@
-// WorldOptions, canonical defaults, and fail-fast resolution/validation (world.md §2.2–§2.3, §7).
-// All feature knobs are nested under their feature key (CANON nesting rule, world.md §2.2).
+// WorldOptions, canonical defaults, and fail-fast resolution/validation.
+// All feature knobs are nested under their feature key ( nesting rule).
 
 export type ObserverCadence = 'frame-end' | 'per-system'
 export type ChangeTracking = 'component' | 'field'
@@ -19,19 +19,19 @@ export interface SchedulerOptions {
 }
 
 export interface WorldOptions {
-  // Registration (loosely typed until the component/relation/system specs land at M2/M6/M8).
+  // Registration (loosely typed until the component/relation/system specs land at).
   components?: readonly unknown[]
   relations?: readonly unknown[]
   systems?: readonly unknown[]
 
-  // Entity identity (entity-model.md §2).
+  // Entity identity.
   maxEntities?: number
   generationBits?: number
 
-  // Threading / backing (memory-buffers.md §4). Single-thread executor ships first.
+  // Threading / backing. Single-thread executor ships first.
   threaded?: boolean
 
-  // Archetype fragmentation cap (archetype-storage.md FRAG-1).
+  // Archetype fragmentation cap.
   maxHotArchetypes?: number
 
   // Feature knobs — NESTED, never flat.
@@ -62,7 +62,7 @@ export interface ResolvedWorldOptions {
   readonly scheduler: { readonly workers: WorkerOption }
 }
 
-/** Thrown synchronously at construction for any invalid configuration (world.md §7). */
+/** Thrown synchronously at construction for any invalid configuration. */
 export class ConfigError extends Error {
   override readonly name = 'ConfigError'
   constructor(message: string) {
@@ -113,7 +113,7 @@ export function resolveOptions(options: WorldOptions = {}): ResolvedWorldOptions
   if (!isPositiveInt(maxShapeChangesPerFrame)) {
     throw new ConfigError(`reactivity.maxShapeChangesPerFrame must be a positive integer; got ${maxShapeChangesPerFrame}`)
   }
-  // Two-word log entries when any relation is registered (CANON C2; world.md §9.6).
+  // Two-word log entries when any relation is registered ( C2).
   const logEntryWords: 1 | 2 = r.logEntryWords ?? (relations.length > 0 ? 2 : 1)
 
   const workers: WorkerOption = options.scheduler?.workers ?? 0

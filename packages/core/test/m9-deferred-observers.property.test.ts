@@ -1,20 +1,20 @@
-// M9 PROPERTY (fast-check) — the deferred-observer drain discriminated against intermediate state.
-// Two headline properties live here (the third, the real-worker R-3 cross-run identity, is in
+// PROPERTY (fast-check) — the deferred-observer drain discriminated against intermediate state.
+// Two headline properties live here (the third, the real-worker cross-run identity, is in
 // packages/scheduler/test/m9-deferred-observers.workers.property.test.ts because it needs the pool):
 //
-//   1. 'frame-end' vs 'per-system' CADENCE EQUIVALENCE (reactivity.md §7.5): both cadences yield the
-//      SAME multiset of observer events for the same workload — they differ only in WHEN the drain
-//      runs (once at frame end vs once per wave), never in WHICH events fire. We model a "wave" as one
-//      batch of writes + one observerDrain (per-system) vs all batches then one drain (frame-end), and
-//      assert the (kind, component, index) event MULTISET is identical.
+// 1. 'frame-end' vs 'per-system' CADENCE EQUIVALENCE: both cadences yield the
+// SAME multiset of observer events for the same workload — they differ only in WHEN the drain
+// runs (once at frame end vs once per wave), never in WHICH events fire. We model a "wave" as one
+// batch of writes + one observerDrain (per-system) vs all batches then one drain (frame-end), and
+// assert the (kind, component, index) event MULTISET is identical.
 //
-//   2. DRAIN VISITS ONLY CHANGED ENTRIES (reactivity.md §7.3 — the O(changes) drain, deferred perf
-//      bench). The observer-drain-cost bench (drain is O(changes) at a serial slot, OFF the wave
-//      critical path) is DEFERRED (no bench harness in this milestone). We assert the STRUCTURAL
-//      property the bench would measure instead: a frame that writes W of N entities fires onChange for
-//      EXACTLY the W written entity indices — never the whole archetype, never an unwritten sibling.
-//      The visited set is independent of N (the unwritten N-W entities are never visited), which is the
-//      load-bearing fact behind "O(changes), not O(N)".
+// 2. DRAIN VISITS ONLY CHANGED ENTRIES ((changes) drain, deferred perf
+// bench). The observer-drain-cost bench (drain is O(changes) at a serial slot, OFF the wave
+// critical path) is DEFERRED (no bench harness in this milestone). We assert the STRUCTURAL
+// property the bench would measure instead: a frame that writes W of N entities fires onChange for
+// EXACTLY the W written entity indices — never the whole archetype, never an unwritten sibling.
+// The visited set is independent of N (the unwritten N-W entities are never visited), which is the
+// load-bearing fact behind "O(changes), not O(N)".
 
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
@@ -48,11 +48,11 @@ interface Ev {
 // A stable multiset key so two event lists can be compared order-independently.
 const multiset = (evs: Ev[]): string[] => evs.map((e) => `${e.kind}|${e.component}|${e.index}`).sort()
 
-describe('§7.5 — frame-end and per-system cadence yield the IDENTICAL observer event multiset', () => {
+describe('', () => {
   // NOTE on the per-wave dedup boundary (a real semantic, flagged for the reviewer): onChange dedup is
   // per-DRAIN, not per-frame (resetChangeDedup runs at each drain start, observers.ts). So 'per-system'
   // drains once per wave and an entity changed in wave 1 AND again in wave 2 fires TWICE; 'frame-end'
-  // coalesces the frame to one fire. That is the cadence's defining behavior, not a bug — §7.5's
+  // coalesces the frame to one fire. That is the cadence's defining behavior, not a bug — 's
   // "same SET of events, differing only in timing" holds precisely when each net change is attributable
   // to ONE wave. We therefore fuzz workloads where each (entity, component) key is written in at most
   // one wave (partitioned below); under that contract the event MULTISET must be byte-identical across
@@ -116,7 +116,7 @@ describe('§7.5 — frame-end and per-system cadence yield the IDENTICAL observe
   })
 })
 
-describe('§7.3 — the drain visits ONLY changed entries (O(changes), DEFERRED perf bench)', () => {
+describe('(O(changes), DEFERRED perf bench)', () => {
   // DEFERRED: the observer-drain-cost bench (O(changes) at the serial slot, off the wave critical
   // path) has no bench harness this milestone. We assert the structural property a bench would rely
   // on: the set of entities the onChange handler is invoked for equals EXACTLY the set of distinct

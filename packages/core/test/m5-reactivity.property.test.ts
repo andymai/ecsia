@@ -1,15 +1,15 @@
-// M5 reactivity DISCRIMINATING property + instrumentation suite (reactivity.md §11 invariants).
-// Each property is designed to FAIL if the dual-mechanism design (R-2), the coalescing (R-9), the
-// recoverable spill (R-5), or the no-per-field-atomic guarantee (R-1) regresses — they are not
+// reactivity DISCRIMINATING property + instrumentation suite.
+// Each property is designed to FAIL if the dual-mechanism design, the coalescing, the
+// recoverable spill, or the no-per-field-atomic guarantee regresses — they are not
 // tautologies over the implementation.
 //
-//   R-2  the .changed FILTER (write-log driven) and the public changedSince PREDICATE
-//        (changeVersion driven) AGREE on which entities changed for any write sequence, yet neither
-//        path touches the other's mechanism (asserted by instrumenting both substores).
-//   R-9  add-then-remove of the same component within one frame nets to no added/removed delta.
-//   R-5  forcing the ring past capacity loses no entry: the public delta is IDENTICAL to a
-//        same-sequence run that never overflowed (ring + spill, chronological).
-//   R-1  zero Atomics.* calls on the trackWrite → write-log push path across a fuzzed write sequence.
+// the .changed FILTER (write-log driven) and the public changedSince PREDICATE
+// (changeVersion driven) AGREE on which entities changed for any write sequence, yet neither
+// path touches the other's mechanism (asserted by instrumenting both substores).
+// add-then-remove of the same component within one frame nets to no added/removed delta.
+// forcing the ring past capacity loses no entry: the public delta is IDENTICAL to a
+// same-sequence run that never overflowed (ring + spill, chronological).
+// zero Atomics.* calls on the trackWrite → write-log push path across a fuzzed write sequence.
 //
 // Wall-clock perf benches (trackWrite overhead, changed-filtered scan sublinearity, observer drain
 // cost) are DEFERRED — no bench harness in this milestone. Their STRUCTURAL surrogate (a changed
@@ -22,7 +22,7 @@ import { OVERFLOW_SENTINEL } from '../src/internal.js'
 import type { ComponentDef, EntityHandle, Schema, World } from '@ecsia/core'
 import type { LogPointer } from '../src/internal.js'
 
-/** Entity index of a handle (the low handle bits the write log packs, §3.3). */
+/** Entity index of a handle (the low handle bits the write log packs). */
 function idx(world: World, h: EntityHandle): number {
   return world.decodeHandle(h).index as number
 }
@@ -39,10 +39,10 @@ function makeKit(opts?: Parameters<typeof createWorld>[0]): {
 }
 
 // ---------------------------------------------------------------------------
-// R-2 — the FILTER and the PREDICATE agree but never touch each other's state.
+// — the FILTER and the PREDICATE agree but never touch each other's state.
 // ---------------------------------------------------------------------------
 
-describe('R-2 — .changed FILTER (write log) and changedSince PREDICATE (changeVersion) agree, mechanisms separate', () => {
+describe(' — .changed FILTER (write log) and changedSince PREDICATE (changeVersion) agree, mechanisms separate', () => {
   test('for any random write subset, the filter set === the predicate set', () => {
     fc.assert(
       fc.property(
@@ -145,10 +145,10 @@ describe('R-2 — .changed FILTER (write log) and changedSince PREDICATE (change
 })
 
 // ---------------------------------------------------------------------------
-// R-9 — add-then-remove of the same component in one frame nets to no delta.
+// — add-then-remove of the same component in one frame nets to no delta.
 // ---------------------------------------------------------------------------
 
-describe('R-9 — coalescing: add/remove pairs within one frame net to zero (single deferred drain)', () => {
+describe(' — coalescing: add/remove pairs within one frame net to zero (single deferred drain)', () => {
   test('any balanced add/remove permutation of one component nets to no added/removed delta', () => {
     fc.assert(
       fc.property(
@@ -194,11 +194,11 @@ describe('R-9 — coalescing: add/remove pairs within one frame net to zero (sin
 })
 
 // ---------------------------------------------------------------------------
-// R-5 — recoverable overflow: a burst past ring capacity loses NO entry, and the
-//        public delta is IDENTICAL to the same sequence run on a ring that never overflowed.
+// — recoverable overflow: a burst past ring capacity loses NO entry, and the
+// public delta is IDENTICAL to the same sequence run on a ring that never overflowed.
 // ---------------------------------------------------------------------------
 
-describe('R-5 — overflow spill preserves the full chronological delta (no entry lost)', () => {
+describe(' — overflow spill preserves the full chronological delta (no entry lost)', () => {
   function runChangedDelta(ringEntries: number, indices: readonly number[]): number[] {
     const { world, Position } = makeKit({ maxEntities: 128, reactivity: { maxWritesPerFrame: ringEntries } })
     const q = world.query(read(Position)).changed()
@@ -250,10 +250,10 @@ describe('R-5 — overflow spill preserves the full chronological delta (no entr
 })
 
 // ---------------------------------------------------------------------------
-// R-1 — NO per-field atomic on the write-log push path.
+// — NO per-field atomic on the write-log push path.
 // ---------------------------------------------------------------------------
 
-describe('R-1 — zero Atomics.* on the trackWrite → write-log push path', () => {
+describe(' — zero Atomics.* on the trackWrite → write-log push path', () => {
   // Spy on EVERY Atomics method so any atomic touched during a setter→trackWrite→push chain trips.
   const atomicNames = [
     'add',
@@ -286,7 +286,7 @@ describe('R-1 — zero Atomics.* on the trackWrite → write-log push path', () 
         (indices) => {
           const { world, Position } = makeKit({ maxEntities: 64 })
           // No `.changed` query and no `changedSince` call → stamping disabled, so the push path is
-          // purely the write-log append (the load-bearing R-1 surface). We still install spies after
+          // purely the write-log append (the load-bearing surface). We still install spies after
           // construction so allocation-time atomics (buffer setup) are not counted.
           const e = world.spawnWith(Position)
           const handles: EntityHandle[] = [e]

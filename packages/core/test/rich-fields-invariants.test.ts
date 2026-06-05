@@ -1,7 +1,7 @@
-// P1 rich-fields INVARIANT suite (rich-fields.md §10/§11) — the discriminating leg.
+// rich-fields INVARIANT suite — the discriminating leg.
 //
 // This file complements the example-based rich-fields.test.ts with the property/parity tests the spec
-// §11 names as MANDATED: the RF-HYGIENE fast-check recycle+wrap property (T-HYGIENE-RECYCLE), the
+// The RF-HYGIENE fast-check recycle+wrap property (T-HYGIENE-RECYCLE), the
 // RF-MIGRATE multi-migration survival, full RF-CHANGED parity against the numeric .changed filter +
 // changedSince + onChange (T-CHANGED-PARITY), the RF-REMOVE-READ window AND its gone-next-frame
 // counterpart (T-REMOVE-READ), the createStableIndex maintenance/duplicate-id policy (T-STABLE-INDEX),
@@ -29,8 +29,8 @@ const wr = (world: ReturnType<typeof createWorld>, e: EntityHandle, C: Component
   world.entity(e).write(C) as Record<string, unknown>
 
 // ===========================================================================
-// RF-HYGIENE — randomized spawn/write/despawn with index recycling AND generation wrap (§11 T-HYGIENE-
-// RECYCLE). A new tenant at a recycled index must NEVER observe a prior tenant's value. The model is an
+// RF-HYGIENE — randomized spawn/write/despawn with index recycling AND generation wrap
+// (T-HYGIENE-RECYCLE). A new tenant at a recycled index must NEVER observe a prior tenant's value. The model is an
 // oracle: track the value each LIVE handle should read; assert the sidecar agrees on every read.
 // ===========================================================================
 describe('RF-HYGIENE — recycle + generation wrap never leak a prior tenant (property, T-HYGIENE-RECYCLE)', () => {
@@ -38,7 +38,7 @@ describe('RF-HYGIENE — recycle + generation wrap never leak a prior tenant (pr
     fc.assert(
       fc.property(
         // A small index space + small generationBits so BOTH index recycling and generation WRAP are
-        // forced within the op budget — this is the discriminating configuration (G-6).
+        // forced within the op budget — this is the discriminating configuration.
         fc.array(fc.constantFrom<'spawn' | 'write' | 'despawn'>('spawn', 'write', 'despawn', 'write', 'spawn'), {
           minLength: 20,
           maxLength: 120,
@@ -115,7 +115,7 @@ describe('RF-HYGIENE — recycle + generation wrap never leak a prior tenant (pr
 })
 
 // ===========================================================================
-// RF-MIGRATE — index-keyed survival across MULTIPLE add/remove migrations (§11 T-MIGRATE). The value
+// RF-MIGRATE — index-keyed survival across MULTIPLE add/remove migrations. The value
 // is set ONCE; a chain of sibling add/removes (each a real archetype relocation) must not perturb it.
 // ===========================================================================
 describe('RF-MIGRATE — rich value survives a chain of migrations untouched', () => {
@@ -165,7 +165,7 @@ describe('RF-MIGRATE — rich value survives a chain of migrations untouched', (
 
 // ===========================================================================
 // RF-CHANGED — FULL parity with numeric fields: the .changed() query filter, world.changedSince, and
-// onChange observers all fire for a rich write exactly as for a numeric write (§11 T-CHANGED-PARITY).
+// onChange observers all fire for a rich write exactly as for a numeric write.
 // ===========================================================================
 describe('RF-CHANGED — parity with numeric fields across all three change surfaces', () => {
   test('.changed() query filter: a rich write surfaces the entity exactly like a numeric write', () => {
@@ -236,7 +236,7 @@ describe('RF-CHANGED — parity with numeric fields across all three change surf
     expect(changes).toBe(1)
   })
 
-  test('deep in-place object mutation does NOT track; re-assignment DOES (§5.3 documented semantics)', () => {
+  test('deep in-place object mutation does NOT track; re-assignment DOES ', () => {
     const Node = defineComponent({ meta: object<{ tags: string[] }>() }, { name: 'NodeDM' })
     const world = createWorld({ components: asComps(Node) })
     let changes = 0
@@ -259,8 +259,8 @@ describe('RF-CHANGED — parity with numeric fields across all three change surf
 })
 
 // ===========================================================================
-// RF-REMOVE-READ — the R-8 window: an onRemove observer reads the DYING entity's last rich value; and
-// the value is GONE next frame (§11 T-REMOVE-READ). Both legs are discriminating: the positive leg
+// RF-REMOVE-READ — the window: an onRemove observer reads the DYING entity's last rich value; and
+// the value is GONE next frame. Both legs are discriminating: the positive leg
 // fails against a naive eager-clear, the gone-next-frame leg fails if the deferred entry never flushes.
 // ===========================================================================
 describe('RF-REMOVE-READ — onRemove reads the dying value; gone next frame', () => {
@@ -319,8 +319,8 @@ describe('RF-REMOVE-READ — onRemove reads the dying value; gone next frame', (
 })
 
 // ===========================================================================
-// createStableIndex — add/remove/despawn maintenance, lookup correctness, duplicate-id policy (§11
-// T-STABLE-INDEX). The util is observer-driven, so ids resolve at the drain.
+// createStableIndex — add/remove/despawn maintenance, lookup correctness, duplicate-id policy
+// (T-STABLE-INDEX). The util is observer-driven, so ids resolve at the drain.
 // ===========================================================================
 describe('createStableIndex — maintenance, lookup, duplicate-id policy', () => {
   test('resolves id→handle after add; drops on despawn', () => {
@@ -357,7 +357,7 @@ describe('createStableIndex — maintenance, lookup, duplicate-id policy', () =>
     idx.dispose()
   })
 
-  test('duplicate id: last writer wins (§8.2)', () => {
+  test('duplicate id: last writer wins ', () => {
     const Id = defineComponent({ id: 'string' }, { name: 'IdD' })
     const world = createWorld({ components: asComps(Id) })
     const idx = createStableIndex(world, Id, 'id')

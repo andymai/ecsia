@@ -2,7 +2,7 @@
 // `.` → index.ts). These are the kernel implementation primitives — store/bitmask/registry/query
 // engine/memory backing/reactivity log classes and the low-level schema inference helpers — that this
 // package's own tests reach through a RELATIVE import (`../src/internal.js`). They are deliberately
-// kept OFF the public `index.ts` so the published surface stays curated (P0.5 surface diet).
+// kept OFF the public `index.ts` so the published surface stays curated.
 //
 // Cross-package note: the symbols genuinely needed by sibling packages (@ecsia/{relations,
 // serialization}) live on the PUBLIC index.ts under an "INTERNAL (cross-package)" banner — they are

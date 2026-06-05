@@ -15,7 +15,7 @@ function makeAllocator(capacity: number): EntityIndex {
   })
 }
 
-describe('reserveEntityBlock / returnReservedIds (entity-model.md §5)', () => {
+describe('reserveEntityBlock / returnReservedIds ', () => {
   test('reserved handles are all alive the instant they are reserved', () => {
     const idx = makeAllocator(64)
     const res = reserveEntityBlock(idx, 0, 8)

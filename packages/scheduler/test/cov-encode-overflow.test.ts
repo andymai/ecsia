@@ -1,5 +1,5 @@
 // Coverage: commands/encode.ts — the worker-side encode API overflow/exhaustion bails
-// (command-buffer.md §5/§6). On a FIXED (SAB) buffer every encoder must CAP (write nothing, leave
+// On a FIXED (SAB) buffer every encoder must CAP (write nothing, leave
 // head untouched) and warn ONCE per wave; create() must additionally bail on reservation exhaustion
 // WITHOUT consuming a reserved handle. Also pins the relation-payload encode path (setRelation).
 
@@ -28,7 +28,7 @@ function fillToLeave(cb: CommandBuffer, free: number): void {
   cb.head = cb.words.length - free
 }
 
-describe('encode.ts: create() reservation exhaustion bails without burning a handle (§6 lines 52-54)', () => {
+describe('encode.ts: create() reservation exhaustion bails without burning a handle ', () => {
   test('create() past the reservation cap returns NO_ENTITY, warns, emits no record, and does not advance the cursor', () => {
     const cb = makeCommandBuffer(0, 64, false)
     cb.reservation = { handles: [1 as EntityHandle, 2 as EntityHandle] }

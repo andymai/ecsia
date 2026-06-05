@@ -1,4 +1,4 @@
-// The opt-in column-cursor iteration surface (queries.md §9): eachChunk hands one reused QueryChunk
+// The opt-in column-cursor iteration surface: eachChunk hands one reused QueryChunk
 // per matched hot archetype, exposing raw SoA column views + a contiguous row span. It bypasses the
 // per-row accessor AND the reactivity write log — so it must read/write the same columns the accessor
 // path sees, NOT visit cold archetypes, and NOT record a write the .changed flavor can observe.
@@ -18,7 +18,7 @@ function makeKit(): {
   return { world: createWorld({ components }), Position, Velocity }
 }
 
-describe('eachChunk column-cursor (queries.md §9)', () => {
+describe('eachChunk column-cursor ', () => {
   test('cursor read/write matches the accessor path', () => {
     const { world, Position, Velocity } = makeKit()
     const n = 1000

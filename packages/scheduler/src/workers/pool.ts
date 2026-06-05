@@ -1,7 +1,7 @@
-// The worker pool + wave dispatch loop (scheduler.md §7). At startup it allocates the per-worker
-// control SABs, exports the world's shared buffer set ONCE (memory-buffers.md §6.3 — SABs posted by
-// reference, never per frame), and spawns a fixed worker pool. Per round it: tops up each worker's
-// reservation (reserveEntityBlock — the M1 Atomics.sub take path is now exercised on the worker side),
+// The worker pool + wave dispatch loop. At startup it allocates the per-worker
+// control SABs, exports the world's shared buffer set ONCE (by reference, never per frame), and
+// spawns a fixed worker pool. Per round it: tops up each worker's
+// reservation (reserveEntityBlock — the Atomics.sub take path is now exercised on the worker side),
 // flips world.phase to 'wave', writes each batch's matched entity indices + dt into the worker's work
 // SAB, bumps the wake word, and waits on the Atomics wave fence; then flips back to 'serial' and merges
 // the per-worker command buffers DETERMINISTICALLY (ascending worker index — flushAll). That fixed
@@ -44,9 +44,9 @@ interface WorkerSlot {
   readonly reservation: WorkerReservationSab
   readonly work: { sab: SharedArrayBuffer; i32: Int32Array; f32: Float32Array }
   readonly wake: Int32Array
-  /** Re-backing signal SAB ([0] = published column-growth generation, §7.6). */
+  /** Re-backing signal SAB ([0] = published column-growth generation). */
   readonly notice: Int32Array
-  /** Write-corral mirror: [0]=count, then [index, componentId] pairs (reactivity.md §9.1). */
+  /** Write-corral mirror: [0]=count, then [index, componentId] pairs. */
   readonly writeCorral: Uint32Array
   ready: boolean
 }
@@ -59,7 +59,7 @@ export interface PoolConfig {
   readonly systems: readonly PoolSystem[]
   /**
    * Every component a worker may touch — read, written, OR named as an add/set-payload target. Their
-   * dense ids are aligned on the worker side (serialization.md §3.2). Defaults to the union of all
+   * dense ids are aligned on the worker side. Defaults to the union of all
    * systems' matchComponents; pass the full registered set if a kernel adds a component it does not
    * also match (e.g. a spawner adding a component to a fresh entity).
    */
@@ -69,7 +69,7 @@ export interface PoolConfig {
   readonly commandWords?: number
   /**
    * Max `(index, componentId)` value-write entries one worker may stage per wave (write-corral SAB
-   * sizing, reactivity.md §9.1). Default: maxBatchEntities × 4 (a kernel may write a few components
+   * sizing). Default: maxBatchEntities × 4 (a kernel may write a few components
    * per matched entity). Excess writes are capped (diagnosed at merge), never dropped silently.
    */
   readonly writeCorralEntries?: number
@@ -95,7 +95,7 @@ export class WorkerPool {
   readonly #defById = new Map<number, ComponentDef<Schema>>()
   readonly #codecById = new Map<number, ComponentFieldCodec>()
   #wakeGen = 0
-  // §7.6: the last column-growth generation we broadcast to the workers. A cheap `!==` against the
+  // The last column-growth generation we broadcast to the workers. A cheap `!==` against the
   // world's live generation gates the whole re-backing fence — zero work when nothing re-backed.
   #appliedGrowthGen = 0
   #disposed = false
@@ -147,7 +147,7 @@ export class WorkerPool {
       const reservation = makeReservationSab(reservationCap)
       const workSab = new SharedArrayBuffer((WORK_HEADER_WORDS + maxBatch) * 4)
       const wakeSab = new SharedArrayBuffer(4)
-      const noticeSab = new SharedArrayBuffer(4) // [0] = published column-growth generation (§7.6)
+      const noticeSab = new SharedArrayBuffer(4) // [0] = published column-growth generation
       // Write-corral SAB: 1 header word (count) + 2 words per staged entry.
       const writeCorralSab = new SharedArrayBuffer((1 + corralEntries * 2) * 4)
       const boot: WorkerBootstrap = {
@@ -206,7 +206,7 @@ export class WorkerPool {
     const active = batches.filter((b) => b.workerIndex >= 0 && b.workerIndex < this.#slots.length)
     if (active.length === 0) return
 
-    // ---- re-backing fence (§7.6): re-wrap any column that moved to a NEW SAB since the last dispatch
+    // ---- re-backing fence: re-wrap any column that moved to a NEW SAB since the last dispatch
     // BEFORE this one proceeds. One generation `!==` per wave when nothing grew (zero steady-state cost).
     await this.#drainColumnGrowth()
 
@@ -253,9 +253,9 @@ export class WorkerPool {
     if (waveErrored(this.#waveCounter)) this.#diag('a worker system threw; its command buffer is applied/dropped per CB-SAFE')
 
     // Merge each worker's value-write corral into the shared write log in ASCENDING worker-index order
-    // (reactivity.md §9.2, R-4) BEFORE the command buffers apply — mirroring single-thread run-wave's
+    // BEFORE the command buffers apply — mirroring single-thread run-wave's
     // mergeCorrals()→flushAll() order. This is what makes onChange observers + `.changed` filters fire
-    // for worker field writes (and stamp changeVersion, §6.4) deterministically.
+    // for worker field writes (and stamp changeVersion) deterministically.
     const writers = active.map((b) => b.workerIndex).sort((a, z) => a - z)
     const corralHeader = 1
     for (const wi of writers) {
@@ -295,7 +295,7 @@ export class WorkerPool {
   }
 
   /**
-   * §7.6 re-backing fence. If a column re-backed onto a new SAB since the last dispatch (the world's
+   * (the world's
    * growth generation advanced), broadcast the new backings to EVERY worker and block on the wave fence
    * until all have re-wrapped + ACKed — so no dispatch ever reads a worker's stale (abandoned-SAB) view.
    * Steady state is a single generation `!==`; the drain + broadcast happen only on an actual re-backing.
@@ -354,8 +354,8 @@ export class WorkerPool {
       removeMany: (h, defs) => apply.removeMany(h, defs),
       has: (h, def) => world.has(h, def),
       writePayload: (h, def, values) => apply.writePayload(h, def, values),
-      // Relation apply (relations.md §5.6): forward to the core __apply surface that @ecsia/relations
-      // fills via createRelations(world). The scheduler does NOT import @ecsia/relations.
+      // Relation apply: forward to the core __apply surface that @ecsia/relations
+      // fills in via createRelations(world). The scheduler does NOT import @ecsia/relations.
       addPair: (s, rid, t, payload) => apply.addPair?.(s, rid, t, payload),
       removePair: (s, rid, t) => apply.removePair?.(s, rid, t),
       returnUnused: (cb) => {

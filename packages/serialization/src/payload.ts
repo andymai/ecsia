@@ -1,4 +1,4 @@
-// Self-describing relation-pair payload codec (serialization.md §4.6, §8.3). A payload is a list of
+// Self-describing relation-pair payload codec. A payload is a list of
 // named field values, each value read back from getPair().read() already DECODED. We tag each field
 // (0 = f64 numeric, 1 = string, 2 = bool) so the wire round-trips every scalar losslessly without the
 // receiver needing the producer's column layout — the receiver writes the named fields back through

@@ -1,4 +1,4 @@
-// Dev-mode access guards (scheduler.md §6.6; Must-Fix #2 declared-intent contract). A system's
+// Dev-mode access guards (declared-intent contract). A system's
 // scoped `query` warns when a term references a component outside the system's declared
 // `read ∪ write`, and when a `write(C)` term names a C absent from `writeIds`. The declaration stays
 // authoritative — an undeclared access is a scheduling BUG the user must fix, not blocked (production
@@ -10,7 +10,7 @@ import type { SystemBox } from '../planner/index.js'
 
 function defOfTerm(term: QueryTerm): { def: ComponentDef<Schema> | null; role: 'read' | 'write' | 'other' } {
   const t = term as { __term?: string; c?: ComponentDef<Schema>; relation?: unknown }
-  if (t.relation !== undefined) return { def: null, role: 'other' } // Pair term — pair ids checked at M8
+  if (t.relation !== undefined) return { def: null, role: 'other' } // Pair term — pair ids checked at
   switch (t.__term) {
     case 'write':
       return { def: t.c ?? null, role: 'write' }

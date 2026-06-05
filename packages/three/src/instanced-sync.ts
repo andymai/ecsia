@@ -1,4 +1,4 @@
-// Instanced sync system (P4 deliverable 3): write a THREE.InstancedMesh's instanceMatrix from the ECS
+// Instanced sync system ( deliverable 3): write a THREE.InstancedMesh's instanceMatrix from the ECS
 // transform columns. One draw call for the whole matched set. Like the transform sync this is a hot
 // per-frame bridge, so it iterates with the SoA fast path (`eachChunk`) and declares READ-ONLY access.
 //
@@ -9,7 +9,7 @@
 // visual instanced mesh (every slot is rewritten every frame from live columns, so no stale transform
 // survives) but means you must NOT cache "entity X is instance i" across frames. If you need a stable
 // entity→slot mapping, store the slot in a component and write it yourself. The swap-compaction
-// behaviour is the archetype storage's (storage.md), and the test asserts it.
+// behaviour is the archetype storage's, and the test asserts it.
 //
 // COUNT: the mesh's `count` is set to the number of matched entities each frame (capped at the mesh's
 // allocated `instanceMatrix` capacity). Entities beyond capacity are dropped (documented; size the mesh

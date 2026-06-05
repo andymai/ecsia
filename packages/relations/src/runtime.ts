@@ -1,8 +1,8 @@
-// @ecsia/relations runtime (relations.md). First-class integer-encoded (relationId, targetIndex)
+// @ecsia/relations runtime. First-class integer-encoded (relationId, targetIndex)
 // pairs as ordinary archetype members: eager O(1) pair-id minting, the per-relation presence bit for
-// O(1) wildcard match, the exclusivity storage split (Must-Fix #4), the main-thread back-ref index,
+// O(1) wildcard match, the exclusivity storage split, the main-thread back-ref index,
 // and the iterative-BFS cascade. Attaches to a world through the core RelationsHost seam — this
-// module imports @ecsia/core; @ecsia/core NEVER imports it (the acyclic boundary, M8).
+// module imports @ecsia/core; @ecsia/core NEVER imports it (the acyclic boundary).
 
 import type {
   ComponentDef,
@@ -36,12 +36,12 @@ import type {
 import { pairKey64, overflowKey64 } from './pair-key.js'
 
 const WILDCARD = Symbol.for('ecsia.query.wildcard')
-/** The wildcard target sentinel: `Pair(R, Wildcard)` matches every R-pair via the presence bit (§3). */
+/** The wildcard target sentinel: `Pair(R, Wildcard)` matches every R-pair via the presence bit. */
 export const Wildcard: unique symbol = WILDCARD as never as typeof Wildcard
 
 export type StorageKind = 'tag' | 'exclusive-column' | 'overflow-table'
 
-/** resolveStorageKind (relations.md §4): payload-free → tag; payload+exclusive → column; else overflow. */
+/** resolveStorageKind: payload-free → tag; payload+exclusive → column; else overflow. */
 function resolveStorageKind(hasPayload: boolean, exclusive: boolean): StorageKind {
   if (!hasPayload) return 'tag'
   return exclusive ? 'exclusive-column' : 'overflow-table'
@@ -51,7 +51,7 @@ function resolveStorageKind(hasPayload: boolean, exclusive: boolean): StorageKin
 type PayloadOf<R extends RelationDef<Schema | void>> = R extends RelationDef<infer P> ? P : never
 
 /**
- * A typed payload accessor over the exclusive subject column or the overflow row (§4.4). The read/write
+ * A typed payload accessor over the exclusive subject column or the overflow row. The read/write
  * views are forked from the relation's payload schema (Item 7); a payload-free relation yields an empty
  * accessor.
  */
@@ -89,9 +89,9 @@ interface RelationRuntime {
   /** Field index of the exclusive `eid` target column within presenceDef's ColumnSet (-1 otherwise). */
   readonly subjectTargetFieldIndex: number
   readonly overflow: OverflowTable | null
-  /** targetIndex → subject handles (relations.md §6). */
+  /** targetIndex → subject handles. */
   readonly backref: Map<number, Set<EntityHandle>>
-  /** Lazily-allocated depth cache (relations.md §9), exclusive relations only. */
+  /** Lazily-allocated depth cache, exclusive relations only. */
   depth: { depth: Int32Array; dirty: Set<number> } | null
 }
 
@@ -110,7 +110,7 @@ interface RelationsApi {
   getPair<R extends RelationDef<Schema | void>>(subject: EntityHandle, relation: R, target: EntityHandle): PairAccessor<R>
   subjectsOf(relation: RelationDef<Schema | void>, target: EntityHandle): Iterable<EntityHandle>
   targetsOf(subject: EntityHandle, relation: RelationDef<Schema | void>): Iterable<EntityHandle>
-  /** Q-PA1: the single current target of an exclusive relation (eid column read, O(1)); null if absent. Throws on a non-exclusive relation. */
+  /**: the single current target of an exclusive relation (eid column read, O(1)); null if absent. Throws on a non-exclusive relation. */
   targetOf(subject: EntityHandle, relation: RelationDef<Schema | void>): EntityHandle | null
   depthOf(subject: EntityHandle, relation: RelationDef<Schema | void>): number
   /**
@@ -125,7 +125,7 @@ const EMPTY_SET: ReadonlySet<EntityHandle> = new Set()
 
 export function createRelations(world: World): RelationsApi {
   const host: RelationsHost = world.__installRelations()
-  // §2.1: pair keys index by the WORLD's target-index width (= 32 - generationBits). Captured once
+  // Pair keys index by the WORLD's target-index width (= 32 - generationBits). Captured once
   // from the host so a non-default generationBits keys the SAME targetIndex host.handleIndex produces.
   const indexBits = host.indexBits
 
@@ -134,16 +134,16 @@ export function createRelations(world: World): RelationsApi {
   const byDef = new Map<RelationDef<Schema | void>, RelationRuntime>()
   const byRelationId = new Map<number, RelationRuntime>()
 
-  // §2.2 mint map: logical pairKey64 → synthetic pair ComponentId, plus the reverse + refcount.
+  // Logical pairKey64 → synthetic pair ComponentId, plus the reverse + refcount.
   const pairIdByKey = new Map<bigint, ComponentId>()
   const pairKeyById = new Map<ComponentId, { relationId: RelationId; targetIndex: number }>()
   const pairDefById = new Map<ComponentId, ComponentDef<Schema>>()
   const pairsByRelation = new Map<number, Set<ComponentId>>()
   const pairRefCount = new Map<ComponentId, number>()
 
-  // §3.3 per-subject relation-pair counter: subjectIndex → (relationId → count).
+  // SubjectIndex → (relationId → count).
   const relationPairCount = new Map<number, Map<number, number>>()
-  // §6.3 forward index (subject → targets), allocated per relation on first targetsOf use.
+  // (subject → targets), allocated per relation on first targetsOf use.
   const forwardIndex = new Map<number, Map<number, Set<number>>>()
 
   let overflowArchetypeSeq = -1000000 // synthetic archetypeId namespace for overflow ColumnSets (never a real archetype)
@@ -152,7 +152,7 @@ export function createRelations(world: World): RelationsApi {
 
   function makePresenceDef(name: string, exclusive: boolean, payload: Schema | null): ComponentDef<Schema> {
     if (exclusive) {
-      // §4.2: an exclusive relation's presence id ALWAYS carries the eid target column (field 0) so
+      // An exclusive relation's presence id ALWAYS carries the eid target column (field 0) so
       // re-target is an in-place column write (the T1 valve) and depth can walk the parent chain —
       // even for a payload-free exclusive relation (just the target column). Payload (if any) follows
       // as fields 1..|P|.
@@ -165,7 +165,7 @@ export function createRelations(world: World): RelationsApi {
 
   function makePairDef(relationId: RelationId, targetIndex: number): ComponentDef<Schema> {
     // The per-target pair member is a zero-field tag — payload (if any) lives in the overflow table
-    // (§4.3) or, for exclusive, in the presence column (§4.2). The pair id is pure signature membership.
+    // or, for exclusive, in the presence column. The pair id is pure signature membership.
     return defineComponent({}, { brand: `pair$${relationId as number}.${targetIndex}`, storage: 'sparse' })
   }
 
@@ -191,7 +191,7 @@ export function createRelations(world: World): RelationsApi {
     }
   }
 
-  // --- §2.2 mintPair (eager, O(1), idempotent, index-keyed) ------------------
+  // --- (eager, O(1), idempotent, index-keyed) ------------------
 
   function mintPair(rt: RelationRuntime, targetIndex: number): ComponentId {
     const key = pairKey64(rt.relationId, targetIndex, indexBits)
@@ -217,7 +217,7 @@ export function createRelations(world: World): RelationsApi {
     return pairIdByKey.get(pairKey64(relationId, targetIndex, indexBits))
   }
 
-  // --- §3.3 relation-pair counter --------------------------------------------
+  // ---
 
   function pairCountOf(sIdx: number, relationId: RelationId): number {
     return relationPairCount.get(sIdx)?.get(relationId as number) ?? 0
@@ -239,7 +239,7 @@ export function createRelations(world: World): RelationsApi {
     if (inner.size === 0) relationPairCount.delete(sIdx)
   }
 
-  // --- §6 back-ref index -----------------------------------------------------
+  // ---
 
   function backrefAdd(rt: RelationRuntime, tIdx: number, subject: EntityHandle): void {
     let set = rt.backref.get(tIdx)
@@ -258,7 +258,7 @@ export function createRelations(world: World): RelationsApi {
 
   function forwardAdd(rt: RelationRuntime, sIdx: number, tIdx: number): void {
     const fwd = forwardIndex.get(rt.relationId as number)
-    if (fwd === undefined) return // not active → not maintained (pay-for-what-you-use, §6.3)
+    if (fwd === undefined) return // not active → not maintained (pay-for-what-you-use)
     let set = fwd.get(sIdx)
     if (set === undefined) {
       set = new Set()
@@ -274,7 +274,7 @@ export function createRelations(world: World): RelationsApi {
     if (set.size === 0) fwd?.delete(sIdx)
   }
 
-  // --- §4 overflow row alloc/free --------------------------------------------
+  // --- /free --------------------------------------------
 
   function overflowRowFor(ov: OverflowTable, sIdx: number, tIdx: number, create: boolean): number {
     const key = overflowKey64(sIdx, tIdx, indexBits)
@@ -296,7 +296,7 @@ export function createRelations(world: World): RelationsApi {
     ov.freeRows.push(row)
   }
 
-  // --- exclusive subject target column access (§4.2) -------------------------
+  // --- exclusive subject target column access -------------------------
 
   function exclusiveTargetCol(rt: RelationRuntime, subject: EntityHandle): { col: Column; row: number } | null {
     const r = host.columnSetFor(subject, rt.presenceDef)
@@ -335,7 +335,7 @@ export function createRelations(world: World): RelationsApi {
     for (const k of Object.keys(payload)) view[k] = payload[k]
   }
 
-  // --- §5 structural operations ----------------------------------------------
+  // ---
 
   function addPair(
     subject: EntityHandle,
@@ -345,7 +345,7 @@ export function createRelations(world: World): RelationsApi {
   ): void {
     if (!host.isAlive(subject)) return
     if (!host.isAlive(target)) return
-    // M9 (reactivity.md §7.4): if an observer drain is in flight, stage this op to the world's deferred
+    // If an observer drain is in flight, stage this op to the world's deferred
     // command buffer and return — it applies at the next serial flush, never mutating mid-drain.
     if (host.deferRelationOp('add', subject, relation, target, payload)) return
     const rt = requireRuntime(relation)
@@ -359,7 +359,7 @@ export function createRelations(world: World): RelationsApi {
 
     const cid = mintPair(rt, tIdx)
     if (host.bitmaskHas(sIdx, cid)) {
-      // idempotent re-add: only refresh the overflow payload. §6.5: an overflow payload change on an
+      // idempotent re-add: only refresh the overflow payload.: an overflow payload change on an
       // already-live pair is journaled as an explicit SET_PAYLOAD structural op (it lives in no archetype
       // column the delta's changed-row scan covers), so a since-T delta carries the new payload.
       if (rt.overflow !== null && payload !== undefined) {
@@ -387,7 +387,7 @@ export function createRelations(world: World): RelationsApi {
     markDepthDirty(rt, sIdx)
   }
 
-  // §5.4 exclusive re-target: the T1 valve — in-place eid column write, NO migration.
+  // The T1 valve — in-place eid column write, NO migration.
   function addPairExclusive(
     rt: RelationRuntime,
     subject: EntityHandle,
@@ -452,7 +452,7 @@ export function createRelations(world: World): RelationsApi {
   }
 
   function hasPair(subject: EntityHandle, relation: RelationDef<Schema | void>, target: EntityHandle): boolean {
-    // P4 (no-dangling): both endpoints must be the LIVE occupants of their indices. handleIndex strips
+    // (no-dangling): both endpoints must be the LIVE occupants of their indices. handleIndex strips
     // the generation, so a stale handle whose index was recycled would otherwise alias the live entity
     // now in that slot. isAlive checks the generation, closing the aliasing class.
     if (!host.isAlive(subject) || !host.isAlive(target)) return false
@@ -474,7 +474,7 @@ export function createRelations(world: World): RelationsApi {
 
   function getPair(subject: EntityHandle, relation: RelationDef<Schema | void>, target: EntityHandle): PairAccessor {
     const rt = requireRuntime(relation)
-    // P4 (no-dangling): a stale (recycled-index) endpoint must not alias the live occupant. Guard both
+    // (no-dangling): a stale (recycled-index) endpoint must not alias the live occupant. Guard both
     // ends before resolving indices; an inert accessor is the safe answer for a dead pair.
     if (!host.isAlive(subject) || !host.isAlive(target)) {
       const inert = (): Record<string, unknown> => ({})
@@ -492,7 +492,7 @@ export function createRelations(world: World): RelationsApi {
     }
     if (rt.overflow !== null) {
       const ov = rt.overflow
-      // re-resolve the overflow row per access (it can move on re-add, §4.4).
+      // re-resolve the overflow row per access (it can move on re-add).
       const bind = (): Record<string, unknown> => {
         const row = overflowRowFor(ov, sIdx, tIdx, true)
         return bindOverflowAccessor(ov, row, subject)
@@ -506,7 +506,7 @@ export function createRelations(world: World): RelationsApi {
 
   function* subjectsOf(relation: RelationDef<Schema | void>, target: EntityHandle): Iterable<EntityHandle> {
     const rt = requireRuntime(relation)
-    // P4 (no-dangling): the back-ref index is keyed by bare entity INDEX (handleIndex strips generation),
+    // (no-dangling): the back-ref index is keyed by bare entity INDEX (handleIndex strips generation),
     // so a despawned handle whose index was recycled would alias the live entity now in that slot. Guard
     // the queried target's liveness/generation FIRST — a dead handle has no subjects.
     if (!host.isAlive(target)) return
@@ -516,7 +516,7 @@ export function createRelations(world: World): RelationsApi {
 
   function* targetsOf(subject: EntityHandle, relation: RelationDef<Schema | void>): Iterable<EntityHandle> {
     const rt = requireRuntime(relation)
-    // P4 (no-dangling): a stale (recycled-index) subject must not alias the live occupant of that slot.
+    // (no-dangling): a stale (recycled-index) subject must not alias the live occupant of that slot.
     if (!host.isAlive(subject)) return
     const sIdx = host.handleIndex(subject)
     if (rt.exclusive) {
@@ -555,7 +555,7 @@ export function createRelations(world: World): RelationsApi {
     return readExclusiveTarget(rt, subject)
   }
 
-  // --- §9 lazy hierarchy depth -----------------------------------------------
+  // ---
 
   function markDepthDirty(rt: RelationRuntime, sIdx: number): void {
     if (rt.depth !== null) rt.depth.dirty.add(sIdx)
@@ -596,13 +596,13 @@ export function createRelations(world: World): RelationsApi {
     return d
   }
 
-  // --- §7 cascade-on-delete (iterative BFS, registered as preDespawn) ---------
+  // --- (iterative BFS, registered as preDespawn) ---------
 
-  // §7.2: ONE cascade is in flight at a time (despawn is serial/main-thread). The queue + visited set
+  // ONE cascade is in flight at a time (despawn is serial/main-thread). The queue + visited set
   // are hoisted to module scope so the re-entrant onPreDespawn that host.despawn fires for each victim
   // appends to the SAME frontier and returns immediately — the OUTERMOST call owns the drain loop. This
   // keeps cascade DEPTH iterative (constant native stack: outer loop → host.despawn → re-entrant
-  // processDespawn → return), so a 100k-deep deleteSubject chain unwinds without recursion (P5).
+  // processDespawn → return), so a 100k-deep deleteSubject chain unwinds without recursion.
   let cascadeQueue: EntityHandle[] | null = null
   let cascadeVisited: Set<number> | null = null
 
@@ -679,18 +679,18 @@ export function createRelations(world: World): RelationsApi {
     return out
   }
 
-  // --- §8 / queries.md §10 pair-term resolver (Q-R2: NEVER mints) ------------
+  // --- / (NEVER mints) ------------
 
   function resolvePair(relationId: number, target: number | symbol): ResolvedPair {
     const rt = byRelationId.get(relationId)
     if (rt === undefined) return { componentId: 0 as ComponentId, unsatisfiable: true }
     if (typeof target === 'symbol') {
-      // Pair(R, Wildcard) → the per-relation presence bit, O(1) per archetype (§8.1).
+      // Pair(R, Wildcard) → the per-relation presence bit, O(1) per archetype.
       return { componentId: rt.presenceId, unsatisfiable: false }
     }
     const targetIndex = host.handleIndex(target as EntityHandle)
     if (rt.exclusive) {
-      // §8.2: target is a column value → match presence archetypes, then row-filter by the eid column.
+      // Target is a column value → match presence archetypes, then row-filter by the eid column.
       return {
         componentId: rt.presenceId,
         unsatisfiable: false,
@@ -757,14 +757,14 @@ export function createRelations(world: World): RelationsApi {
   }
 
   function Pair<R extends RelationDef<Schema | void>>(relation: R, target: EntityHandle | WildcardToken): PairDef<R> {
-    // The query-term PairDef shape (type-system §7.2): { relation, target, id }. id is UNREGISTERED;
+    // The query-term PairDef shape (type-system ): { relation, target, id }. id is UNREGISTERED;
     // the compiler resolves the concrete pair/presence id via the injected resolver.
     return { relation, target, id: -1 as PairDef<R>['id'] }
   }
 
-  // --- serialization provider (serialization.md §4.6 / §8.3) -----------------
+  // --- serialization provider -----------------
   // Enumerate every live pair as a logical (subject, relationId, target, payload) triple — NEVER the
-  // synthetic pair id (producer-local, §8.3). Payload is read by field name so the receiver re-mints
+  // synthetic pair id (producer-local). Payload is read by field name so the receiver re-mints
   // its own pair id and re-writes the named fields. addPair re-establishes a pair on deserialize.
 
   function payloadFieldNames(rt: RelationRuntime): string[] {
@@ -800,7 +800,7 @@ export function createRelations(world: World): RelationsApi {
     },
     livePairs() {
       const out: SerializePair[] = []
-      // Deterministic order: relationId asc, then subject index asc, then target index asc (§4.4).
+      // Deterministic order: relationId asc, then subject index asc, then target index asc.
       for (const rt of [...relations].sort((a, b) => (a.relationId as number) - (b.relationId as number))) {
         const triples: { subject: EntityHandle; target: EntityHandle | null; sIdx: number; tIdx: number }[] = []
         if (rt.exclusive) {

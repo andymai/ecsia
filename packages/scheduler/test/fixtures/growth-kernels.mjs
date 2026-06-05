@@ -3,11 +3,11 @@
 // main thread; ids are aligned from the manifest by name.
 //
 // Health + Mana, one archetype. Three kernels:
-//   Regen   — Health += 1               (the disjoint-write twin used for serial-equivalence)
-//   Copy    — Mana   := Health          (READ-BACK proof: the worker reads Health and surfaces it in a
-//             DIFFERENT column. After a re-backing, a main-thread sentinel written at a high Health row
-//             must reappear in that entity's Mana iff the worker re-wrapped onto the NEW backing.)
-//   Spawner — create child + add Mana=7 (worker-staged OP_CREATE; its serial-slot apply may grow a col)
+// Regen — Health += 1 (the disjoint-write twin used for serial-equivalence)
+// Copy — Mana := Health (READ-BACK proof: the worker reads Health and surfaces it in a
+// DIFFERENT column. After a re-backing, a main-thread sentinel written at a high Health row
+// must reappear in that entity's Mana iff the worker re-wrapped onto the NEW backing.)
+// Spawner — create child + add Mana=7 (worker-staged OP_CREATE; its serial-slot apply may grow a col)
 
 import { defineComponent } from '@ecsia/core'
 

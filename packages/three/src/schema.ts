@@ -1,14 +1,14 @@
-// Transform schema conventions (P4 deliverables 2 & 3). The bridge is structural, not nominal: it
+// Transform schema conventions ( deliverables 2 & 3). The bridge is structural, not nominal: it
 // reads named fields off whatever component you pass, so you can reuse your own Position/Velocity defs.
 // The conventions below are what the sync systems EXPECT — define your components with these field
 // names (all f32) and everything lines up with no adapter.
 //
-//   position  { x, y, z }            world translation
-//   rotation  { x, y, z, w }         a quaternion (NOT euler — Object3D.quaternion is the cheap write)
-//   scale     { x, y, z }            per-axis scale; defaults to 1 when the scale term is omitted
+// position { x, y, z } world translation
+// rotation { x, y, z, w } a quaternion (NOT euler — Object3D.quaternion is the cheap write)
+// scale { x, y, z } per-axis scale; defaults to 1 when the scale term is omitted
 //
 // These are the canonical defs most apps will just import. They are plain `define*` descriptors with no
-// world attached (public-api.md §3 naming), so they can live at module scope and be shared across worlds.
+// world attached, so they can live at module scope and be shared across worlds.
 
 import type { ComponentDef, EntityHandle, EntityIndex, Schema, WorldQuery } from '@ecsia/schema'
 import type { ObserverHandle, ObserverTerm } from '@ecsia/core'

@@ -1,7 +1,7 @@
-// The archetype table (archetype-storage.md §3.4): a ColumnSet per column-bearing component in the
+// The archetype table: a ColumnSet per column-bearing component in the
 // signature + a dense entity-row list. Tag / zero-field components contribute NO ColumnSet
-// (presence is pure signature membership, §3.4). The rows list is itself a u32 column allocated
-// through Buffers so it grows under the same length-tracking protocol as data columns (§3.4).
+// (presence is pure signature membership). The rows list is itself a u32 column allocated
+// through Buffers so it grows under the same length-tracking protocol as data columns.
 
 import type { ComponentId, ComponentDef, Schema } from '@ecsia/schema'
 import type { ArchetypeId } from '@ecsia/schema'
@@ -26,15 +26,15 @@ export interface Archetype {
   /** componentId → its ColumnSet. Hot archetypes only; tag/cold archetypes leave it empty. */
   readonly columnSets: Map<ComponentId, ColumnSet>
 
-  /** Dense entity-row list column: rows[r] = the FULL EntityHandle occupying row r (§3.5). */
+  /** Dense entity-row list column: rows[r] = the FULL EntityHandle occupying row r. */
   rowsColumn: Column | null
   rows: Uint32Array
   count: number
 
-  /** Lazy edge cache keyed by single ComponentId (§5.4). */
+  /** Lazy edge cache keyed by single ComponentId. */
   readonly edges: Map<ComponentId, { add?: Archetype; remove?: Archetype }>
 
-  /** Fragmentation policy state (§10). */
+  /** Fragmentation policy state. */
   cold: boolean
   lastAccessTick: number
 }
@@ -57,10 +57,10 @@ export function attachHotColumns(arch: Archetype, deps: ArchetypeColumnDeps): vo
   for (let i = 0; i < arch.signature.length; i++) {
     const c = arch.signature[i] as number as ComponentId
     const def = defOf(c)
-    if (def === undefined) continue // pair/synthetic id with no registered def yet (relations, M8)
+    if (def === undefined) continue // pair/synthetic id with no registered def yet (relations)
     const rt = def as ComponentRuntime<Schema>
     // A pure tag (no columns AND no rich fields) gets no ColumnSet. A rich-only or mixed component DOES
-    // get one — its accessor carries the sidecar getters/setters even with zero columns (rich-fields.md).
+    // get one — its accessor carries the sidecar getters/setters even with zero columns.
     if (rt.columnLayouts.length === 0 && !rt.hasRichFields) continue
     arch.columnSets.set(
       c,

@@ -1,10 +1,10 @@
-// The buffer layer (memory-buffers.md §3–§7). Owns the physical column/region representation,
-// the SAB-vs-ArrayBuffer decision (the single B-1 site, §5.5), and the growth protocol with its
-// load-bearing correctness invariant — accessor view-invalidation (Must-Fix #5):
-//   PRIMARY  (§7.2): length-tracking views over a resizable backing auto-widen on `.grow()`,
-//                    so growth re-points NOTHING (Invariant V-1).
-//   FALLBACK (§7.5): a non-resizable backing is re-allocated, copied, and every live ViewHolder
-//                    is re-bound via `__rebind` (the live-accessor registry).
+// The buffer layer. Owns the physical column/region representation,
+// the SAB-vs-ArrayBuffer decision (the single site), and the growth protocol with its
+// load-bearing correctness invariant — accessor view-invalidation:
+// PRIMARY: length-tracking views over a resizable backing auto-widen on `.grow()`,
+// so growth re-points NOTHING.
+// FALLBACK: a non-resizable backing is re-allocated, copied, and every live ViewHolder
+// is re-bound via `__rebind` (the live-accessor registry).
 
 import type { ColumnLayout, ElementKind, TypedArray } from './layout.js'
 import { elementCtor } from './layout.js'
@@ -13,7 +13,7 @@ export type Backing = SharedArrayBuffer | ArrayBuffer
 export type ColumnKey = string & { readonly __columnKey: unique symbol }
 export type RegionKey = string & { readonly __regionKey: unique symbol }
 
-// --- §4 capability probe ---------------------------------------------------
+// ---
 
 export type WorkerMode = 'single' | 'sab' | 'no-sab' | 'auto'
 
@@ -113,14 +113,14 @@ export function probeCapabilities(
   })
 }
 
-// --- §3.1 Column / Region --------------------------------------------------
+// --- / Region --------------------------------------------------
 
 export interface Column<TA extends TypedArray = TypedArray> {
   readonly layout: ColumnLayout
   readonly key: ColumnKey
-  // MUTABLE: re-pointed only on the fallback grow path (§7.5); stable on the primary path (§7.2).
+  // MUTABLE: re-pointed only on the fallback grow path; stable on the primary path.
   view: TA
-  // MUTABLE identity ONLY on the fallback path; the SAB identity is stable on the primary path (B-2).
+  // MUTABLE identity ONLY on the fallback path; the SAB identity is stable on the primary path.
   backing: Backing
   capacity(): number
 }
@@ -138,19 +138,19 @@ export interface RegionOpts {
   readonly fill?: number
 }
 
-// Anything holding a captured view that must be re-bound on a fallback grow (§5.1, §7.5).
+// Anything holding a captured view that must be re-bound on a fallback grow.
 export interface ViewHolder {
   __rebind(newBacking: Backing): void
 }
 
-// --- §7.7 reservation sizing ----------------------------------------------
+// ---
 
 export interface BuffersConfig {
   readonly capabilities: RuntimeCapabilities
   readonly maxEntities: number
-  /** §7.7 GROWTH_RESERVE_FACTOR — multiplies initialCapacity for the address-space reservation. */
+  /** _RESERVE_FACTOR — multiplies initialCapacity for the address-space reservation. */
   readonly growthReserveFactor?: number
-  /** §7.7 MIN_RESERVE_ROWS — floor on a column's reserved capacity. */
+  /** _RESERVE_ROWS — floor on a column's reserved capacity. */
   readonly minReserveRows?: number
 }
 
@@ -163,7 +163,7 @@ const isSab = (strategy: BackingStrategy): boolean =>
   strategy === 'resizable-sab' || strategy === 'grow-patch-sab'
 
 function makeView(element: ElementKind, backing: Backing): TypedArray {
-  // No length argument: the view length-tracks the (possibly resizable) backing (V-1).
+  // No length argument: the view length-tracks the (possibly resizable) backing.
   const Ctor = elementCtor(element)
   return new Ctor(backing)
 }
@@ -196,8 +196,8 @@ export interface SharedHandleManifest {
   readonly regions: ReadonlyArray<ExportedRegionHandle>
 }
 
-// memory-buffers §7.6 / serialization §3.4: a re-backing event the worker pool must replay at the wave
-// fence. The in-place `.grow()` path emits NOTHING (length-tracking views auto-widen, V-1); ONLY the
+// memory-buffers / serialization: a re-backing event the worker pool must replay at the wave
+// fence. The in-place `.grow()` path emits NOTHING (length-tracking views auto-widen); ONLY the
 // fallback re-allocation (a NEW SAB backing) produces a notice, because the worker's manifest-captured
 // view still points at the abandoned buffer until it re-wraps this `backing`.
 export interface ColumnGrowthNotice {
@@ -218,13 +218,13 @@ export class Buffers {
   readonly #maxEntities: number
   readonly #growthReserveFactor: number
   readonly #minReserveRows: number
-  // One registry of column/region objects, keyed for idempotent allocation (§5.2).
+  // One registry of column/region objects, keyed for idempotent allocation.
   readonly #registry = new Map<string, Column | Region>()
   readonly #regionElement = new Map<string, ElementKind>()
-  // The live-accessor registry: walked ONLY on the fallback grow path (R-1, §7.5).
+  // The live-accessor registry: walked ONLY on the fallback grow path.
   readonly #accessors = new Map<string, Set<ViewHolder>>()
-  // §7.6 re-backing journal: bumped + appended ONLY on the SAB #growFallback path (workers re-wrap the
-  // new backing at the wave fence). In-place `.grow()` never touches this — V-1 keeps it zero-cost.
+  // Bumped + appended ONLY on the SAB #growFallback path (workers re-wrap the
+  // new backing at the wave fence). In-place `.grow()` never touches this — keeps it zero-cost.
   #growGeneration = 0
   readonly #pendingGrowth = new Map<ColumnKey, ColumnGrowthNotice>()
 
@@ -255,7 +255,7 @@ export class Buffers {
     }
   }
 
-  // §5.3: allocate (or fetch existing) a column. Idempotent per key.
+  // Allocate (or fetch existing) a column. Idempotent per key.
   column(key: ColumnKey, layout: ColumnLayout, initialCapacity: number): Column {
     const existing = this.#registry.get(key)
     if (existing !== undefined) return existing as Column
@@ -281,7 +281,7 @@ export class Buffers {
     return col
   }
 
-  // §5.4: a flat global region (entity records, bitmask words, log rings).
+  // A flat global region (entity records, bitmask words, log rings).
   region(key: RegionKey, element: ElementKind, length: number, opts: RegionOpts = {}): Region {
     const existing = this.#registry.get(key)
     if (existing !== undefined) return existing as Region
@@ -310,7 +310,7 @@ export class Buffers {
     return reg
   }
 
-  // §7.2 PRIMARY path. Grow a column to >= newCapacity rows. Returns the (possibly re-pointed) Column.
+  // >= newCapacity rows. Returns the (possibly re-pointed) Column.
   grow(col: Column, newCapacity: number): Column {
     const rowBytes = col.layout.rowBytes
     const required = newCapacity * rowBytes
@@ -325,8 +325,8 @@ export class Buffers {
       if (target >= required) {
         try {
           resizeFn.call(growable, target)
-          // No view re-point, no registry walk, no worker re-broadcast (R-1): the length-tracking
-          // view (and every captured view) auto-widens. C-2: fill to the ACTUAL post-grow capacity
+          // No view re-point, no registry walk, no worker re-broadcast: the length-tracking
+          // view (and every captured view) auto-widens.: fill to the ACTUAL post-grow capacity
           // (the doubling protocol over-allocates beyond newCapacity), else eid rows in
           // [newCapacity, actualCapacity) read 0 — a valid entity index, not the -1 null sentinel.
           this.#fillGrownTail(col.view, col.layout, oldCapacity, col.backing.byteLength / rowBytes)
@@ -335,12 +335,12 @@ export class Buffers {
           return this.#growFallback(col, newCapacity)
         }
       }
-      // Reservation exhausted: clamp failed to cover required → exact alloc, no cap (§7.7 valve).
+      // Reservation exhausted: clamp failed to cover required → exact alloc, no cap.
     }
     return this.#growFallback(col, newCapacity)
   }
 
-  // §7.5 FALLBACK path. PRECONDITION (V-2): serial flush point, no worker executing.
+  // Serial flush point, no worker executing.
   #growFallback(col: Column, newCapacity: number): Column {
     const rowBytes = col.layout.rowBytes
     const oldView = col.view
@@ -358,7 +358,7 @@ export class Buffers {
     if (holders !== undefined) {
       for (const holder of holders) holder.__rebind(newBacking)
     }
-    // §7.6: main-thread holders are re-bound above, but worker views captured the OLD SAB at bootstrap.
+    // Main-thread holders are re-bound above, but worker views captured the OLD SAB at bootstrap.
     // Record the new backing so the pool re-wraps it at the next wave fence (only SAB is worker-visible).
     if (isSharedBacking(newBacking)) {
       this.#growGeneration += 1
@@ -367,7 +367,7 @@ export class Buffers {
     return col
   }
 
-  // §7.6: the re-backing journal the worker pool drains at the wave fence. `generation` is a cheap
+  // The re-backing journal the worker pool drains at the wave fence. `generation` is a cheap
   // monotonic int: when it is unchanged across two reads the pool skips the drain entirely (zero
   // steady-state cost). `drain()` returns the latest backing per re-backed column and clears the queue.
   columnGrowth(): ColumnGrowthLog {
@@ -381,7 +381,7 @@ export class Buffers {
     }
   }
 
-  // §7.3: only eid columns need an explicit fill (their zero is a valid entity); everything else
+  // Only eid columns need an explicit fill (their zero is a valid entity); everything else
   // relies on the runtime zero-init of the grown region.
   #fillGrownTail(view: TypedArray, layout: ColumnLayout, oldCapacity: number, newCapacity: number): void {
     if (layout.fillOnInit === 0) return
@@ -408,7 +408,7 @@ export class Buffers {
     return this.#registry.get(key)
   }
 
-  // §6.3: the worker-relevant SAB handles, posted once at worker startup.
+  // The worker-relevant SAB handles, posted once at worker startup.
   exportSharedHandles(): SharedHandleManifest {
     const columns: ExportedColumnHandle[] = []
     const regions: ExportedRegionHandle[] = []
@@ -425,7 +425,7 @@ export class Buffers {
   }
 }
 
-// §6.4 serialization boundary: zero-copy SAB vs copy snapshot.
+// Zero-copy SAB vs copy snapshot.
 export function sharedBacking(col: Column): SharedArrayBuffer | null {
   return isSharedBacking(col.backing) ? col.backing : null
 }
@@ -439,7 +439,6 @@ export function snapshotInto(col: Column, count: number, out: TypedArray, outOff
   return elements
 }
 
-// §3.6 zero-copy slice for one vec row.
 export function rowSlice(col: Column, row: number): TypedArray {
   const n = col.layout.stride
   return (col.view as unknown as { subarray(s: number, e: number): TypedArray }).subarray(row * n, row * n + n)

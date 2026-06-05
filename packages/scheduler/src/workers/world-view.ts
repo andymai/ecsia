@@ -1,9 +1,8 @@
-// The worker-side (and main-thread-mirror) zero-copy view over the shared buffer set (serialization.md
-// §3.3 attachWorld). It re-wraps every column + region SAB by reference (LENGTH-TRACKING views,
-// memory-buffers.md V-1) so a worker reads/writes Position.x as a direct indexed load on the SAME
+// The worker-side (and main-thread-mirror) zero-copy view over the shared buffer set. It
+// re-wraps every column + region SAB by reference (LENGTH-TRACKING views) so a worker
+// reads/writes Position.x as a direct indexed load on the SAME
 // Float32Array the main thread uses — no value copy. Workers read ARCHETYPE TABLES ONLY here: an
 // entity's (archetypeId, row) comes from the shared entity-record regions, never the bitmask
-// (Must-Fix #1).
 
 import { elementCtor } from '@ecsia/core'
 import type { ColumnGrowthNotice, ColumnKey, ElementKind, RegionKey, SharedHandleManifest, TypedArray } from '@ecsia/core'
@@ -33,7 +32,7 @@ export interface WorkerWorldView {
   /** The structural-op encoder for this worker (defers create/destroy/add/remove to the command buffer). */
   readonly commands: CommandEncoder
   /**
-   * Re-wrap re-backed columns onto their new SAB (serialization.md §3.4 / memory-buffers.md §7.6). The
+   * Re-wrap re-backed columns onto their new SAB. The
    * pool drains the main thread's re-backing journal at the wave fence and delivers the new backings
    * here BEFORE the next dispatch, so the worker stops reading the abandoned buffer. In-place `.grow()`
    * never produces a notice — those views length-track automatically.
@@ -42,7 +41,7 @@ export interface WorkerWorldView {
 }
 
 /**
- * Worker write-corral writer (reactivity.md §9.1, R-4). Wraps the per-worker corral SAB. `push`
+ * Worker write-corral writer. Wraps the per-worker corral SAB. `push`
  * stages one `(index, componentId)` value-write entry: word [0] is the running entry count, entries
  * follow as `[index, componentId]` pairs. Single-writer (this worker only), no atomics — the main
  * thread reads it only after the wave fence. On overflow the corral caps (the merge would read past
@@ -114,9 +113,9 @@ export function buildWorkerWorldView(
       const col = columns.get(colKey(archetypeId, componentId, fieldIndex))
       if (col === undefined) return
       ;(col.view as unknown as { [i: number]: number })[row * col.stride] = value
-      // R-4: stage the value write into this worker's corral so the serial merge feeds the write log
+      // Stage the value write into this worker's corral so the serial merge feeds the write log
       // (drives onChange + `.changed` for worker writes). fieldIndex collapses to component granularity
-      // — matching the main-thread trackWrite default (reactivity.md §6.2).
+      // — matching the main-thread trackWrite default.
       writeCorral?.push(index, componentId)
     },
     commands,

@@ -2,7 +2,6 @@
 // 41/43), the cycle-escaped guard (lines 75-76, branch 73) via a hand-built cyclic DAG, round packing
 // with incompatible systems (branch 100), worker-ineligible main-thread pinning into an existing
 // worker round (lines 121-126, branch 119), and the eligible/worker-0 fall-through (branch 112).
-// scheduler.md §5.
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, object } from '@ecsia/core'
@@ -61,7 +60,7 @@ describe('waves.ts: concurrencyCompatible rejections (branches 41/43)', () => {
     expect(concurrencyCompatible(a!, b!)).toBe(false)
   })
 
-  test('two pure READERS of the same component ARE compatible (read/read allowed, §5.6)', () => {
+  test('two pure READERS of the same component ARE compatible (read/read allowed)', () => {
     const C = defineComponent({ x: 'f32' }, { name: 'cov_cc_rr' }) as ComponentDef<Schema>
     createWorld({ components: [C] })
     const [a, b] = lowerSystems(
@@ -76,7 +75,7 @@ describe('waves.ts: concurrencyCompatible rejections (branches 41/43)', () => {
 })
 
 describe('waves.ts: extractWaves cycle-escaped guard (lines 75-76, branch 73)', () => {
-  test('buildPlan over a DAG that still contains a cycle throws the SCH-1 safety assertion', () => {
+  test('buildPlan over a DAG that still contains a cycle throws the safety assertion', () => {
     const C = defineComponent({ x: 'f32' }, { name: 'cov_wave_cycle' }) as ComponentDef<Schema>
     createWorld({ components: [C] })
     const systems = lowerSystems(
@@ -85,7 +84,7 @@ describe('waves.ts: extractWaves cycle-escaped guard (lines 75-76, branch 73)', 
     )
     // A 0→1→0 cycle: every node has in-degree >= 1, so Kahn's queue is empty from the start and
     // `placed` stays 0 < n → the guard fires. (This path is unreachable via buildDAG, which detects
-    // cycles first; the guard is the SCH-1 belt-and-braces assertion against an escaped cycle.)
+    // cycles first; the guard is the belt-and-braces assertion against an escaped cycle.)
     const cyclic: DAG = {
       n: 2,
       succ: [[1 as unknown as SystemId], [0 as unknown as SystemId]],

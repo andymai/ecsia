@@ -1,8 +1,8 @@
 // Edge-case coverage for LiveQuery flavor + iteration corners reached through the public world:
-//   - changed(...components) with an EXPLICIT component subset (#resolveChangedComponents id push);
-//   - eachAdded/eachRemoved/eachChanged guard arms when no delta / no reactivity is declared;
-//   - the scattered-index cold branch (eachAdded over a COLD matching archetype);
-//   - a cold OPTIONAL value term whose component block was never cold-allocated -> undefined prop.
+// - changed(...components) with an EXPLICIT component subset (#resolveChangedComponents id push);
+// - eachAdded/eachRemoved/eachChanged guard arms when no delta / no reactivity is declared;
+// - the scattered-index cold branch (eachAdded over a COLD matching archetype);
+// - a cold OPTIONAL value term whose component block was never cold-allocated -> undefined prop.
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, optional, read, write } from '@ecsia/core'

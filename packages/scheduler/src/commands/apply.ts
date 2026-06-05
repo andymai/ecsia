@@ -1,9 +1,9 @@
-// Command-buffer flush + deterministic merge + validate-then-apply (command-buffer.md §7, §8, §9).
+// Command-buffer flush + deterministic merge + validate-then-apply.
 // The main thread merges every worker's buffer in FIXED worker-index order, applies each record
 // serially (validate-then-apply, drop-if-dead with an in-flush tombstone set), coalesces per-entity
 // adds/removes into ONE migration each, and returns unused reserved ids. This is what makes a
 // multi-worker run SERIAL-EQUIVALENT to the single-threaded executor: encoding order across workers is
-// nondeterministic, but applying order is fixed (ascending worker index, then append order, §7.2).
+// nondeterministic, but applying order is fixed (ascending worker index, then append order).
 
 import { Op, recordLen } from './op.js'
 import type { CommandBuffer } from './buffer.js'
@@ -14,7 +14,7 @@ import type { EntityHandle } from '@ecsia/core'
 
 const NO_ENTITY_BITS = (NO_ENTITY as unknown as number) >>> 0
 
-/** A staged structural intent (legacy M6 seam, kept for compatibility). */
+/** A staged structural intent (legacy seam, kept for compatibility). */
 export interface StructuralIntent {
   readonly op: Op
 }
@@ -23,37 +23,37 @@ export interface CommandSink {
   flushAll(): void
 }
 
-/** The M6 single-thread sink: structural ops never deferred, so the flush is empty work (CB-6). */
+/** The single-thread sink: structural ops never deferred, so the flush is empty work. */
 export const directApplySink: CommandSink = {
   flushAll(): void {
-    // command-buffer.md §7.1 degenerate case: zero workers → zero command buffers → no-op.
+    // Zero workers → zero command buffers → no-op.
   },
 }
 
 /**
- * The main-thread world verbs the apply path drives (command-buffer.md §9). Built from the World's
+ * The main-thread world verbs the apply path drives. Built from the World's
  * public surface by the scheduler. Every call runs serial/main-thread (PHASE-2 flush slot).
  */
 export interface WorldApply {
   isAlive(h: EntityHandle): boolean
   handleIndex(h: EntityHandle): number
-  /** Place an already-reserved (alive) handle into the EMPTY archetype + emit Create (§7.4). */
+  /** Place an already-reserved (alive) handle into the EMPTY archetype + emit Create. */
   spawnReserved(h: EntityHandle): void
   despawn(h: EntityHandle): void
   /** id → registered ComponentDef (for migration + write-view). */
   defOf(id: ComponentId): ComponentDef<Schema> | undefined
   /** Field codec for a component id (payload decode). */
   codecOf(id: ComponentId): ComponentFieldCodec | undefined
-  /** One migration adding several components (archetype-storage.md §5.6a; C-MIG-1). */
+  /** One migration adding several components. */
   addMany(h: EntityHandle, defs: readonly ComponentDef<Schema>[]): void
   removeMany(h: EntityHandle, defs: readonly ComponentDef<Schema>[]): void
-  /** Is `def` currently present on `h`? (SET_PAYLOAD requires presence, §9.2). */
+  /** Is `def` currently present on `h`? (SET_PAYLOAD requires presence). */
   has(h: EntityHandle, def: ComponentDef<Schema>): boolean
   /** Write decoded field values into `h`'s current row + emit the `.changed` write-log entry. */
   writePayload(h: EntityHandle, def: ComponentDef<Schema>, values: Record<string, unknown>): void
-  /** Reclaim the unconsumed reservation tail after this worker's creates are applied (§6.3). */
+  /** Reclaim the unconsumed reservation tail after this worker's creates are applied. */
   returnUnused(cb: CommandBuffer): void
-  /** Relation apply (best-effort; relations land at M8). */
+  /** Relation apply (best-effort; relations land at ). */
   addPair?(subject: EntityHandle, relationId: RelationId, target: EntityHandle, payload: Record<string, unknown> | undefined): void
   removePair?(subject: EntityHandle, relationId: RelationId, target: EntityHandle): void
   warn(message: string): void
@@ -83,9 +83,9 @@ function removeFrom(arr: ComponentId[], c: ComponentId): void {
  * (diagnostics).
  */
 export function flushAll(world: WorldApply, buffers: readonly CommandBuffer[]): void {
-  const newlyCreated = new Set<number>() // §8.5 reserved-handle whitelist (by handle bit-pattern)
-  const tombstones = new Set<number>() // §8.2 entity INDICES destroyed THIS flush
-  // Ascending workerIndex is the deterministic merge order (§7.2). Buffers are passed in index order
+  const newlyCreated = new Set<number>() // (by handle bit-pattern)
+  const tombstones = new Set<number>() //
+  // Ascending workerIndex is the deterministic merge order. Buffers are passed in index order
   // by the caller; sort defensively so the invariant holds regardless of array order.
   const ordered = [...buffers].sort((a, b) => a.workerIndex - b.workerIndex)
   for (const cb of ordered) applyBuffer(world, cb, newlyCreated, tombstones)
@@ -93,7 +93,7 @@ export function flushAll(world: WorldApply, buffers: readonly CommandBuffer[]): 
 }
 
 function validateSubject(world: WorldApply, h: EntityHandle, newlyCreated: Set<number>, tombstones: Set<number>): boolean {
-  if (newlyCreated.has(h as number)) return true // reserved-and-created THIS flush → alive (§8.5)
+  if (newlyCreated.has(h as number)) return true // reserved-and-created THIS flush → alive
   if (tombstones.has(world.handleIndex(h))) {
     world.warn(`command references entity destroyed earlier this flush (handle ${h})`)
     return false
@@ -114,7 +114,7 @@ function applyBuffer(world: WorldApply, cb: CommandBuffer, newlyCreated: Set<num
   const drain = (h: EntityHandle): void => {
     const p = pending.get(h as number)
     if (p === undefined) return
-    // removes before adds (§9.3) so a remove-then-add of distinct ids lands in the final archetype.
+    // removes before adds so a remove-then-add of distinct ids lands in the final archetype.
     if (p.removes.length > 0) {
       const defs = p.removes.map((c) => world.defOf(c)).filter((d): d is ComponentDef<Schema> => d !== undefined)
       if (defs.length > 0) world.removeMany(h, defs)
@@ -136,7 +136,7 @@ function applyBuffer(world: WorldApply, cb: CommandBuffer, newlyCreated: Set<num
     switch (op) {
       case Op.CREATE: {
         const h = words[at + 1] as unknown as EntityHandle
-        // Belt-and-suspenders (command-buffer.md §6.4): a reserved handle is ALWAYS alive, so a
+        // Belt-and-suspenders: a reserved handle is ALWAYS alive, so a
         // well-formed OP_CREATE never names NO_ENTITY. Guard anyway so a corrupt/exhaustion-fabricated
         // record can never reach spawnReserved(0xffffffff) → handleIndex(NO_ENTITY) → record-table
         // corruption. Dropped: emits nothing, not counted toward appliedCreates (no reservation slot
@@ -195,7 +195,7 @@ function applyBuffer(world: WorldApply, cb: CommandBuffer, newlyCreated: Set<num
             const values = codec.decode(words, at + 4)
             const p = pending.get(h as number)
             if (p !== undefined && p.adds.includes(cid)) {
-              p.payloads.set(cid, values) // fold into the add's payload (§9.2)
+              p.payloads.set(cid, values) // fold into the add's payload
             } else {
               drain(h) // ensure the component is present at its current row before overwriting
               if (world.has(h, def)) world.writePayload(h, def, values)
@@ -209,7 +209,7 @@ function applyBuffer(world: WorldApply, cb: CommandBuffer, newlyCreated: Set<num
         const s = words[at + 1] as unknown as EntityHandle
         const rid = words[at + 2] as unknown as RelationId
         const t = words[at + 3] as unknown as EntityHandle
-        // command-buffer.md §8.3: ADD_PAIR drops if EITHER subject or target is dead (a relation to a
+        // ADD_PAIR drops if EITHER subject or target is dead (a relation to a
         // destroyed target is meaningless). Both go through the drop-if-dead gate.
         if (
           validateSubject(world, s, newlyCreated, tombstones) &&
@@ -217,13 +217,13 @@ function applyBuffer(world: WorldApply, cb: CommandBuffer, newlyCreated: Set<num
         ) {
           drain(s)
           if (world.addPair !== undefined) {
-            // relations.md §5.6 M8 deferral: worker-path pair PAYLOADS are deferred — the worker encoder
+            // Worker-path pair PAYLOADS are deferred — the worker encoder
             // emits payloadWordCount=0 (no relation-schema replication yet), so there are no payload
             // words to decode and the pair is applied with an undefined payload. recordLen() still skips
-            // the (zero) payload words correctly (§4.6). The pair/presence/back-ref/mint are all applied.
+            // the (zero) payload words correctly. The pair/presence/back-ref/mint are all applied.
             world.addPair(s, rid, t, undefined)
           } else {
-            world.warn('ADD_PAIR encountered but relations are not wired (M8)')
+            world.warn('ADD_PAIR encountered but relations are not wired')
           }
         }
         break
@@ -244,7 +244,7 @@ function applyBuffer(world: WorldApply, cb: CommandBuffer, newlyCreated: Set<num
     at += len
   }
 
-  // Drain any entity still pending at end-of-buffer (§9.4 unconditional tail drain).
+  // Drain any entity still pending at end-of-buffer.
   for (const key of [...pending.keys()]) drain(key as unknown as EntityHandle)
   cb.appliedCreateCount = appliedCreates
 }

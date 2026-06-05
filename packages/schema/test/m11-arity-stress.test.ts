@@ -1,19 +1,18 @@
-// Guard for the M11 type-arity stress + inference-budget fixtures (type-system.md §6.5/§6,
-// queries.md §9.1). The fixtures are type-only; vitest does not type-check them by default, so we
+// Guard for the type-arity stress + inference-budget fixtures (). The fixtures are type-only; vitest does not type-check them by default, so we
 // drive tsc on them directly under the project's strict flags.
 //
 // Three obligations:
-//   (1) the stress fixture type-checks clean — every @ts-expect-error is a REAL error (the
-//       read/write/has/without/optional/pair fold, the arity cap, the Has/HasWrite escape hatch).
-//   (2) DISCRIMINATION (not-any): an @ts-expect-error passes for ANY error, so a clean compile alone
-//       would not prove the elements are PRECISE rather than `any`. We compile a MUTATED fixture in
-//       which every iteration element is rebound to `any`. has `any`, the bogus-method calls guarded
-//       by `@ts-expect-error` (el.zzz() / el.nonexistentMethod()) no longer error → those directives
-//       become UNUSED → tsc fails with TS2578. The pair (clean passes, mutated fails-with-2578) proves
-//       the fixture discriminates `any` from a precise/typed element.
-//   (3) BUDGET (§6.4): the budget fixture compiles within a bounded type-instantiation count. A
-//       regression that replaces the fixed-arity overload family with a recursive variadic
-//       QueryElement would balloon instantiations and blow the budget.
+// (1) the stress fixture type-checks clean — every @ts-expect-error is a REAL error (the
+// read/write/has/without/optional/pair fold, the arity cap, the Has/HasWrite escape hatch).
+// (2) DISCRIMINATION (not-any): an @ts-expect-error passes for ANY error, so a clean compile alone
+// would not prove the elements are PRECISE rather than `any`. We compile a MUTATED fixture in
+// which every iteration element is rebound to `any`. has `any`, the bogus-method calls guarded
+// by `@ts-expect-error` (el.zzz() / el.nonexistentMethod()) no longer error → those directives
+// become UNUSED → tsc fails with TS2578. The pair (clean passes, mutated fails-with-2578) proves
+// the fixture discriminates `any` from a precise/typed element.
+// (3) BUDGET: the budget fixture compiles within a bounded type-instantiation count. A
+// regression that replaces the fixed-arity overload family with a recursive variadic
+// QueryElement would balloon instantiations and blow the budget.
 
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -50,7 +49,7 @@ const STRICT_FLAGS = [
 // flaking on minor type-machinery additions.
 const INSTANTIATION_BUDGET = 8000
 
-// Wall-clock budget (type-system.md §6.4 — "measure tsc wall-clock … assert under a GENEROUS budget").
+// Wall-clock budget ("measure tsc wall-clock … assert under a GENEROUS budget").
 // The instantiation count above is the PRIMARY, non-flaky tripwire (deterministic). Wall-clock is a
 // secondary, deliberately-loose guard: it is sensitive to CI machine load, cold tsc start, npx
 // resolution, and disk, so the threshold carries large headroom (baseline ~0.6s for one fixture; a
@@ -72,7 +71,7 @@ function typecheck(file: string, extra: readonly string[] = []): { ok: boolean; 
   }
 }
 
-describe('M11 type-arity stress (type-system.md §6.5/§6)', () => {
+describe(' type-arity stress ', () => {
   test('the stress fixture type-checks clean: every @ts-expect-error is a real error', () => {
     const { ok, out } = typecheck(stressFixture)
     expect(ok, out).toBe(true)
@@ -139,7 +138,7 @@ describe('M11 type-arity stress (type-system.md §6.5/§6)', () => {
   })
 })
 
-describe('M11 inference budget (type-system.md §6.4)', () => {
+describe(' inference budget ', () => {
   test('the max-arity budget fixture compiles within the instantiation budget', () => {
     const { ok, out } = typecheck(budgetFixture, ['--extendedDiagnostics'])
     expect(ok, out).toBe(true)
@@ -161,7 +160,7 @@ describe('M11 inference budget (type-system.md §6.4)', () => {
   })
 
   test('WALL-CLOCK: the max-arity budget fixture type-checks within a generous wall-clock ceiling', () => {
-    // Secondary, deliberately-loose regression tripwire (§6.4). Wall-clock is environment-sensitive,
+    // Secondary, deliberately-loose regression tripwire. Wall-clock is environment-sensitive,
     // so the ceiling carries large headroom and the measured time is recorded for visibility. A
     // recursive-variadic regression (the thing the cap prevents) would blow past it.
     const start = performance.now()
@@ -169,7 +168,7 @@ describe('M11 inference budget (type-system.md §6.4)', () => {
     const elapsedMs = performance.now() - start
     expect(ok, out).toBe(true)
     // eslint-disable-next-line no-console
-    console.info(`[M11 budget] tsc wall-clock for max-arity fixture: ${elapsedMs.toFixed(0)}ms (ceiling ${WALLCLOCK_BUDGET_MS}ms)`)
+    console.info(`[arity budget] tsc wall-clock for max-arity fixture: ${elapsedMs.toFixed(0)}ms (ceiling ${WALLCLOCK_BUDGET_MS}ms)`)
     expect(
       elapsedMs,
       `tsc wall-clock ${elapsedMs.toFixed(0)}ms exceeded the generous ceiling ${WALLCLOCK_BUDGET_MS}ms — likely a type-machinery regression (recursive variadic fold?)`,

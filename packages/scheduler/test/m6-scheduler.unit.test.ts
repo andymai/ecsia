@@ -1,8 +1,8 @@
-// M6 scheduler UNIT suite (scheduler.md §3–§6, §11). Each test pins ONE exit-criterion behaviour:
-//   - a system set produces the expected wave LAYERING (Kahn topological levels);
-//   - a write-before-read pair is ORDERED (writer's wave strictly precedes the reader's);
-//   - a cycle reports the FULL named chain AND a suggested break edge (inAnyOrderWith);
-//   - entity.write(C) / write(C) where the declaration omits C is FLAGGED (dev-mode assertion).
+// scheduler UNIT suite. Each test pins ONE exit-criterion behaviour:
+// - a system set produces the expected wave LAYERING (Kahn topological levels);
+// - a write-before-read pair is ORDERED (writer's wave strictly precedes the reader's);
+// - a cycle reports the FULL named chain AND a suggested break edge (inAnyOrderWith);
+// - entity.write(C) / write(C) where the declaration omits C is FLAGGED (dev-mode assertion).
 // The plan is built ONCE at createScheduler; nothing here runs a graph algorithm per frame.
 
 import { describe, expect, test, vi } from 'vitest'
@@ -38,7 +38,7 @@ function waveOf(waves: readonly ScheduleWave[], id: number): number {
   return waveSets(waves).findIndex((s) => s.has(id))
 }
 
-describe('wave layering (§5.1, SCH-1)', () => {
+describe('wave layering ', () => {
   test('a pure write→read→write chain layers into three single-system waves', () => {
     const { Position, Velocity, Health } = fixture()
     // Producer writes Velocity; Movement reads Velocity, writes Position; Combat reads Position, writes Health.
@@ -64,7 +64,7 @@ describe('wave layering (§5.1, SCH-1)', () => {
     expect(sets[1]).toEqual(new Set([3]))
   })
 
-  test('every systemId appears in exactly one wave (Σ|waves| === systemCount, SCH-1)', () => {
+  test('every systemId appears in exactly one wave (Σ|waves| === systemCount)', () => {
     const { Position, Velocity, Health } = fixture()
     const A = defineSystem({ name: 'A', write: [Position], run() {} })
     const B = defineSystem({ name: 'B', read: [Position], write: [Velocity], run() {} })
@@ -75,7 +75,7 @@ describe('wave layering (§5.1, SCH-1)', () => {
   })
 })
 
-describe('write-before-read ordering (§4.3)', () => {
+describe('write-before-read ordering ', () => {
   test('the WRITER of a component is scheduled in a strictly earlier wave than its READER', () => {
     const { Position, Velocity } = fixture()
     // Reader is registered FIRST (id 0) to prove ordering is by conflict semantics, not registration order.
@@ -106,7 +106,7 @@ describe('write-before-read ordering (§4.3)', () => {
   })
 })
 
-describe('cycle UX (§4.5, SCH-9)', () => {
+describe('cycle UX ', () => {
   test('a 3-system cycle reports the FULL named chain AND a suggested inAnyOrderWith break edge', () => {
     fixture()
     // A → B (B.after A), B → C (C.after B), then C → A (C.before A) closes the loop. Built in index
@@ -148,7 +148,7 @@ describe('cycle UX (§4.5, SCH-9)', () => {
   })
 })
 
-describe('undeclared-write dev assertion (§6.6, Must-Fix #2)', () => {
+describe('undeclared-write dev assertion ', () => {
   test('write(C) term where the declaration omits C is FLAGGED in dev mode', () => {
     const { world, Position, Health } = fixture()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -204,7 +204,7 @@ describe('undeclared-write dev assertion (§6.6, Must-Fix #2)', () => {
 
 // Helper used by the property suite's oracle, exported via a shared local re-impl there. Kept here
 // only as a unit sanity check that the SystemBox masks reflect the declared ids.
-describe('access words reflect declared ids (§3.3)', () => {
+describe('access words reflect declared ids ', () => {
   test('readWords/writeWords bit c is set iff c ∈ readIds/writeIds', () => {
     const { Position, Velocity } = fixture()
     const S = defineSystem({ name: 'S', read: [Velocity], write: [Position], run() {} })

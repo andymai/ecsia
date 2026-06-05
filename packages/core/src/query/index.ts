@@ -1,4 +1,4 @@
-// @ecsia/core query subsystem (queries.md). The query DSL runtime: compilation + canonical-hash
+// @ecsia/core query subsystem. The query DSL runtime: compilation + canonical-hash
 // dedup cache (compile.ts), the SAB-capable sparse-set result container (sparse-set.ts), the
 // LiveQuery with the matchingArchetypes pointer cache and the .each iteration (live-query.ts), and
 // the QueryEngine that owns matching, the archetypeCreated hook, and single-entity maintenance

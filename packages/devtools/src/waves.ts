@@ -1,4 +1,4 @@
-// Wave visualizer (P5 §3): explain the WHY of a schedule, not just the what. Reads the scheduler's
+// Wave visualizer: explain the WHY of a schedule, not just the what. Reads the scheduler's
 // immutable, frozen `SchedulePlan` (the public plan-introspection types) and derives, as a plain
 // serializable PlanExplain: the waves/batches with per-system access + worker-eligibility, the
 // component-level access CONFLICTS that forced systems apart, and the systems PINNED to the main thread.
@@ -14,7 +14,7 @@ function planOf(input: PlanLike): SchedulePlan {
 }
 
 /**
- * Explain a plan (§3). `names` maps ComponentId → a human name; pass the inspector's componentNameMap, or
+ * Explain a plan. `names` maps ComponentId → a human name; pass the inspector's componentNameMap, or
  * omit it to render ids as `#id`. The plan carries dense ComponentIds (incl. synthetic pair ids), so a
  * name miss is rendered, never thrown.
  */
@@ -57,7 +57,7 @@ export function explainPlan(input: PlanLike, names?: ReadonlyMap<number, string>
   }
 
   // --- conflicts: a pair of systems with overlapping access (write-write or read-write, the
-  // WAVE-CONFLICT rule, scheduler.md §5.2) that the plan ACTUALLY separated — i.e. it placed them in
+  // WAVE-CONFLICT rule) that the plan ACTUALLY separated — i.e. it placed them in
   // different waves, or in different rounds of the same wave. Two systems whose access overlaps but
   // that the plan kept CONCURRENT (same round) were NOT forced apart: the scheduler suppressed the
   // edge via an `inAnyOrderWith` deny (or they only read-read overlap), so reporting them would lie

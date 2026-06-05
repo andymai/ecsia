@@ -1,4 +1,4 @@
-// RF-DESC (rich-fields.md §2.3 / §10): for every field, `ctor === null ⟺ rich !== undefined ⟺
+// RF-DESC: for every field, `ctor === null ⟺ rich !== undefined ⟺
 // shareable === false`. The three are equivalent — a rich field has no column, has a sidecar kind, and
 // is never SAB-shareable. This is the load-bearing classification every storage/serialization/pinning
 // site branches on, so it is asserted directly against the resolved FieldDescriptor of every token kind.
@@ -13,11 +13,11 @@ describe('RF-DESC — ctor===null ⟺ rich!==undefined ⟺ shareable===false', (
   test('the equivalence holds for every field across a wide schema', () => {
     const Wide = defineComponent(
       {
-        n: 'i32', //              numeric column → not rich
-        f: 'f64', //              numeric column → not rich
-        v: vec3('f32'), //        vec column → not rich, shareable
+        n: 'i32', // numeric column → not rich
+        f: 'f64', // numeric column → not rich
+        v: vec3('f32'), // vec column → not rich, shareable
         choice: staticString(['a', 'b']), // enum staticString → column, shareable, NOT rich
-        text: 'string', //        rich (string)
+        text: 'string', // rich (string)
         meta: object<{ k: number }>(), // rich (object)
         labeled: field('string', { default: 'd' }), // rich (string) with default
       },

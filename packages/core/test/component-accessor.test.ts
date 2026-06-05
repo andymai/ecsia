@@ -7,7 +7,7 @@ import type { AccessorWorld } from '../src/internal.js'
 const newBuffers = (): Buffers =>
   new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 20 })
 
-describe('defineComponent runtime (component-schema.md §2, §3)', () => {
+describe('defineComponent runtime ', () => {
   test('resolves descriptors + column layouts in declaration order', () => {
     const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c1' })
     expect(Position.fields.map((f) => f.name)).toEqual(['x', 'y'])
@@ -18,7 +18,7 @@ describe('defineComponent runtime (component-schema.md §2, §3)', () => {
     ])
   })
 
-  test('eid field default is the null sentinel and needs explicit init (C-2)', () => {
+  test('eid field default is the null sentinel and needs explicit init ', () => {
     const Ref = defineComponent({ target: 'eid' }, { name: 'c2' })
     const f = Ref.fields[0]!
     expect(f.default).toBe(-1)
@@ -45,20 +45,20 @@ describe('defineComponent runtime (component-schema.md §2, §3)', () => {
   })
 })
 
-// The accessor world stub: trackWrite is the M5 no-op; here we spy on the call SITE.
+// The accessor world stub: trackWrite is the no-op; here we spy on the call SITE.
 function stubWorld(): AccessorWorld & { calls: Array<[number, number, number?]> } {
   const calls: Array<[number, number, number?]> = []
   return {
     calls,
     trackWrite: (index, componentId, fieldIndex) => calls.push([index, componentId as number, fieldIndex]),
     handleIndex: (h) => (h as number) & 0x3fffff,
-    // A live consumer is "present" for these spy tests so the setter's P7 fast-out does not skip the
+    // A live consumer is "present" for these spy tests so the setter's fast-out does not skip the
     // trackWrite call site under test.
     tracking: { active: true },
   }
 }
 
-describe('accessor factory closure (component-schema.md §8.2; type-system.md §9)', () => {
+describe('accessor factory closure ', () => {
   test('read decodes the column slot at __idx; write encodes + tracks', () => {
     const buffers = newBuffers()
     const world = stubWorld()
@@ -72,7 +72,7 @@ describe('accessor factory closure (component-schema.md §8.2; type-system.md §
     expect(a.x).toBeCloseTo(1.5)
     expect(a.y).toBe(-3)
 
-    // The write setter side effect (I-ACC-4 / world.md §9.1): handleIndex(__eid), componentId.
+    // The write setter side effect: handleIndex(__eid), componentId.
     expect(world.calls.length).toBe(2)
     expect(world.calls[0]).toEqual([999 & 0x3fffff, Position.id, undefined])
   })
@@ -95,7 +95,7 @@ describe('accessor factory closure (component-schema.md §8.2; type-system.md §
     new ComponentRegistry(buffers, world).register([Ref])
     const set = buildColumnSet({ buffers, archetypeId: 0, def: Ref, world, initialCapacity: 4 })
     const a = bindAccessorRow(set, 0, 0 as never) as unknown as { target: number | null }
-    expect(a.target).toBeNull() // C-2: fresh row is -1 → null
+    expect(a.target).toBeNull() // fresh row is -1 → null
     a.target = 0x80000003 as never
     expect(a.target).toBe(0x80000003)
   })
@@ -115,7 +115,7 @@ describe('accessor factory closure (component-schema.md §8.2; type-system.md §
     expect(world.calls.at(-1)?.[2]).toBe(0) // fieldIndex forwarded for vec writes
   })
 
-  test('accessor survives a column grow: row read past old capacity is correct (M2 exit)', () => {
+  test('accessor survives a column grow: row read past old capacity is correct ( exit)', () => {
     const buffers = newBuffers()
     const world = stubWorld()
     const Position = defineComponent({ x: 'f32' }, { name: 'c11' }) as ComponentDef<Schema>
@@ -130,12 +130,12 @@ describe('accessor factory closure (component-schema.md §8.2; type-system.md §
   })
 })
 
-describe('entity.read / entity.write split (Must-Fix #2)', () => {
+describe('entity.read / entity.write split ', () => {
   test('write mutates, read reflects the same slot via the singleton', () => {
     const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c12' })
     const w = createWorld({ components: [Position] })
 
-    // M3: the entity must hold Position before read/write; spawnWith lands it there in one migration.
+    // The entity must hold Position before read/write; spawnWith lands it there in one migration.
     const e = w.spawnWith(Position)
     const ref = w.entity(e)
     const write = ref.write(Position) as { x: number; y: number }
@@ -144,7 +144,7 @@ describe('entity.read / entity.write split (Must-Fix #2)', () => {
     expect(read.x).toBe(4)
   })
 
-  test('world.trackWrite is the canonical no-op stub (no throw) until M5', () => {
+  test('world.trackWrite is the canonical no-op stub (no throw) until ', () => {
     const w = createWorld()
     expect(() => w.trackWrite(0, 1 as never, 0)).not.toThrow()
   })

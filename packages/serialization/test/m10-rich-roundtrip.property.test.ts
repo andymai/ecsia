@@ -1,4 +1,4 @@
-// Rich-field round-trip property (rich-fields.md §11): a randomized world with string + object<T> + a
+// Rich-field round-trip property: a randomized world with string + object<T> + a
 // numeric column + an eid column, snapshotted and deserialized, reproduces every rich value (RF-ROUNDTRIP)
 // with the eid column remapped and the in-object handle NOT remapped (RF-NOREMAP). A second snapshot of
 // the loaded world is byte-equal to a re-snapshot of itself (canonical determinism, rich section included).
@@ -16,7 +16,7 @@ interface Meta {
   n: number
 }
 
-describe('M10 RICH — round-trip property (RF-ROUNDTRIP)', () => {
+describe(' RICH — round-trip property (RF-ROUNDTRIP)', () => {
   it('every string + object<T> value survives a snapshot round-trip for a randomized entity set', () => {
     fc.assert(
       fc.property(

@@ -1,4 +1,4 @@
-// @ecsia/scheduler/workers — the M7 parallel execution layer: SAB allocation + one-time column/region
+// @ecsia/scheduler/workers — the parallel execution layer: SAB allocation + one-time column/region
 // transfer to a fixed worker pool, the wave dispatch loop, the three-tier Atomics wave-sync, the
 // reservation Atomics.sub take path, and the deterministic command-buffer merge (serial-equivalence).
 
