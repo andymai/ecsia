@@ -58,9 +58,9 @@ scheduler.update(dt) // run one frame
 const world = createWorld({ components: [/* ... */], threaded: true })
 ```
 
-The worker pool is `node:worker_threads` + `Atomics` based and requires `SharedArrayBuffer`
-(a non-silent `postMessage` fallback covers non-isolated hosts). A browser Web-Worker pool is
-future work. See the repository README and CHANGELOG for the full known-issues list.
+The worker pool is `node:worker_threads` + `Atomics` based and requires `SharedArrayBuffer`;
+without it, ecsia warns and runs single-threaded — never silently. A browser Web-Worker pool
+is future work.
 
 ## Links
 

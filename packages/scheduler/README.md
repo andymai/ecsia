@@ -13,10 +13,8 @@ serial path (a fixed worker-index command-buffer merge makes the merge order det
 > `createScheduler`, and `WorkerPool`.
 >
 > **Known limitation (worker pool):** the pool is `node:worker_threads`-based and requires
-> `SharedArrayBuffer` (it falls back to a `postMessage` path, never silently, when the host
-> is not cross-origin-isolated). A browser Web-Worker pool is future work. There is also a
-> documented per-column growth cap above 1024 rows-per-column in the threaded path — see the
-> repository's known-issues / CHANGELOG before relying on very wide threaded columns.
+> `SharedArrayBuffer`; without it, ecsia warns and runs single-threaded — never silently.
+> A browser Web-Worker pool is future work.
 
 ## Install
 
