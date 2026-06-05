@@ -191,12 +191,26 @@ interface World {
 }
 ```
 
-`spawnWith` and `addPair`/`despawn` are **main-thread / serial-phase** verbs (the
-single-writer invariant, entity-model I10, Must-Fix #1). Inside a worker-dispatched
-system the user never calls these directly; structural intent is staged to the command
-buffer by the same-named verbs on the worker-side `World` proxy and applied between waves
-(scheduler/commands; report §6.1). The **public signature is identical** in both modes —
-this is the load-bearing parallel-readiness property.
+`spawnWith` and `despawn` are **main-thread / serial-phase** verbs (the single-writer
+invariant, entity-model I10, Must-Fix #1). Inside a worker-dispatched system the user never
+calls these directly; structural intent is staged to the command buffer by the same-named
+verbs on the worker-side `World` proxy and applied between waves (scheduler/commands; report
+§6.1). The **public signature is identical** in both modes — this is the load-bearing
+parallel-readiness property.
+
+> **Reconciliation note (M12 review — AS BUILT, normative §10 wins).** The relations verbs
+> (`addPair`/`removePair`/`hasPair`/`getPair`/`subjectsOf`/`targetsOf`/`targetOf`), the
+> scheduler frame loop (`update`), and the serialization verbs
+> (`createSnapshot`/`loadSnapshot`/`createDeltaSerializer`/`exportSharedHandles`) are **not**
+> methods on the core `World`. They are reached through small free functions the umbrella
+> re-exports, each currying a world: `createRelations(world).addPair(...)`,
+> `createScheduler(world, systems).update(dt)`,
+> `createSnapshotSerializer(world).snapshot()` / `createSnapshotDeserializer(world).load(...)`
+> / `createDeltaSerializer(world, sinceTick)`, and `bootstrapForWorker(world)` (the zero-copy
+> handoff). This keeps `@ecsia/core` free of any import of relations/scheduler/serialization
+> (the **acyclic** dependency direction), and matches the fact that relations/serialization
+> mint world-scoped state at attach time. The `World` interface block above is retained as the
+> *conceptual* surface; the executable surface is §10.
 
 ---
 
@@ -262,6 +276,14 @@ const Damages = defineRelation<{ amount: 'f32' }>(
   O(archetypes), never O(distinct targets) (relations.md P6; report §6.4 mitigation 2).
 - The exclusivity choice and the overflow table are **invisible** to the consumer; the
   only user-facing contract is "exclusive relations hold at most one target per subject."
+
+> **Reconciliation note (M12 review — AS BUILT).** `defineRelation` is **not** a module-scope
+> standalone; it is obtained per-world via `const rel = createRelations(world)` and then
+> `rel.defineRelation(payload | null, opts?)` (it mints world-scoped synthetic ids). The pair
+> query term is `rel.Pair(relation, target | Wildcard)`. The umbrella re-exports
+> `createRelations` + `Wildcard`; the rest of the relations surface
+> (`addPair`/`removePair`/`hasPair`/`getPair`/`subjectsOf`/`targetsOf`/`targetOf`/`depthOf`)
+> lives on the object `createRelations(world)` returns.
 
 ### 3.4 `defineSystem` (scheduler; type-system.md `SystemAccess`)
 
@@ -354,6 +376,18 @@ const xs = e.position.x;        // OK: number, no `any`
 - The accessor's captured column views are **length-tracking** (memory-buffers.md V-1),
   so an `EntityRef` accessor created before a `.grow()` keeps working after — no
   regeneration (Must-Fix #5). This is invisible to the user.
+
+> **Delivered (M12 review).** `EntityRef.read`/`write` are now **generically typed** on the
+> random-access path: `read<const C extends ComponentDef<Schema>>(c: C): ReadOf<C>` and
+> `write<const C>(c: C): WriteOf<C>`. So `world.entity(h).write(Position)` infers a mutable
+> `WriteView`, and `world.entity(h).read(Position)` infers a deeply-`Readonly` `ReadView`
+> **without** caller casts — the Must-Fix #2 ergonomic contract (PA-2) holds on the
+> random-access path, not only on the query-iteration element. The read-only **`entity.<comp>`
+> shorthand** is NOT implemented as a getter on `EntityRef` (it would require per-world
+> prototype installation keyed by registered components); it is **struck from the frozen
+> surface** — `e.read(C)` is the random-access read path, and the query-iteration element keeps
+> the `el.<comp>` shorthand. The bare public `e.handle` accessor replaces `e.__handle` on the
+> public surface.
 
 ### 4.3 Structural verbs on `EntityRef`
 
@@ -658,7 +692,10 @@ function firstTarget(world: World, subject: EntityHandle): EntityHandle | undefi
 > Note: `firstTarget` is illustrative. For an **exclusive** relation the runtime resolves
 > the single target via the subject's `eid` payload column directly (relations.md
 > `targetsOf(subject, relation)` → exclusive eid column read, O(1)), so no query is
-> required; the convenience verb `world.targetOf(subject, Targets)` is the ergonomic form.
+> required; the convenience verb is **`createRelations(world).targetOf(subject, Targets)`**
+> (AS BUILT, Q-PA1 resolved): it returns `EntityHandle | null` and **throws** on a
+> non-exclusive relation. `attacker.__handle` in this pseudocode is the public
+> **`attacker.handle`** accessor in the as-built `EntityRef`.
 
 ### 9.4 A reactive cleanup system using a relation cascade
 
@@ -718,44 +755,78 @@ const save = world.createSnapshot();
 
 ---
 
-## 10. Public re-export manifest (`@ecsia/ecsia`)
+## 10. Public re-export manifest (`@ecsia/ecsia`) — AS BUILT (M12, frozen)
 
-The umbrella package re-exports exactly the following (normative home in parentheses):
+> **Reconciliation note (M12 review).** The aspirational manifest sketched in earlier drafts
+> assumed module-scope standalones (`defineRelation`, `Pair`, `Changed`, an `eid` token
+> constructor) and relation/serialization verbs hanging off the `World` facade. The as-built
+> runtime instead binds relations and serialization to a world through small **free functions**
+> (`createRelations(world)`, `createSnapshotSerializer(world)`), because those subsystems mint
+> **world-scoped** state (synthetic component ids, presence bits) that is meaningless without a
+> world — and because the dependency graph must stay **acyclic** (`@ecsia/core` must not import
+> `@ecsia/relations`/`@ecsia/serialization`). This section is the **normative frozen surface**;
+> where it and §2.3/§3.3/§9 disagree, **this section wins** (the worked example §9 is illustrative
+> pseudocode, reconciled in the per-section notes).
+
+The umbrella package re-exports exactly the following (normative home in parentheses). Every
+world-consuming function accepts the **public `World` view** (PA-1: the `__`-seams are omitted from
+the exported `World`/`EntityRef` types):
 
 ```ts
-// world
-export { createWorld } from '@ecsia/core';                 // World, WorldOptions
-export type { World, WorldOptions, EntityRef, SystemContext } from '@ecsia/core';
+// world — the single constructor returns the PUBLIC World facade (no `__` seams; PA-1..PA-8)
+export { createWorld, ConfigError } from '@ecsia/ecsia';      // createWorld is umbrella-wrapped
+export type { World, EntityRef, WorldPhase, WorldOptions } from '@ecsia/ecsia';
 
-// definitions
-export { defineComponent, defineTag, defineRelation }       // type-system.md / relations.md
-  from '@ecsia/schema';
-export { defineSystem } from '@ecsia/scheduler';            // SystemDef, SystemAccess
+// definitions (module scope)
+export { defineComponent, defineTag } from '@ecsia/core';     // schema constructors (re-homed via core)
+export { defineSystem, inAnyOrderWith, beforeWritersOf, afterReadersOf } from '@ecsia/scheduler';
+// `defineRelation` is reached through the world-attach API: createRelations(world).defineRelation(...)
+export { createRelations, Wildcard } from '@ecsia/relations'; // + the Relations API it returns
 
-// field tokens
-export { vec, vec2, vec3, staticString, object, eid }       // type-system.md tokens
-  from '@ecsia/schema';
+// field tokens (constructors; scalar tokens incl. 'eid' are string literals in a schema, not exports)
+export { vec, vec2, vec3, vec4, staticString, object } from '@ecsia/core';
 
-// query DSL
-export { read, write, With, Without, optional, Changed, Pair, Wildcard }
-  from '@ecsia/core';
+// query DSL  (Changed → query(...).changed(); Pair → createRelations(world).Pair)
+export { read, write, With, Without, optional, MAX_QUERY_ARITY } from '@ecsia/core';
 
 // reactivity
-export { onAdd, onRemove, onChange } from '@ecsia/observers';
+export { onAdd, onRemove, onChange } from '@ecsia/core';
+
+// scheduler (opt-in frame loop) + worker-parallel path
+export { createScheduler, WorkerPool } from '@ecsia/ecsia';   // createScheduler is umbrella-wrapped
+
+// serialization (umbrella-wrapped to accept the public World; copy + zero-copy paths)
+export {
+  createSnapshotSerializer, createSnapshotDeserializer, createDeltaSerializer, applyDelta,
+  bootstrapForWorker, attachWorld,
+} from '@ecsia/ecsia';
+
+// convenience wiring (tree-shakeable one-liners that curry a world)
+export { snapshot, relationsOf } from '@ecsia/ecsia';
 
 // branded types + inference helpers (escape hatch)
 export type {
-  EntityHandle, ComponentDef, RelationDef, PairDef, PairAccessor,
+  EntityHandle, EntityIndex, ComponentId, ComponentDef, ComponentOptions,
+  RelationDef, RelationOptions, PairDef, WildcardToken, PairAccessor, StorageKind,
   ReadView, WriteView, ReadOf, WriteOf, SchemaOf,
-  Query, QueryTerm, Has, HasWrite, Tick,
+  Query, LooseQuery, QueryTerm, QueryElement, Has, HasWrite, Tick,
   ObserverHandle, ObserverContext, ObserverTerm, ObserverCadence,
-  SharedHandleManifest, DeltaSerializer,
-} from '@ecsia/core';
+  SharedHandleManifest, SnapshotSerializer, SnapshotDeserializer, DeltaSerializer, WorldBootstrap,
+  SystemDef, SystemContext, OrderingHint, SchedulerHandle, CreateSchedulerOptions,
+  PoolConfig, PoolSystem, RoundDispatcher, ScalarToken, VecToken, StaticStringToken, ObjectToken,
+  FieldToken, Schema, ReactivityOptions, SchedulerOptions, ChangeTracking, WorkerOption,
+} from '@ecsia/ecsia';
 ```
+
+**`vec4` and the `eid` token are IN the frozen set** (vec4 is a documented field-token
+constructor; `eid` is the scalar field token written as the string `'eid'` inside a schema, e.g.
+`defineComponent({ who: 'eid' })` — there is no separate `eid` *constructor* to export). The
+exported `World`/`EntityRef` are the **public view types** declared by the umbrella, with the
+`__`-prefixed wiring seams and scheduler-only loop verbs omitted (PA-1).
 
 `MAX_QUERY_ARITY = 8` is exported as a documented constant. The kernel
 (`createWorld` + `query` + accessors) runs **without** importing `@ecsia/scheduler` in
-single-threaded mode; `defineSystem` + `world.update` pull in the scheduler layer
+single-threaded mode; `defineSystem` + the scheduler pull in the scheduler layer
 (report §5.1: scheduler is an opt-in layer over a kernel that runs single-threaded).
 
 ---
@@ -793,10 +864,11 @@ single-threaded mode; `defineSystem` + `world.update` pull in the scheduler laye
 
 ## 12. Open Questions (non-blocking; deferred to gated milestones)
 
-- **Q-PA1 (targetOf convenience):** expose `world.targetOf(subject, exclusiveRelation)`
-  as the ergonomic single-target read (relations.md `targetsOf` exclusive path). Confirm
-  naming + whether it returns `EntityHandle | null` vs throws on non-exclusive relations
-  at M8.
+- **Q-PA1 (targetOf convenience): RESOLVED (M12).** Exposed as
+  `createRelations(world).targetOf(subject, exclusiveRelation)` (relations.md `targetsOf`
+  exclusive path). Returns `EntityHandle | null` (null = no current target) and **throws**
+  on a non-exclusive relation. It lives on the Relations API object rather than on `World`,
+  for the acyclic-dependency reason in §10.
 - **Q-PA2 (system context surface):** whether `SystemContext` exposes `commands` (an
   explicit command-buffer handle) for power users staging structural ops, or whether the
   same `world` verbs transparently route to the buffer under `threaded: true`. Leaning

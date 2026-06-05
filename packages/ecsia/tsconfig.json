@@ -5,8 +5,8 @@
     "rootDir": "./src"
   },
   "references": [
-    { "path": "../core" },
     { "path": "../schema" },
+    { "path": "../core" },
     { "path": "../relations" },
     { "path": "../scheduler" },
     { "path": "../serialization" }
