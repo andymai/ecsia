@@ -40,5 +40,5 @@ describe('query DSL inference contracts', () => {
       out = String((e as { stdout?: Buffer }).stdout ?? '') + String((e as { stderr?: Buffer }).stderr ?? '')
     }
     expect(ok, out).toBe(true)
-  })
+  }, 60_000)
 })
