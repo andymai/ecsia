@@ -2,7 +2,7 @@
 // position from velocity each tick, plus a cohesion nudge toward the flock centroid so the end state
 // is observable and deterministic. Single-threaded — the default kernel + scheduler path.
 //
-// Everything imports from the umbrella (@ecsia/ecsia), exercising defineComponent / createWorld /
+// Everything imports from the umbrella (ecsia), exercising defineComponent / createWorld /
 // defineSystem / createScheduler / query DSL end-to-end.
 
 import {
@@ -12,8 +12,8 @@ import {
   createScheduler,
   read,
   write,
-} from '@ecsia/ecsia'
-import type { EntityHandle } from '@ecsia/ecsia'
+} from 'ecsia'
+import type { EntityHandle } from 'ecsia'
 
 export interface BoidsOptions {
   /** Number of boids to simulate. Default 256. */

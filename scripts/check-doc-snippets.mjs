@@ -119,7 +119,7 @@ async function main() {
       types: ['node', 'three'],
       baseUrl: '../..',
       paths: {
-        '@ecsia/ecsia': ['packages/ecsia/src/index.ts'],
+        'ecsia': ['packages/ecsia/src/index.ts'],
         '@ecsia/core': ['packages/core/src/index.ts'],
         '@ecsia/schema': ['packages/schema/src/index.ts'],
         '@ecsia/relations': ['packages/relations/src/index.ts'],

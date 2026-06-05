@@ -3,7 +3,7 @@
 // This barrel is split into two sections:
 //   • PUBLIC — the documented user/umbrella surface: createWorld + config, component/tag definition,
 //     entity sentinels, reactivity observer builders, and the schema token/inference re-exports the
-//     umbrella (@ecsia/ecsia) curates.
+//     umbrella (ecsia) curates.
 //   • INTERNAL (cross-package) — kernel seams that sibling packages (@ecsia/{relations,serialization})
 //     import via '@ecsia/core'. They are NOT user API, but removing them would break those siblings,
 //     so they stay exported here under a clearly-marked banner rather than on a hidden subpath

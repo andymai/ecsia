@@ -4,7 +4,7 @@
 per-frame transform sync (to `Object3D`s and `InstancedMesh`es), and a frame driver.
 
 ::: tip Opt-in, not in the umbrella
-`@ecsia/three` is deliberately **not** re-exported from `@ecsia/ecsia`. THREE is a large peer dependency
+`@ecsia/three` is deliberately **not** re-exported from `ecsia`. THREE is a large peer dependency
 with WebGL/DOM assumptions; the kernel stays renderer-agnostic. Install it explicitly:
 
 ```ts no-check
@@ -22,7 +22,7 @@ with a THREE object; `objectOf(handle)` resolves it back. `autoUnbindOn(anchor)`
 component into auto-teardown when the entity despawns.
 
 ```ts no-check
-import { createWorld, defineComponent } from '@ecsia/ecsia'
+import { createWorld, defineComponent } from 'ecsia'
 import { createThreeBindings } from '@ecsia/three'
 import { Object3D, Scene } from 'three'
 
@@ -47,7 +47,7 @@ system that writes position (a read-after-write conflict orders them — no manu
 - `makeInstancedSyncSystem({ mesh, position })` — writes a `THREE.InstancedMesh`'s `instanceMatrix`.
 
 ```ts no-check
-import { createScheduler } from '@ecsia/ecsia'
+import { createScheduler } from 'ecsia'
 import { makeTransformSyncSystem, makeInstancedSyncSystem } from '@ecsia/three'
 import { BufferGeometry, InstancedMesh, MeshBasicMaterial } from 'three'
 

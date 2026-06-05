@@ -8,9 +8,6 @@ importers:
 
   .:
     devDependencies:
-      '@ecsia/ecsia':
-        specifier: workspace:*
-        version: link:packages/ecsia
       '@ecsia/scheduler':
         specifier: workspace:*
         version: link:packages/scheduler
@@ -32,6 +29,9 @@ importers:
       bitecs:
         specifier: ^0.3.40
         version: 0.3.40
+      ecsia:
+        specifier: workspace:*
+        version: link:packages/ecsia
       esbuild:
         specifier: 0.21.5
         version: 0.21.5

@@ -8,7 +8,7 @@
 //
 // Burning entities take `stacks` damage per tick; each tick burns one stack down. At 0 stacks the
 // Burning component is removed; at hp <= 0 the entity despawns (and any ChildOf children despawn with
-// it). The onRemove(Health) observer records every death. Everything imports from @ecsia/ecsia.
+// it). The onRemove(Health) observer records every death. Everything imports from ecsia.
 
 import {
   createWorld,
@@ -19,8 +19,8 @@ import {
   onRemove,
   read,
   write,
-} from '@ecsia/ecsia'
-import type { EntityHandle } from '@ecsia/ecsia'
+} from 'ecsia'
+import type { EntityHandle } from 'ecsia'
 
 export interface MobSpec {
   /** Starting hit points. */

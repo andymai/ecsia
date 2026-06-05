@@ -24,7 +24,7 @@ features:
   - title: First-class relations
     details: Integer-encoded pairs as real archetype members — exclusive/overflow storage, presence-bit wildcards, and cascade directions. Relations cross worker boundaries (JS-object pair identity can't).
   - title: One frozen surface
-    details: "@ecsia/ecsia re-exports the whole cohesive API — world, components, queries, systems, scheduler, relations, serialization — and tree-shakes what you don't touch."
+    details: "ecsia re-exports the whole cohesive API — world, components, queries, systems, scheduler, relations, serialization — and tree-shakes what you don't touch."
 ---
 
 ## Why ecsia
@@ -66,7 +66,7 @@ placeholder until P7 fills it with measured results.
 ```ts
 import {
   createWorld, defineComponent, defineSystem, createScheduler, read, write,
-} from '@ecsia/ecsia'
+} from 'ecsia'
 
 // Components are schema'd numeric SoA, stored in (optionally shared) TypedArrays.
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
@@ -98,7 +98,7 @@ Go parallel with the **same** user code — `threaded: true` is a dispatcher cho
 change:
 
 ```ts
-import { createWorld, defineComponent } from '@ecsia/ecsia'
+import { createWorld, defineComponent } from 'ecsia'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 
@@ -116,7 +116,7 @@ Keep going: [Getting started →](/guide/getting-started)
 | `@ecsia/relations` | integer-encoded pairs · exclusive/overflow storage · presence-bit wildcard · cascade |
 | `@ecsia/scheduler` | access-graph DAG · wave executor · workers + Atomics wave-sync + command buffers |
 | `@ecsia/serialization` | snapshot · version-stamp delta · structural journal · id remap · zero-copy worker bootstrap |
-| `@ecsia/ecsia` | batteries-included umbrella re-export (the public, frozen surface) |
+| `ecsia` | batteries-included umbrella re-export (the public, frozen surface) |
 | `@ecsia/three` | THREE.js bridge — bindings, transform/instanced sync, driver (opt-in) |
 | `@ecsia/devtools` | inspectWorld · explainPlan · watchWorld · text/HTML renderers (opt-in) |
 

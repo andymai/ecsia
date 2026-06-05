@@ -5,7 +5,7 @@
 is assertable headless. `renderText` / `renderHTML` are pure functions over exactly those report shapes.
 
 ::: tip Opt-in, and it reads core seams
-`@ecsia/devtools` is **not** re-exported from `@ecsia/ecsia`, and nothing in the framework imports it —
+`@ecsia/devtools` is **not** re-exported from `ecsia`, and nothing in the framework imports it —
 it sits at the top of the dependency graph. Because `inspectWorld`/`watchWorld` read the world's internal
 inspection seams, devtools consumes the **`@ecsia/core` world** (the seam-carrying `World`), driven with
 `@ecsia/scheduler` + `@ecsia/relations` directly — the same wiring a real devtools consumer uses, and

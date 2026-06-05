@@ -10,8 +10,8 @@
 // Components use the @ecsia/three transform conventions: position {x,y,z} f32. Velocity is the sim's
 // own component. We define them per-call (component ids are world-scoped) so main() can run repeatedly.
 
-import { createWorld, defineComponent, defineSystem, createScheduler, read, write } from '@ecsia/ecsia'
-import type { EntityHandle } from '@ecsia/ecsia'
+import { createWorld, defineComponent, defineSystem, createScheduler, read, write } from 'ecsia'
+import type { EntityHandle } from 'ecsia'
 import {
   createThreeBindings,
   makeTransformSyncSystem,

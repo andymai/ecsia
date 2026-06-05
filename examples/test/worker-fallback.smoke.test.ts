@@ -19,8 +19,8 @@ import {
   defineSystem,
   createScheduler,
   write,
-} from '@ecsia/ecsia'
-import type { EntityHandle, RoundDispatcher, SystemContext, SystemDef, Tick, World } from '@ecsia/ecsia'
+} from 'ecsia'
+import type { EntityHandle, RoundDispatcher, SystemContext, SystemDef, Tick, World } from 'ecsia'
 import { main as workerSim } from '../worker-sim.js'
 
 function lcg(seed: number): () => number {

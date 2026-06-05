@@ -12,8 +12,8 @@
 
 import { fileURLToPath } from 'node:url'
 import { describe, expect, test, afterEach } from 'vitest'
-import { createWorld, defineComponent, defineSystem, createScheduler, write, WorkerPool } from '@ecsia/ecsia'
-import type { EntityHandle, PoolSystem, World } from '@ecsia/ecsia'
+import { createWorld, defineComponent, defineSystem, createScheduler, write, WorkerPool } from 'ecsia'
+import type { EntityHandle, PoolSystem, World } from 'ecsia'
 
 const WORKER_ENTRY = fileURLToPath(
   new URL('../../packages/scheduler/dist/workers/worker-entry.js', import.meta.url),

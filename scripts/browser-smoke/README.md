@@ -1,6 +1,6 @@
 # ecsia browser smoke lane
 
-A CI-only browser smoke that proves the **shipped** `@ecsia/ecsia` dist runs in a real Chromium tab and
+A CI-only browser smoke that proves the **shipped** `ecsia` dist runs in a real Chromium tab and
 that its SharedArrayBuffer capability probe behaves correctly under and without cross-origin isolation.
 
 ## Pieces
@@ -10,7 +10,7 @@ that its SharedArrayBuffer capability probe behaves correctly under and without 
   `--no-isolation` **omits** them (the page is not isolated). The Playwright spec stands up both variants
   against the same bundle.
 - `entry.ts` — the browser-scoped smoke. esbuild bundles it (`build.mjs`) into `dist/entry.js`, inlining
-  the `@ecsia/ecsia` dist umbrella. Exercises kernel ops (world/components/spawnWith/query/scheduler),
+  the `ecsia` dist umbrella. Exercises kernel ops (world/components/spawnWith/query/scheduler),
   an in-tab snapshot round-trip, the **capability probe** (`bootstrapForWorker(world).capabilities`), a
   `crossOriginIsolated` assertion, and raw resizable-`SharedArrayBuffer` alloc + grow (isolated only).
 - `index.html` — sets `window.__ECSIA_EXPECT_ISOLATED` from `?isolated=1|0` before importing the bundle,

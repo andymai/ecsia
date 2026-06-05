@@ -1,7 +1,7 @@
 # Getting started
 
 ::: warning Not published yet
-ecsia is **0.x and unpublished**. There is no `@ecsia/ecsia` on npm to `pnpm add` today — the install
+ecsia is **0.x and unpublished**. There is no `ecsia` on npm to `pnpm add` today — the install
 command below is the shape it will take **once published**. Until then, consume it from the local
 workspace (see [Use it today](#use-it-today)).
 :::
@@ -15,7 +15,7 @@ workspace (see [Use it today](#use-it-today)).
 ## Install (when published)
 
 ```ts no-check
-pnpm add @ecsia/ecsia   # not yet published — local workspace for now
+pnpm add ecsia   # not yet published — local workspace for now
 ```
 
 ## Use it today {#use-it-today}
@@ -28,7 +28,7 @@ pnpm build              # tsc -b across all packages (strict, ESM, project refs)
 pnpm test               # vitest: unit + property (fast-check) + worker + type-level
 ```
 
-Then write your program against `@ecsia/ecsia` exactly as the snippets here do — every example in
+Then write your program against `ecsia` exactly as the snippets here do — every example in
 `examples/` (boids, scene-graph, worker-parallel sim, damage-over-time cascade) imports from the
 umbrella and runs through the same build.
 
@@ -38,7 +38,7 @@ A world owns entity storage. You register the components it can hold up front; s
 in the archetype for its component set.
 
 ```ts
-import { createWorld, defineComponent } from '@ecsia/ecsia'
+import { createWorld, defineComponent } from 'ecsia'
 
 // Components are schema'd numeric SoA — each field is a typed column in a (optionally shared) TypedArray.
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
@@ -56,7 +56,7 @@ You can also initialise components inline with a **value-carrying spawn**, which
 tracked path in one call:
 
 ```ts
-import { createWorld, defineComponent } from '@ecsia/ecsia'
+import { createWorld, defineComponent } from 'ecsia'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
@@ -76,7 +76,7 @@ DAG; your `run` body iterates a query and mutates columns through accessors.
 ```ts
 import {
   createWorld, defineComponent, defineSystem, createScheduler, read, write,
-} from '@ecsia/ecsia'
+} from 'ecsia'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })

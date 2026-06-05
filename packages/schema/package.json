@@ -1,12 +1,38 @@
 {
   "name": "@ecsia/schema",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Type-level field tokens and 1..8 arity query inference for the ecsia ECS. The compile-time vocabulary the kernel and umbrella build on.",
+  "keywords": [
+    "ecs",
+    "entity-component-system",
+    "ecsia",
+    "schema",
+    "type-level",
+    "typescript",
+    "data-oriented"
+  ],
+  "license": "MIT",
+  "author": "Andy Aragon",
+  "homepage": "https://github.com/andymai/ecsia",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andymai/ecsia.git",
+    "directory": "packages/schema"
+  },
+  "bugs": {
+    "url": "https://github.com/andymai/ecsia/issues"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": ["dist"],
+  "publishConfig": { "access": "public" },
   "scripts": { "build": "tsc -b" }
 }

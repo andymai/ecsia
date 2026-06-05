@@ -1,10 +1,10 @@
-// P0.5 Wave-1: the null-handle sentinel + its predicate must be reachable from the @ecsia/ecsia
+// P0.5 Wave-1: the null-handle sentinel + its predicate must be reachable from the ecsia
 // umbrella so a user can discriminate an absent handle without reaching into @ecsia/core or
 // hand-rolling the 0xffffffff cast.
 
 import { describe, expect, test } from 'vitest'
-import { NO_ENTITY, NULL_ENTITY, isNoEntity, createWorld, defineComponent } from '@ecsia/ecsia'
-import type { EntityHandle } from '@ecsia/ecsia'
+import { NO_ENTITY, NULL_ENTITY, isNoEntity, createWorld, defineComponent } from 'ecsia'
+import type { EntityHandle } from 'ecsia'
 
 describe('P0.5 sentinel surface (umbrella)', () => {
   test('NO_ENTITY / NULL_ENTITY are exported and alias the same value', () => {

@@ -1,13 +1,41 @@
 {
   "name": "@ecsia/serialization",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Serialization for the ecsia ECS: bit-exact world snapshots, version-stamped deltas with a structural journal, entity-id and relation-target remap on load, and a zero-copy worker bootstrap.",
+  "keywords": [
+    "ecs",
+    "entity-component-system",
+    "ecsia",
+    "serialization",
+    "snapshot",
+    "delta",
+    "networking",
+    "data-oriented",
+    "typescript"
+  ],
+  "license": "MIT",
+  "author": "Andy Aragon",
+  "homepage": "https://github.com/andymai/ecsia",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andymai/ecsia.git",
+    "directory": "packages/serialization"
+  },
+  "bugs": {
+    "url": "https://github.com/andymai/ecsia/issues"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": ["dist"],
+  "publishConfig": { "access": "public" },
   "scripts": { "build": "tsc -b" },
   "dependencies": {
     "@ecsia/core": "workspace:*",

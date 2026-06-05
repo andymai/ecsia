@@ -21,8 +21,8 @@ import {
   createScheduler,
   write,
   WorkerPool,
-} from '@ecsia/ecsia'
-import type { EntityHandle, PoolSystem, SystemDef, World } from '@ecsia/ecsia'
+} from 'ecsia'
+import type { EntityHandle, PoolSystem, SystemDef, World } from 'ecsia'
 import type { SystemId } from '@ecsia/schema'
 
 // Mirror the kernel module's constants + inner loop EXACTLY (serial-equivalence by construction). The

@@ -12,7 +12,7 @@ The relations runtime is world-scoped — you reach it through `createRelations(
 Pass `null` for a payload-free relation.
 
 ```ts
-import { createWorld, defineComponent, createRelations } from '@ecsia/ecsia'
+import { createWorld, defineComponent, createRelations } from 'ecsia'
 
 const Node = defineComponent({ x: 'f32' }, { name: 'node' })
 const world = createWorld({ components: [Node], maxEntities: 1 << 16 })
@@ -29,7 +29,7 @@ const ChildOf = rel.defineRelation(null, { exclusive: true, cascade: 'deleteSubj
 subject is an in-place write with **zero migrations**.
 
 ```ts
-import { createWorld, defineComponent, createRelations } from '@ecsia/ecsia'
+import { createWorld, defineComponent, createRelations } from 'ecsia'
 
 const Node = defineComponent({ x: 'f32' }, { name: 'node' })
 const world = createWorld({ components: [Node], maxEntities: 1 << 16 })
@@ -47,8 +47,8 @@ For a non-exclusive relation, a subject can hold many targets; iterate them with
 the parent chain depth with `depthOf`:
 
 ```ts
-import { createWorld, defineComponent, createRelations } from '@ecsia/ecsia'
-import type { EntityHandle } from '@ecsia/ecsia'
+import { createWorld, defineComponent, createRelations } from 'ecsia'
+import type { EntityHandle } from 'ecsia'
 
 const Node = defineComponent({ x: 'f32' }, { name: 'node' })
 const world = createWorld({ components: [Node], maxEntities: 1 << 16 })
@@ -69,7 +69,7 @@ const depth = rel.depthOf(a, ChildOf)   // root = 0
 The first argument is the payload schema; `addPair` then carries the values.
 
 ```ts
-import { createWorld, defineComponent, createRelations } from '@ecsia/ecsia'
+import { createWorld, defineComponent, createRelations } from 'ecsia'
 
 const Person = defineComponent({ id: 'i32' }, { name: 'person' })
 const world = createWorld({ components: [Person], maxEntities: 1 << 16 })
@@ -87,7 +87,7 @@ The pair-term constructor lives on the **relations API** (`rel.Pair`), not the u
 matches any target via the per-relation presence bit (`O(archetypes)`).
 
 ```ts
-import { createWorld, defineComponent, createRelations, Wildcard } from '@ecsia/ecsia'
+import { createWorld, defineComponent, createRelations, Wildcard } from 'ecsia'
 
 const Node = defineComponent({ x: 'f32' }, { name: 'node' })
 const world = createWorld({ components: [Node], maxEntities: 1 << 16 })
@@ -112,7 +112,7 @@ Cascade is declared on the relation and fires when a participant is despawned:
 Despawning a **subject** always just removes its own outgoing pairs — it never deletes its target.
 
 ```ts
-import { createWorld, defineComponent, createRelations } from '@ecsia/ecsia'
+import { createWorld, defineComponent, createRelations } from 'ecsia'
 
 const Mob = defineComponent({ hp: 'i32' }, { name: 'mob' })
 const world = createWorld({ components: [Mob], maxEntities: 1 << 16 })

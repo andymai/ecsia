@@ -1,4 +1,4 @@
-// @ecsia/ecsia — the batteries-included umbrella (public-api.md §10). Frozen at M12.
+// ecsia — the batteries-included umbrella (public-api.md §10). Frozen at M12.
 //
 // This module owns no runtime mechanism: it is the curated assembly + re-export layer over
 // @ecsia/{schema,core,relations,scheduler,serialization}. A consumer imports the whole cohesive
@@ -16,7 +16,7 @@
 // The core `World`/`EntityRef` types carry `__`-prefixed wiring seams (scheduler/serialization/relations
 // attach points) plus scheduler-only frame-loop verbs. PA-1..PA-8 require those seams stay NON-public.
 // The umbrella therefore re-exports a PUBLIC VIEW that omits them — the only `World`/`EntityRef` a
-// consumer ever sees through '@ecsia/ecsia' is the curated surface below, never the internal seams.
+// consumer ever sees through 'ecsia' is the curated surface below, never the internal seams.
 import { createWorld as _createWorld } from '@ecsia/core'
 import type { World as _CoreWorld, EntityRef as _CoreEntityRef, WorldOptions as _WorldOptions, EntityHandle } from '@ecsia/core'
 

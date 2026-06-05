@@ -10,7 +10,7 @@ const alias = {
   '@ecsia/relations': pkg('relations'),
   '@ecsia/scheduler': pkg('scheduler'),
   '@ecsia/serialization': pkg('serialization'),
-  '@ecsia/ecsia': pkg('ecsia'),
+  'ecsia': pkg('ecsia'),
   '@ecsia/three': pkg('three'),
   '@ecsia/devtools': pkg('devtools'),
 }
@@ -26,7 +26,7 @@ export default defineWorkspace([
   },
   {
     // The "examples run green in CI" gate (build-plan.md M12): each example's main() is driven by a
-    // smoke test that imports @ecsia/ecsia and asserts the observable end state.
+    // smoke test that imports ecsia and asserts the observable end state.
     test: {
       name: 'examples',
       include: ['examples/test/**/*.test.ts'],
