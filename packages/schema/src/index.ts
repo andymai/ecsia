@@ -201,6 +201,24 @@ export type SchemaOf<C> = C extends ComponentDef<infer S> ? S : never
 export type ReadOf<C> = ReadView<SchemaOf<C>>
 export type WriteOf<C> = WriteView<SchemaOf<C>>
 
+// Value-carrying spawn (Item 8). A spawn argument is either a bare ComponentDef (membership only) or a
+// `[def, values]` tuple whose value object is a partial write view inferred FROM the def's schema, so
+// `world.spawnWith([Position, { x: 1, y: 2 }], Velocity)` type-checks the values against Position.
+export type SpawnTuple<C extends ComponentDef<Schema> = ComponentDef<Schema>> = readonly [
+  C,
+  Partial<WriteView<SchemaOf<C>>>,
+]
+export type SpawnArg = ComponentDef<Schema> | SpawnTuple
+/**
+ * Per-element constraint: when an arg is a `[def, values]` tuple, re-type its value slot as the partial
+ * write view of THAT def's schema so each tuple's values are checked against its own component.
+ */
+export type SpawnArgFor<E> = E extends readonly [infer C, unknown]
+  ? C extends ComponentDef<Schema>
+    ? readonly [C, Partial<WriteView<SchemaOf<C>>>]
+    : E
+  : E
+
 // ---------------------------------------------------------------------------
 // §9 Accessor type contract (the factory the component module must satisfy)
 // ---------------------------------------------------------------------------
@@ -235,8 +253,6 @@ export const NO_ENTITY = 0xffffffff as EntityHandle
 export const NULL_ENTITY = NO_ENTITY
 
 export const MAX_QUERY_ARITY = 8
-
-export const SCHEMA_PACKAGE = 'schema' as const
 
 // ---------------------------------------------------------------------------
 // §7 Relation typing — the type-level contract the query DSL threads (the relations
@@ -276,7 +292,7 @@ export interface PairDef<R extends RelationDef<Schema | void>> {
 
 // ---------------------------------------------------------------------------
 // §5.1 Query term DSL (the typed wrappers + value-level constructors). read/write fork the
-// inferred element mutability; With/Without are membership-only; optional narrows to `| undefined`.
+// inferred element mutability; has/without are membership-only; optional narrows to `| undefined`.
 // A bare ComponentDef is treated as read (type-system.md §5.1).
 // ---------------------------------------------------------------------------
 
@@ -288,8 +304,8 @@ export interface WriteTerm<C> {
   readonly __term: 'write'
   readonly c: C
 }
-export interface WithTerm<C> {
-  readonly __term: 'with'
+export interface HasTerm<C> {
+  readonly __term: 'has'
   readonly c: C
 }
 export interface WithoutTerm<C> {
@@ -303,14 +319,14 @@ export interface OptionalTerm<C> {
 
 export const read = <C>(c: C): ReadTerm<C> => ({ __term: 'read', c })
 export const write = <C>(c: C): WriteTerm<C> => ({ __term: 'write', c })
-export const With = <C>(c: C): WithTerm<C> => ({ __term: 'with', c })
-export const Without = <C>(c: C): WithoutTerm<C> => ({ __term: 'without', c })
+export const has = <C>(c: C): HasTerm<C> => ({ __term: 'has', c })
+export const without = <C>(c: C): WithoutTerm<C> => ({ __term: 'without', c })
 export const optional = <C>(c: C): OptionalTerm<C> => ({ __term: 'optional', c })
 
 export type QueryTerm =
   | ReadTerm<unknown>
   | WriteTerm<unknown>
-  | WithTerm<unknown>
+  | HasTerm<unknown>
   | WithoutTerm<unknown>
   | OptionalTerm<unknown>
   | PairDef<RelationDef<Schema | void>>
@@ -334,7 +350,7 @@ type PairValue<P extends PairDef<RelationDef<Schema | void>>, RW extends 'r' | '
     : Record<never, never>
   : Record<never, never>
 
-// §5.2 term → element-contribution mapping. With/Without contribute nothing (membership-only);
+// §5.2 term → element-contribution mapping. has/without contribute nothing (membership-only);
 // optional contributes a possibly-undefined view; a Pair contributes its payload under the relation name.
 export type TermElement<T> = T extends WriteTerm<infer C>
   ? { [K in CompKey<C>]: WriteOf<C> }
@@ -342,7 +358,7 @@ export type TermElement<T> = T extends WriteTerm<infer C>
     ? { [K in CompKey<C>]: ReadOf<C> }
     : T extends OptionalTerm<infer C>
       ? { [K in CompKey<C>]: ReadOf<C> | undefined }
-      : T extends WithTerm<infer _C>
+      : T extends HasTerm<infer _C>
         ? Record<never, never>
         : T extends WithoutTerm<infer _C>
           ? Record<never, never>

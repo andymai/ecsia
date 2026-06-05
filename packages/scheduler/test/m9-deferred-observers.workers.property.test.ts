@@ -176,14 +176,14 @@ describe('R-3 — deferred observers under a REAL multi-worker frame: no re-entr
           const thrCap = wireObservers(thr, policy)
           const RegenT = defineSystem({ name: 'Regen', read: [], write: [thr.Health], run() {} })
           const SpawnerT = defineSystem({ name: 'Spawner', read: [thr.Health], write: [thr.Mana], maxSpawnsPerWave: n, run() {} })
-          const thrSched = createScheduler(thr.world, [RegenT, SpawnerT], { workerCount: 2 })
+          const thrSched = createScheduler(thr.world, [RegenT, SpawnerT], { workers: 2 })
           const systems: PoolSystem[] = [
             { id: 0 as unknown as SystemId, name: 'Regen', matchComponents: [thr.Health], kernel: () => {}, maxSpawnsPerWave: 0 },
             { id: 1 as unknown as SystemId, name: 'Spawner', matchComponents: [thr.Health], kernel: () => {}, maxSpawnsPerWave: n },
           ]
           pool = new WorkerPool({
             world: thr.world,
-            workerCount: 2,
+            workers: 2,
             kernelModule: KERNEL_MODULE,
             workerEntryUrl: WORKER_ENTRY,
             systems,

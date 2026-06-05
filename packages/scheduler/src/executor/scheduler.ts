@@ -39,8 +39,8 @@ export interface CreateSchedulerOptions {
    * test; widen-only). Pass it to align the access words with the bitmask stride for M7 worker work.
    */
   readonly registeredComponentCount?: number
-  /** Worker pool size for plan shape. Default: 0 (single-thread; worker bodies land at M7). */
-  readonly workerCount?: number
+  /** Worker pool size for plan shape (matches WorldOptions.scheduler.workers). Default: 0 (single-thread; worker bodies land at M7). */
+  readonly workers?: number
   /** Dev guards on/off. Default: NODE_ENV !== 'production'. */
   readonly dev?: boolean
 }
@@ -63,21 +63,21 @@ function strideFor(systems: readonly SystemBox[], registeredComponentCount: numb
  */
 export function buildSchedulePlan(
   systems: readonly SystemBox[],
-  opts: { accessStrideWords: number; workerCount: number },
+  opts: { accessStrideWords: number; workers: number },
 ): SchedulePlan {
   if (systems.length === 0) {
     return Object.freeze({
       waves: [],
       systems,
       accessStrideWords: opts.accessStrideWords,
-      workerCount: opts.workerCount,
+      workers: opts.workers,
     })
   }
   const defs = systems.map((sb) => sb.def)
   const access = aggregateAccess(systems)
   const edges = buildEdges(systems, defs, access)
   const dag = buildDAG(systems, edges)
-  return buildPlan(systems, dag, opts.accessStrideWords, opts.workerCount)
+  return buildPlan(systems, dag, opts.accessStrideWords, opts.workers)
 }
 
 export function createScheduler(
@@ -85,12 +85,12 @@ export function createScheduler(
   defs: readonly SystemDef[],
   opts?: CreateSchedulerOptions,
 ): SchedulerHandle {
-  const workerCount = opts?.workerCount ?? 0
+  const workers = opts?.workers ?? 0
   const dev = opts?.dev ?? (typeof process !== 'undefined' && process.env['NODE_ENV'] !== 'production')
 
   const accessStrideWords = strideFor(lowerSystems(defs, 1), opts?.registeredComponentCount)
   const systems = resolveOrdering(lowerSystems(defs, accessStrideWords), defs)
-  const plan = buildSchedulePlan(systems, { accessStrideWords, workerCount })
+  const plan = buildSchedulePlan(systems, { accessStrideWords, workers })
 
   const env = {
     world,

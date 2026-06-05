@@ -8,29 +8,10 @@
 //     (-1 <-> null).
 
 import { describe, expect, test } from 'vitest'
-import {
-  Buffers,
-  ComponentRegistry,
-  bindAccessorRow,
-  buildColumnSet,
-  createWorld,
-  decodeEid,
-  defineComponent,
-  encodeEid,
-  makeColumnLayout,
-  probeCapabilities,
-  staticString,
-  vec,
-} from '@ecsia/core'
-import type {
-  AccessorWorld,
-  ColumnKey,
-  ComponentDef,
-  ElementKind,
-  RegionKey,
-  RuntimeCapabilities,
-  Schema,
-} from '@ecsia/core'
+import { bindAccessorRow, buildColumnSet, createWorld, decodeEid, defineComponent, encodeEid, makeColumnLayout, staticString, vec } from '@ecsia/core'
+import { Buffers, ComponentRegistry, probeCapabilities } from '../src/internal.js'
+import type { ColumnKey, ComponentDef, ElementKind, RegionKey, RuntimeCapabilities, Schema } from '@ecsia/core'
+import type { AccessorWorld } from '../src/internal.js'
 
 const k = (s: string): ColumnKey => s as ColumnKey
 const newBuffers = (): Buffers =>
@@ -45,7 +26,7 @@ function stubWorld(): AccessorWorld {
 
 describe('defineComponent infers a usable component', () => {
   test('a defined component reads and writes through the world entity surface', () => {
-    const Position = defineComponent({ x: 'f32', y: 'f32' })
+    const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c1' })
     const w = createWorld({ components: [Position] })
     // M3: an entity reads/writes a component only once it HOLDS it. spawnWith lands it in the
     // {Position} archetype in a single migration (archetype-storage.md §5.6).
@@ -65,7 +46,7 @@ describe('defineComponent infers a usable component', () => {
     // Drive the column directly to prove the setter reaches the TypedArray slot.
     const buffers = newBuffers()
     const world = stubWorld()
-    const Position = defineComponent({ x: 'f32', y: 'f32' }) as ComponentDef<Schema>
+    const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c2' }) as ComponentDef<Schema>
     new ComponentRegistry(buffers, world).register([Position])
     const set = buildColumnSet({ buffers, archetypeId: 0, def: Position, world, initialCapacity: 8 })
 
@@ -181,7 +162,7 @@ describe('field round-trip encode→store→decode for every ElementKind', () =>
     test(`${c.token} round-trips ${c.input}`, () => {
       const buffers = newBuffers()
       const world = stubWorld()
-      const C = defineComponent({ v: c.token as never }) as ComponentDef<Schema>
+      const C = defineComponent({ v: c.token as never }, { name: 'c3' }) as ComponentDef<Schema>
       new ComponentRegistry(buffers, world).register([C])
       const set = buildColumnSet({ buffers, archetypeId: 0, def: C, world, initialCapacity: 4 })
       const a = bindAccessorRow(set, 1, 0 as never) as unknown as { v: number }
@@ -194,7 +175,7 @@ describe('field round-trip encode→store→decode for every ElementKind', () =>
   test('bool round-trips true/false through a u8 slot', () => {
     const buffers = newBuffers()
     const world = stubWorld()
-    const C = defineComponent({ b: 'bool' }) as ComponentDef<Schema>
+    const C = defineComponent({ b: 'bool' }, { name: 'c4' }) as ComponentDef<Schema>
     new ComponentRegistry(buffers, world).register([C])
     const set = buildColumnSet({ buffers, archetypeId: 0, def: C, world, initialCapacity: 4 })
     const a = bindAccessorRow(set, 0, 0 as never) as unknown as { b: boolean }
@@ -209,7 +190,7 @@ describe('field round-trip encode→store→decode for every ElementKind', () =>
   test('staticString round-trips a choice through its stored index, throws on an unknown value', () => {
     const buffers = newBuffers()
     const world = stubWorld()
-    const C = defineComponent({ state: staticString('idle', 'run', 'jump') }) as ComponentDef<Schema>
+    const C = defineComponent({ state: staticString('idle', 'run', 'jump') }, { name: 'c5' }) as ComponentDef<Schema>
     new ComponentRegistry(buffers, world).register([C])
     const set = buildColumnSet({ buffers, archetypeId: 0, def: C, world, initialCapacity: 4 })
     const a = bindAccessorRow(set, 0, 0 as never) as unknown as { state: string }
@@ -232,7 +213,7 @@ describe('field round-trip encode→store→decode for every ElementKind', () =>
     // …and through the accessor: a fresh row decodes null, a written handle decodes back.
     const buffers = newBuffers()
     const world = stubWorld()
-    const Ref = defineComponent({ target: 'eid' }) as ComponentDef<Schema>
+    const Ref = defineComponent({ target: 'eid' }, { name: 'c6' }) as ComponentDef<Schema>
     new ComponentRegistry(buffers, world).register([Ref])
     const set = buildColumnSet({ buffers, archetypeId: 0, def: Ref, world, initialCapacity: 4 })
     const a = bindAccessorRow(set, 0, 0 as never) as unknown as { target: number | null }
@@ -244,7 +225,7 @@ describe('field round-trip encode→store→decode for every ElementKind', () =>
   test('vec round-trips n contiguous slots per row (stride = n)', () => {
     const buffers = newBuffers()
     const world = stubWorld()
-    const C = defineComponent({ v: vec('f32', 3) }) as ComponentDef<Schema>
+    const C = defineComponent({ v: vec('f32', 3) }, { name: 'c7' }) as ComponentDef<Schema>
     new ComponentRegistry(buffers, world).register([C])
     const set = buildColumnSet({ buffers, archetypeId: 0, def: C, world, initialCapacity: 4 })
     const a = bindAccessorRow(set, 2, 0 as never) as unknown as {
@@ -266,7 +247,7 @@ describe('post-grow accessor validity (cross-library Proxy bench DEFERRED — co
   test('a pre-grow accessor writes/reads a high row after grow with no class regeneration', () => {
     const buffers = newBuffers()
     const world = stubWorld()
-    const Position = defineComponent({ x: 'f32' }) as ComponentDef<Schema>
+    const Position = defineComponent({ x: 'f32' }, { name: 'c8' }) as ComponentDef<Schema>
     new ComponentRegistry(buffers, world).register([Position])
     const set = buildColumnSet({ buffers, archetypeId: 0, def: Position, world, initialCapacity: 4 })
 

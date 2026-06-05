@@ -45,7 +45,7 @@ export function ordinalToElement(ordinal: number): ElementKind {
 export function assertPlatformLittleEndian(): void {
   const probe = new Uint8Array(new Uint32Array([1]).buffer)
   if (probe[0] !== 1) {
-    throw new Error('serialization: big-endian platform unsupported (the wire format is little-endian, §9.4)')
+    throw new Error('serialization: big-endian platform unsupported (the wire format is little-endian)')
   }
 }
 

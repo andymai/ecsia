@@ -169,12 +169,12 @@ describe('M8 relations — wildcard query, cascade, back-ref, depth', () => {
     const b = world.spawn()
     rel.addPair(a, ChildOf, root)
     rel.addPair(b, ChildOf, a)
-    expect(rel.depthOf(ChildOf, root)).toBe(0)
-    expect(rel.depthOf(ChildOf, a)).toBe(1)
-    expect(rel.depthOf(ChildOf, b)).toBe(2)
+    expect(rel.depthOf(root, ChildOf)).toBe(0)
+    expect(rel.depthOf(a, ChildOf)).toBe(1)
+    expect(rel.depthOf(b, ChildOf)).toBe(2)
 
     const NonExcl = rel.defineRelation(null)
-    expect(() => rel.depthOf(NonExcl, root)).toThrow()
+    expect(() => rel.depthOf(root, NonExcl)).toThrow()
   })
 
   it('drop-if-dead: addPair to a dead subject or target is a no-op', () => {

@@ -3,7 +3,7 @@
 // sequentially in batch-index order. Because batches in a round are conflict-free by construction
 // (WAVE-CONFLICT, §5.2), the observable result equals the threaded path (§6.5).
 //
-// Rule PHASE-1 (§6.4): in single-thread mode (workerCount === 0) runWave does NOT flip world.phase to
+// Rule PHASE-1 (§6.4): in single-thread mode (workers === 0) runWave does NOT flip world.phase to
 // 'wave'. It stays 'serial' for the entire update, so every structural op a system performs takes the
 // synchronous direct-apply fast path (command-buffer.md §2.2) and there are no command buffers to
 // flush. The post-wave serial slot's flushAll/mergeCorrals are no-ops — zero cost single-threaded.

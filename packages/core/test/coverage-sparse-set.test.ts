@@ -3,7 +3,7 @@
 // out-of-capacity index, and the lazy capacity grow path (growRegion doubling + view re-publish).
 
 import { describe, expect, test } from 'vitest'
-import { Buffers, SparseSetU32, probeCapabilities } from '@ecsia/core'
+import { Buffers, SparseSetU32, probeCapabilities } from '../src/internal.js'
 import type { RegionKey } from '@ecsia/core'
 
 const newBuffers = (max = 1 << 16): Buffers =>

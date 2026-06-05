@@ -17,7 +17,7 @@ export interface BufferReservation {
 }
 
 export interface CommandBuffer {
-  /** Worker index this buffer belongs to (0..workerCount-1). Fixes merge order (§7.2). */
+  /** Worker index this buffer belongs to (0..workers-1). Fixes merge order (§7.2). */
   readonly workerIndex: number
   /** u32 words. SAB-backed in the threaded path, plain AB in the fallback (§3.1). */
   words: Uint32Array

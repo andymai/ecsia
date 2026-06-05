@@ -4,7 +4,7 @@
 // components pushes the last ids into that residual range.
 
 import { describe, expect, test } from 'vitest'
-import { createWorld, defineComponent, With, Without, read } from '@ecsia/core'
+import { createWorld, defineComponent, has, without, read } from '@ecsia/core'
 import type { ComponentDef, EntityHandle, Schema } from '@ecsia/core'
 
 // 40 single-field components -> ids 1..40; fixedBitCount is 64 here (ceil(41/32)*32) so ids stay
@@ -22,13 +22,13 @@ function manyComponents(n: number): ComponentDef<Schema>[] {
 }
 
 describe('QueryEngine matching over a high (multi-word) component id', () => {
-  test('With(high id) matches only entities holding it; the residual/dense AND is correct', () => {
+  test('has(high id) matches only entities holding it; the residual/dense AND is correct', () => {
     const comps = manyComponents(70) // ids 1..70 -> stride 3 (fixedBitCount 96)
     const world = createWorld({ components: comps })
     const High = comps[65]! // a 2nd/3rd-word bit
     const Other = comps[3]!
 
-    const q = world.query(With(High))
+    const q = world.query(has(High))
     expect(q.count).toBe(0)
 
     const a = world.spawnWith(High)
@@ -49,13 +49,13 @@ describe('QueryEngine matching over a high (multi-word) component id', () => {
     expect(q.count).toBe(1)
   })
 
-  test('Without(high id) excludes holders across the multi-word boundary', () => {
+  test('without(high id) excludes holders across the multi-word boundary', () => {
     const comps = manyComponents(70)
     const world = createWorld({ components: comps })
     const High = comps[64]!
     const Base = comps[0]!
 
-    const q = world.query(read(Base), Without(High))
+    const q = world.query(read(Base), without(High))
     const plain = world.spawnWith(Base)
     const withHigh = world.spawnWith(Base, High)
     expect(q.count).toBe(1) // only `plain`
@@ -72,7 +72,7 @@ describe('dropEntity + frameReset across queries (engine §6.3 / §8.2)', () => 
     const comps = manyComponents(4)
     const world = createWorld({ components: comps })
     const A = comps[0]!
-    const constrained = world.query(With(A))
+    const constrained = world.query(has(A))
     const loose = world.query() // matches the empty signature too
 
     const e = world.spawnWith(A)

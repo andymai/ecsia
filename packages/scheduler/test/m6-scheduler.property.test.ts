@@ -17,17 +17,10 @@ import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
 import { createWorld, defineComponent } from '@ecsia/core'
 import type { ComponentDef, Schema } from '@ecsia/core'
-import {
-  CycleError,
-  aggregateAccess,
-  buildDAG,
-  buildEdges,
-  buildPlan,
-  defineSystem,
-  lowerSystems,
-  resolveOrdering,
-} from '@ecsia/scheduler'
-import type { ScheduleWave, SystemDef } from '@ecsia/scheduler'
+import { defineSystem } from '@ecsia/scheduler'
+import { CycleError, aggregateAccess, buildDAG, buildEdges, buildPlan, lowerSystems, resolveOrdering } from '../src/internal.js'
+import type { SystemDef } from '@ecsia/scheduler'
+import type { ScheduleWave } from '../src/internal.js'
 
 // ---- shared component pool -----------------------------------------------------------------------
 // A ComponentDef interns per world, so a property mints a FRESH pool + world on every fast-check run.

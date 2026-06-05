@@ -4,9 +4,11 @@
 // placement, the bare-ComponentDef default arm, and the pair-term resolution outcomes.
 
 import { describe, expect, test } from 'vitest'
-import { compileQuery, read, write, With, Without, optional } from '@ecsia/core'
+import { read, write, has, without, optional } from '@ecsia/core'
+import { compileQuery } from '../src/internal.js'
 import type { ComponentDef, QueryTerm, Schema } from '@ecsia/core'
-import type { CompileContext, ResolvedPair } from '@ecsia/core'
+import type { ResolvedPair } from '@ecsia/core'
+import type { CompileContext } from '../src/internal.js'
 
 interface FakeDef {
   id: number
@@ -33,7 +35,7 @@ describe('compileQuery term classification', () => {
     const D = def(4, 'd')
     const E = def(5, 'e')
     const q = compileQuery(
-      [read(A), write(B), With(C), Without(D), optional(E)] as readonly QueryTerm[],
+      [read(A), write(B), has(C), without(D), optional(E)] as readonly QueryTerm[],
       ctx(),
     )
     const roles = new Map(q.valueTerms.map((vt) => [vt.componentId as number, vt.role]))
@@ -41,9 +43,9 @@ describe('compileQuery term classification', () => {
     expect(roles.get(1)).toBe('read')
     expect(roles.get(2)).toBe('write')
     expect(roles.get(5)).toBe('optional')
-    // With contributes a membership bit but NO value term.
+    // has contributes a membership bit but NO value term.
     expect(roles.has(3)).toBe(false)
-    // Without is a not-bit, no value term.
+    // without is a not-bit, no value term.
     expect(roles.has(4)).toBe(false)
 
     // withWords cover A,B,C; notWords cover D; optionalIds cover E.
@@ -64,7 +66,7 @@ describe('compileQuery term classification', () => {
 
   test('a with-bit id at/above fixedBitCount lands in residualWith (not the dense words)', () => {
     const Big = def(40, 'big') // fixedBitCount 32 -> 40 is residual
-    const q = compileQuery([With(Big)] as readonly QueryTerm[], ctx(32))
+    const q = compileQuery([has(Big)] as readonly QueryTerm[], ctx(32))
     expect(q.withWords).toHaveLength(0)
     expect(q.residualWith).toHaveLength(1)
     expect(q.residualWith[0]!.componentId as number).toBe(40)
@@ -73,7 +75,7 @@ describe('compileQuery term classification', () => {
 
   test('a without-bit id at/above fixedBitCount lands in residualWith with negate=true', () => {
     const Big = def(50, 'big')
-    const q = compileQuery([Without(Big)] as readonly QueryTerm[], ctx(32))
+    const q = compileQuery([without(Big)] as readonly QueryTerm[], ctx(32))
     expect(q.notWords).toHaveLength(0)
     expect(q.residualWith).toHaveLength(1)
     expect(q.residualWith[0]!.componentId as number).toBe(50)
@@ -83,7 +85,7 @@ describe('compileQuery term classification', () => {
   test('low ids go into the dense words, high ids into residual, in the same query', () => {
     const Low = def(3, 'low')
     const High = def(40, 'high')
-    const q = compileQuery([With(Low), With(High)] as readonly QueryTerm[], ctx(32))
+    const q = compileQuery([has(Low), has(High)] as readonly QueryTerm[], ctx(32))
     expect(q.withWords).toHaveLength(1) // only Low
     expect(q.residualWith).toHaveLength(1) // only High
     expect(q.residualWith[0]!.componentId as number).toBe(40)

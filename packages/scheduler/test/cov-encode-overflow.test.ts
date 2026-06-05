@@ -5,8 +5,8 @@
 
 import { describe, expect, test } from 'vitest'
 import { defineComponent } from '@ecsia/core'
-import { makeCommandBuffer, makeEncoder, buildFieldCodec, Op } from '@ecsia/scheduler'
-import type { CommandBuffer, ComponentFieldCodec } from '@ecsia/scheduler'
+import { makeCommandBuffer, makeEncoder, buildFieldCodec, Op } from '../src/internal.js'
+import type { CommandBuffer, ComponentFieldCodec } from '../src/internal.js'
 import type { ComponentDef, ComponentId, RelationId, Schema } from '@ecsia/schema'
 import type { EntityHandle } from '@ecsia/core'
 

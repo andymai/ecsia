@@ -1,5 +1,22 @@
-// @ecsia/core — the single-threaded kernel. M0: world keystone scaffold + reserved-id constants.
-export { NO_COMPONENT, FIRST_USER_COMPONENT_ID } from './ids.js'
+// @ecsia/core — the single-threaded kernel. PUBLIC surface (P0.5 surface diet).
+//
+// This barrel is split into two sections:
+//   • PUBLIC — the documented user/umbrella surface: createWorld + config, component/tag definition,
+//     entity sentinels, reactivity observer builders, and the schema token/inference re-exports the
+//     umbrella (@ecsia/ecsia) curates.
+//   • INTERNAL (cross-package) — kernel seams that sibling packages (@ecsia/{relations,serialization})
+//     import via '@ecsia/core'. They are NOT user API, but removing them would break those siblings,
+//     so they stay exported here under a clearly-marked banner rather than on a hidden subpath
+//     (package.json#exports maps only `.`).
+//
+// The rest of the kernel (store/bitmask/registry/query-engine/memory-backing classes + low-level
+// schema helpers) is implementation detail and lives in ./internal.ts — NOT re-exported here. This
+// package's own tests reach those through a relative `../src/internal.js` import.
+
+// ===========================================================================
+// PUBLIC
+// ===========================================================================
+
 export type { ComponentId } from './ids.js'
 export { ConfigError, resolveOptions } from './config.js'
 export type {
@@ -13,173 +30,31 @@ export type {
   WorkerOption,
 } from './config.js'
 export { createWorld } from './world.js'
-export type { World, WorldPhase, WorldApplySurface, RelationsHost } from './world.js'
-export type {
-  SerializationSurface,
-  SerializeArchetype,
-  SerializeComponentColumns,
-  SerializeComponentMeta,
-  SerializePair,
-  SerializeRelationProvider,
-  SerializeStructuralRecord,
-} from './serialize-surface.js'
+export type { World, WorldPhase } from './world.js'
 
-export {
-  makeHandle,
-  handleIndex,
-  handleGeneration,
-  makeHandleLayout,
-  NO_ENTITY,
-  ARCHETYPE_NONE,
-  CapacityExceeded,
-  EntityRef,
-  reserveEntityBlock,
-  returnReservedIds,
-} from './entity/index.js'
-export type {
-  EntityHandle,
-  EntityIndex,
-  EntityGeneration,
-  HandleLayout,
-  HandleStats,
-  EntityLocation,
-  EntityReservation,
-  EntityAccessors,
-} from './entity/index.js'
-
-export { allocU32 } from './memory/index.js'
-export type { AllocU32Options, U32Region } from './memory/index.js'
-
-export {
-  Buffers,
-  probeCapabilities,
-  selectBacking,
-  sharedBacking,
-  snapshotInto,
-  rowSlice,
-  columnKey,
-  elementCtor,
-  elementBytes,
-  makeColumnLayout,
-  tokenToColumnLayout,
-  fieldToColumnLayout,
-  stringIndexElement,
-  encodeEid,
-  decodeEid,
-  EID_NULL,
-} from './memory/index.js'
-export type {
-  Backing,
-  ColumnKey,
-  RegionKey,
-  WorkerMode,
-  BackingStrategy,
-  RuntimeCapabilities,
-  Column,
-  Region,
-  RegionOpts,
-  ViewHolder,
-  BuffersConfig,
-  SharedHandleManifest,
-  ExportedColumnHandle,
-  ExportedRegionHandle,
-  ElementKind,
-  TypedArray,
-  ColumnLayout,
-} from './memory/index.js'
+export { NO_ENTITY, NULL_ENTITY, isNoEntity, EntityRef, handleIndex } from './entity/index.js'
+export type { EntityHandle, EntityIndex, HandleLayout } from './entity/index.js'
 
 export {
   defineComponent,
   defineTag,
-  registerComponentId,
-  UNREGISTERED,
-  resolveDescriptor,
-  makeAccessorFactory,
-  bindingsFor,
-  buildColumnSet,
-  bindAccessorRow,
-} from './component/index.js'
-export type {
-  ComponentRuntime,
-  DefKind,
-  AccessorWorld,
-  AccessorBinding,
-  AccessorInstanceBase,
-  ColumnSet,
-  BuildColumnSetParams,
 } from './component/index.js'
 
-export { ComponentRegistry } from './registry.js'
-
 export {
-  ArchetypeStore,
-  Storage,
-  EMPTY_ARCHETYPE_ID,
-  canonicalize,
-  sigEquals,
-  sigHash,
-  sigHas,
-  sigWithAdded,
-  sigWithRemoved,
-  buildSigWords,
-  signatureMatches,
-  makeColdStore,
-  coldRowOf,
-} from './storage/index.js'
-export type {
-  Archetype,
-  ColdStore,
-  Signature,
-  MatchTerm,
-  RecordSurface,
-  StorageDeps,
-  StorageConfig,
-  DefRegistry,
-} from './storage/index.js'
-
-export { Bitmask } from './bitmask/index.js'
-export type { PhaseGate } from './bitmask/index.js'
-
-export {
-  Reactivity,
-  LogRing,
-  WriteCorral,
-  ChangeVersionStore,
-  ObserverRegistry,
   ShapeKind,
-  OVERFLOW_SENTINEL,
   onAdd,
   onRemove,
   onChange,
 } from './reactivity/index.js'
 export type {
-  ReactivityDeps,
-  LogPointer,
-  ObserverKind,
   ObserverHandle,
   ObserverTerm,
   ObserverContext,
-  ObserverHandler,
-  ObserverDeps,
 } from './reactivity/index.js'
 
-export { QueryEngine, LiveQuery, SparseSetU32, compileQuery } from './query/index.js'
-export type {
-  QueryEngineDeps,
-  LiveQueryDeps,
-  ReactivityQueryHooks,
-  PooledElement,
-  CompiledQuery,
-  CompiledValueTerm,
-  CompileContext,
-  ResidualTerm,
-  ResolvedPair,
-  RowFilterTerm,
-  ValueRole,
-  Word,
-} from './query/index.js'
+export type { SharedHandleManifest } from './memory/index.js'
 
-// Re-export the schema surface so users import tokens/inference from @ecsia/core (the umbrella).
+// Schema surface re-exported so users import tokens/inference from @ecsia/core (the umbrella).
 export {
   vec,
   vec2,
@@ -190,8 +65,8 @@ export {
   MAX_QUERY_ARITY,
   read,
   write,
-  With,
-  Without,
+  has,
+  without,
   optional,
 } from '@ecsia/schema'
 export type {
@@ -200,45 +75,68 @@ export type {
   StaticStringToken,
   ObjectToken,
   FieldToken,
-  ScalarValue,
-  FieldValue,
-  VecView,
-  ReadonlyVecView,
-  FieldDescriptor,
-  TypedArrayCtor,
   Schema,
   ComponentDef,
   ComponentOptions,
-  StorageStrategy,
   ReadView,
   WriteView,
   ReadOf,
   WriteOf,
   SchemaOf,
-  AccessorInstance,
-  AccessorFactory,
-  TypedArrayLike,
-  ColumnBinding,
   // query DSL types (queries.md / type-system.md §5–§7)
   QueryTerm,
-  ReadTerm,
-  WriteTerm,
-  WithTerm,
-  WithoutTerm,
-  OptionalTerm,
-  TermElement,
   QueryElement,
-  UnionToIntersection,
   Query,
   QueryChunk,
   LooseQuery,
-  WorldQuery,
-  LooseQueryElement,
   Has,
   HasWrite,
-  CompKey,
   RelationDef,
   RelationOptions,
   PairDef,
   WildcardToken,
+  Tick,
 } from '@ecsia/schema'
+
+// ===========================================================================
+// INTERNAL (cross-package) — imported by @ecsia/{relations,serialization} via '@ecsia/core'.
+// NOT user API; kept here only because those siblings need them and exports map only `.`.
+// ===========================================================================
+
+export { NO_COMPONENT, FIRST_USER_COMPONENT_ID } from './ids.js'
+export type { WorldApplySurface, RelationsHost } from './world.js'
+export type {
+  SerializationSurface,
+  SerializeArchetype,
+  SerializeComponentColumns,
+  SerializeComponentMeta,
+  SerializePair,
+  SerializeRelationProvider,
+  SerializeStructuralRecord,
+} from './serialize-surface.js'
+
+export { makeHandleLayout, ARCHETYPE_NONE, reserveEntityBlock, returnReservedIds } from './entity/index.js'
+export type { EntityReservation } from './entity/index.js'
+
+export {
+  encodeEid,
+  decodeEid,
+  elementCtor,
+  elementBytes,
+  makeColumnLayout,
+} from './memory/index.js'
+export type {
+  ColumnKey,
+  RegionKey,
+  RuntimeCapabilities,
+  Column,
+  ElementKind,
+  TypedArray,
+  ColumnLayout,
+} from './memory/index.js'
+
+export { buildColumnSet, bindAccessorRow } from './component/index.js'
+export type { ColumnSet } from './component/index.js'
+
+export type { StorageStrategy } from '@ecsia/schema'
+export type { ResolvedPair } from './query/index.js'

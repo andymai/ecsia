@@ -49,7 +49,10 @@ export class Bitmask {
 
   #assertSerial(): void {
     if (this.#phase() !== 'serial') {
-      throw new Error('bitmask is main-thread/serial-only (Must-Fix #1)')
+      throw new Error(
+        'component bitmask access is main-thread / serial-phase only; perform structural reads or mutations ' +
+          'outside worker waves (before scheduler.update() or in a serial system), not from a worker-wave system',
+      )
     }
   }
 

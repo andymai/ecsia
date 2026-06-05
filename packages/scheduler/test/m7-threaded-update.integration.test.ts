@@ -98,12 +98,12 @@ describe('M7 threaded frame loop reproduces the single-thread result via schedul
     const thr = seedWorld(true, 2, N)
     const RegenT = defineSystem({ name: 'Regen', read: [], write: [thr.Health], run() {} })
     const ChannelT = defineSystem({ name: 'Channel', read: [], write: [thr.Mana], run() {} })
-    const thrSched = createScheduler(thr.world, [RegenT, ChannelT], { workerCount: 2 })
+    const thrSched = createScheduler(thr.world, [RegenT, ChannelT], { workers: 2 })
     const systems: PoolSystem[] = [
       { id: 0 as unknown as SystemId, name: 'Regen', matchComponents: [thr.Health], kernel: () => {}, maxSpawnsPerWave: 0 },
       { id: 1 as unknown as SystemId, name: 'Channel', matchComponents: [thr.Mana], kernel: () => {}, maxSpawnsPerWave: 0 },
     ]
-    pool = new WorkerPool({ world: thr.world, workerCount: 2, kernelModule: KERNEL_MODULE, workerEntryUrl: WORKER_ENTRY, systems })
+    pool = new WorkerPool({ world: thr.world, workers: 2, kernelModule: KERNEL_MODULE, workerEntryUrl: WORKER_ENTRY, systems })
     await pool.ready()
 
     // Measured frames.
@@ -157,11 +157,11 @@ describe('M7 threaded frame loop reproduces the single-thread result via schedul
     const thr = seedWorld(true, 1, N, false)
     const thrDeltas = captureDeltas(thr.world, thr)
     const SpawnerT = defineSystem({ name: 'Spawner', read: [thr.Health], write: [thr.Mana], maxSpawnsPerWave: N, run() {} })
-    const thrSched = createScheduler(thr.world, [SpawnerT], { workerCount: 1 })
+    const thrSched = createScheduler(thr.world, [SpawnerT], { workers: 1 })
     const systems: PoolSystem[] = [
       { id: 0 as unknown as SystemId, name: 'Spawner', matchComponents: [thr.Health], kernel: () => {}, maxSpawnsPerWave: N },
     ]
-    pool = new WorkerPool({ world: thr.world, workerCount: 1, kernelModule: KERNEL_MODULE, workerEntryUrl: WORKER_ENTRY, systems, components: [thr.Health, thr.Mana] })
+    pool = new WorkerPool({ world: thr.world, workers: 1, kernelModule: KERNEL_MODULE, workerEntryUrl: WORKER_ENTRY, systems, components: [thr.Health, thr.Mana] })
     await pool.ready()
 
     const beforeRef = ref.world.handleStats().aliveCount

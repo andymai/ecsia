@@ -15,8 +15,8 @@ import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
 import { createWorld, handleIndex } from '@ecsia/core'
 import type { ComponentDef, ComponentId, EntityHandle, RelationId, Schema, World } from '@ecsia/core'
-import { flushAll, makeCommandBuffer, makeEncoder } from '@ecsia/scheduler'
-import type { CommandBuffer, CommandEncoder, WorldApply } from '@ecsia/scheduler'
+import { flushAll, makeCommandBuffer, makeEncoder } from '../../scheduler/src/internal.js'
+import type { CommandBuffer, CommandEncoder, WorldApply } from '../../scheduler/src/internal.js'
 import { createRelations, Wildcard } from '../src/index.js'
 
 type Rel = ReturnType<typeof createRelations>

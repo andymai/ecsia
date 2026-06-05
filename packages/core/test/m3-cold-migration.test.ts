@@ -5,19 +5,10 @@
 // copy for a cold target — or a cold store that never reclaims rows — fails here.
 
 import { describe, expect, test } from 'vitest'
-import {
-  ArchetypeStore,
-  Bitmask,
-  Buffers,
-  ComponentRegistry,
-  canonicalize,
-  coldRowOf,
-  createWorld,
-  defineComponent,
-  probeCapabilities,
-  sigHas,
-} from '@ecsia/core'
-import type { ColdStore, ComponentId, RecordSurface, Signature } from '@ecsia/core'
+import { createWorld, defineComponent } from '@ecsia/core'
+import { ArchetypeStore, Bitmask, Buffers, ComponentRegistry, canonicalize, coldRowOf, probeCapabilities, sigHas } from '../src/internal.js'
+import type { ComponentId } from '@ecsia/core'
+import type { ColdStore, RecordSurface, Signature } from '../src/internal.js'
 
 const newBuffers = (): Buffers =>
   new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 16 })
@@ -33,7 +24,7 @@ interface Store {
 function makeStore(componentCount: number, maxHotArchetypes = 1 << 20): Store {
   const buffers = newBuffers()
   const registry = new ComponentRegistry()
-  const defs = Array.from({ length: componentCount }, (_, i) => defineComponent({ ['f' + i]: 'i32' as const }))
+  const defs = Array.from({ length: componentCount }, (_, i) => defineComponent({ ['f' + i]: 'i32' as const }, { name: 'f' + i }))
   registry.register(defs)
   const recordArch = new Map<number, number>()
   const recordRow = new Map<number, number>()
@@ -129,8 +120,8 @@ describe('hot → cold migration preserves shared-column field VALUES (MIG-1 / �
   })
 
   test('end-to-end via createWorld: cold target keeps the prior field value', () => {
-    const A = defineComponent({ a: 'i32' })
-    const B = defineComponent({ b: 'i32' })
+    const A = defineComponent({ a: 'i32' }, { name: 'c1' })
+    const B = defineComponent({ b: 'i32' }, { name: 'c2' })
     const w = createWorld({ components: [A, B], maxHotArchetypes: 2 })
     const e = w.spawnWith(A)
     ;(w.entity(e).write(A) as { a: number }).a = 42

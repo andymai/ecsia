@@ -4,20 +4,9 @@
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent } from '@ecsia/core'
-import {
-  CycleError,
-  EdgeWeight,
-  aggregateAccess,
-  beforeWritersOf,
-  afterReadersOf,
-  buildDAG,
-  buildEdges,
-  defineSystem,
-  inAnyOrderWith,
-  lowerSystems,
-  resolveOrdering,
-} from '@ecsia/scheduler'
-import type { Edge, SystemBox } from '@ecsia/scheduler'
+import { beforeWritersOf, afterReadersOf, defineSystem, inAnyOrderWith } from '@ecsia/scheduler'
+import { CycleError, EdgeWeight, aggregateAccess, buildDAG, buildEdges, lowerSystems, resolveOrdering } from '../src/internal.js'
+import type { Edge, SystemBox } from '../src/internal.js'
 import type { ComponentDef, Schema, SystemId } from '@ecsia/schema'
 
 /** Lower + resolve ordering the way createScheduler does, ready for buildEdges/buildDAG. */

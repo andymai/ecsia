@@ -24,7 +24,6 @@ import {
   write,
 } from '@ecsia/ecsia'
 import type { EntityHandle, RoundDispatcher, World, SystemDef, SystemContext, Tick } from '@ecsia/ecsia'
-import { wr, rd } from './_helpers.js'
 
 export interface WorkerSimOptions {
   /** Particles per group (two groups total). Default 512. */
@@ -86,19 +85,19 @@ export async function main(opts: WorkerSimOptions = {}): Promise<WorkerSimResult
   const groupB: EntityHandle[] = []
   for (let i = 0; i < perGroup; i++) {
     const a = world.spawnWith(PositionA, VelocityA)
-    const pa = wr(world, a, PositionA)
+    const pa = world.entity(a).write(PositionA)
     pa.x = (rand() - 0.5) * 100
     pa.y = (rand() - 0.5) * 100
-    const va = wr(world, a, VelocityA)
+    const va = world.entity(a).write(VelocityA)
     va.dx = (rand() - 0.5) * 10
     va.dy = (rand() - 0.5) * 10
     groupA.push(a)
 
     const b = world.spawnWith(PositionB, VelocityB)
-    const pb = wr(world, b, PositionB)
+    const pb = world.entity(b).write(PositionB)
     pb.x = (rand() - 0.5) * 100
     pb.y = (rand() - 0.5) * 100
-    const vb = wr(world, b, VelocityB)
+    const vb = world.entity(b).write(VelocityB)
     vb.dx = (rand() - 0.5) * 10
     vb.dy = (rand() - 0.5) * 10
     groupB.push(b)
@@ -132,7 +131,7 @@ export async function main(opts: WorkerSimOptions = {}): Promise<WorkerSimResult
   })
 
   const defs: readonly SystemDef[] = [UpdateA, UpdateB]
-  const scheduler = createScheduler(world, defs, parallel ? { workerCount: 2 } : undefined)
+  const scheduler = createScheduler(world, defs, parallel ? { workers: 2 } : undefined)
 
   if (parallel) {
     // In-process RoundDispatcher: run each disjoint worker batch's kernel by systemId. Because the
@@ -147,17 +146,20 @@ export async function main(opts: WorkerSimOptions = {}): Promise<WorkerSimResult
   let energy = 0
   let radA = 0
   for (const h of groupA) {
-    const p = rd(world, h, PositionA)
-    const v = rd(world, h, VelocityA)
+    // Read each component's fields out before resolving the next — the pooled ref rebinds per call.
+    const p = world.entity(h).read(PositionA)
+    const radius = Math.hypot(p.x, p.y)
+    const v = world.entity(h).read(VelocityA)
     energy += 0.5 * (v.dx * v.dx + v.dy * v.dy)
-    radA += Math.hypot(p.x, p.y)
+    radA += radius
   }
   let radB = 0
   for (const h of groupB) {
-    const p = rd(world, h, PositionB)
-    const v = rd(world, h, VelocityB)
+    const p = world.entity(h).read(PositionB)
+    const radius = Math.hypot(p.x, p.y)
+    const v = world.entity(h).read(VelocityB)
     energy += 0.5 * (v.dx * v.dx + v.dy * v.dy)
-    radB += Math.hypot(p.x, p.y)
+    radB += radius
   }
 
   return {

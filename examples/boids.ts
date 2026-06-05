@@ -14,7 +14,6 @@ import {
   write,
 } from '@ecsia/ecsia'
 import type { EntityHandle } from '@ecsia/ecsia'
-import { wr, rd } from './_helpers.js'
 
 export interface BoidsOptions {
   /** Number of boids to simulate. Default 256. */
@@ -65,14 +64,14 @@ export function main(opts: BoidsOptions = {}): BoidsResult {
 
   const handles: EntityHandle[] = []
   for (let i = 0; i < count; i++) {
-    const h = world.spawnWith(Position, Velocity)
-    const p = wr(world, h, Position)
-    p.x = (rand() - 0.5) * 200
-    p.y = (rand() - 0.5) * 200
-    const v = wr(world, h, Velocity)
-    v.dx = (rand() - 0.5) * 20
-    v.dy = (rand() - 0.5) * 20
-    handles.push(h)
+    // Value-carrying spawn: one call spawns AND initializes both components through the tracked path
+    // (object-literal evaluation is left-to-right, so the rand() sequence x,y,dx,dy is preserved).
+    handles.push(
+      world.spawnWith(
+        [Position, { x: (rand() - 0.5) * 200, y: (rand() - 0.5) * 200 }],
+        [Velocity, { dx: (rand() - 0.5) * 20, dy: (rand() - 0.5) * 20 }],
+      ),
+    )
   }
 
   // Cohesion: shared per-tick centroid the movement system steers toward. Recomputed each tick from a
@@ -124,11 +123,15 @@ export function main(opts: BoidsOptions = {}): BoidsResult {
   let cy = 0
   let speedSum = 0
   for (const h of handles) {
-    const p = rd(world, h, Position)
-    const v = rd(world, h, Velocity)
-    positions.push({ x: p.x, y: p.y })
-    cx += p.x
-    cy += p.y
+    // The pooled EntityRef rebinds on each world.entity() call, so read each component's fields out
+    // before resolving the next one — never hold two live accessors across a world.entity() call.
+    const p = world.entity(h).read(Position)
+    const px = p.x
+    const py = p.y
+    const v = world.entity(h).read(Velocity)
+    positions.push({ x: px, y: py })
+    cx += px
+    cy += py
     speedSum += Math.hypot(v.dx, v.dy)
   }
 

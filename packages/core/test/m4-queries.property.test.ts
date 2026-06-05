@@ -21,18 +21,10 @@
 
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
-import {
-  buildSigWords,
-  canonicalize,
-  createWorld,
-  defineComponent,
-  read,
-  signatureMatches,
-  With,
-  Without,
-  optional,
-} from '@ecsia/core'
-import type { ComponentDef, ComponentId, EntityHandle, MatchTerm, Schema, Signature } from '@ecsia/core'
+import { createWorld, defineComponent, read, has, without, optional } from '@ecsia/core'
+import { buildSigWords, canonicalize, signatureMatches } from '../src/internal.js'
+import type { ComponentDef, ComponentId, EntityHandle, Schema } from '@ecsia/core'
+import type { MatchTerm, Signature } from '../src/internal.js'
 
 // A component def's id is mutated once at world registration, so every world needs FRESH defs.
 function freshDefs(n: number): ComponentDef<Schema>[] {
@@ -64,8 +56,8 @@ function oracleMatches(
 function buildQuery(world: ReturnType<typeof createWorld>, defs: ComponentDef<Schema>[], terms: TermSpec[]) {
   const args = terms.map((t) => {
     const def = defs[t.comp] as ComponentDef<Schema>
-    if (t.kind === 'with') return With(def)
-    if (t.kind === 'without') return Without(def)
+    if (t.kind === 'with') return has(def)
+    if (t.kind === 'without') return without(def)
     return optional(def)
   })
   return world.query(...args)
@@ -134,7 +126,7 @@ describe('PROP-MATCH per-archetype iteration == per-entity oracle', () => {
           const terms = rawTerms.map((t) => ({ neg: t.neg, comp: t.comp % universe }))
           const queryArgs = terms.map((t) => {
             const def = defs[t.comp] as ComponentDef<Schema>
-            return t.neg ? Without(def) : With(def)
+            return t.neg ? without(def) : has(def)
           })
 
           const entities: { handle: EntityHandle; idSet: Set<number> }[] = []
@@ -203,16 +195,16 @@ describe('PROP-MAINT incremental single-migration maintenance == full re-scan', 
           if (handles.length === 0) return
 
           // A handful of queries, each referencing a single component (so each migration touches a
-          // known subset). Plus a Without query to exercise the negate path.
+          // known subset). Plus a without query to exercise the negate path.
           const queries = defs.map((def, i) => ({
             comp: i,
             kind: 'with' as const,
-            q: world.query(With(def)),
+            q: world.query(has(def)),
           }))
           const notQueries = defs.map((def, i) => ({
             comp: i,
             kind: 'without' as const,
-            q: world.query(Without(def), With(defs[(i + 1) % universe] as ComponentDef<Schema>)),
+            q: world.query(without(def), has(defs[(i + 1) % universe] as ComponentDef<Schema>)),
           }))
 
           for (const m of migrations) {
@@ -268,7 +260,7 @@ describe('PROP-OACOST per-archetype match is independent of entity count N', () 
           const terms = rawTerms.map((t) => ({ neg: t.neg, comp: t.comp % universe }))
           const queryArgs = (defs: ComponentDef<Schema>[]) =>
             terms.map((t) =>
-              t.neg ? Without(defs[t.comp] as ComponentDef<Schema>) : With(defs[t.comp] as ComponentDef<Schema>),
+              t.neg ? without(defs[t.comp] as ComponentDef<Schema>) : has(defs[t.comp] as ComponentDef<Schema>),
             )
 
           // Build TWO worlds with the SAME distinct signatures but different per-signature populations.

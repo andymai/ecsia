@@ -2,17 +2,8 @@
 // runtime guard test that compiles this file); no assertions run. Contracts are pinned by mutual
 // assignability rather than a brittle `Equal` helper (deferred conditionals defeat strict Equal,
 // while bidirectional assignment proves the same equivalence).
-import type {
-  ComponentDef,
-  EntityHandle,
-  FieldValue,
-  ReadOf,
-  ReadView,
-  StaticStringToken,
-  VecView,
-  WriteOf,
-  WriteView,
-} from '@ecsia/core'
+import type { ComponentDef, EntityHandle, ReadOf, ReadView, StaticStringToken, WriteOf, WriteView } from '@ecsia/core'
+import type { FieldValue, VecView } from '../src/internal.js'
 import { defineComponent, vec, staticString } from '@ecsia/core'
 
 // Field token → value type (assignable both directions == equal).
@@ -35,14 +26,14 @@ wp.x = 5 // mutable
 // @ts-expect-error shorthand/read is deeply readonly (Must-Fix #2)
 rp.x = 5
 
-const Position = defineComponent({ x: 'f32', y: 'f32' })
+const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c1' })
 declare const rPos: ReadOf<typeof Position>
 declare const wPos: WriteOf<typeof Position>
 export const _r2: Readonly<{ x: number; y: number }> = rPos
 export const _w2: { x: number; y: number } = wPos
 
 // vec / staticString through a full component.
-const Body = defineComponent({ v: vec('f32', 3), state: staticString('idle', 'run') })
+const Body = defineComponent({ v: vec('f32', 3), state: staticString('idle', 'run') }, { name: 'c2' })
 declare const wBody: WriteOf<typeof Body>
 declare const rBody: ReadOf<typeof Body>
 export const _v1: VecView<'f32', 3> = wBody.v

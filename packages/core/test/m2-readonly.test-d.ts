@@ -11,7 +11,7 @@ import { defineComponent, vec } from '@ecsia/core'
 import type { ReadOf, WriteOf } from '@ecsia/core'
 import { expectTypeOf } from 'vitest'
 
-const Position = defineComponent({ x: 'f32', y: 'f32' })
+const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c1' })
 
 declare const r: ReadOf<typeof Position>
 declare const w: WriteOf<typeof Position>
@@ -29,7 +29,7 @@ expectTypeOf<ReadOf<typeof Position>>().toEqualTypeOf<Readonly<{ x: number; y: n
 expectTypeOf<WriteOf<typeof Position>>().toEqualTypeOf<{ x: number; y: number }>()
 
 // A vec field's read view is a ReadonlyVecView: indexed and named-axis writes are also TS2540.
-const Body = defineComponent({ v: vec('f32', 3) })
+const Body = defineComponent({ v: vec('f32', 3) }, { name: 'c2' })
 declare const rb: ReadOf<typeof Body>
 declare const wb: WriteOf<typeof Body>
 // @ts-expect-error read vec view axis is readonly

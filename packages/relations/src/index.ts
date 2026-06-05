@@ -3,8 +3,9 @@
 // id minting, migrate-many, preDespawn cascade, the Pair(...) query resolver, and the OP_ADD_PAIR
 // apply path). @ecsia/core never imports this package — the dependency direction stays acyclic.
 
+// PUBLIC surface (P0.5 surface diet): the world-attach entry point + the wildcard sentinel + the two
+// public accessor/storage types the umbrella re-exports. The integer pair-key encoders (pairKey64 /
+// overflowKey64) are an internal encoding detail consumed only by ./runtime.js — they are NOT part of
+// the published surface and are reached relatively.
 export { createRelations, Wildcard } from './runtime.js'
 export type { PairAccessor, StorageKind } from './runtime.js'
-export { pairKey64, overflowKey64 } from './pair-key.js'
-
-export const RELATIONS_PACKAGE = 'relations' as const

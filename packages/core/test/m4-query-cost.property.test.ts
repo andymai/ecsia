@@ -4,7 +4,7 @@
 //
 //   HASH-ORDER   term sets differing ONLY in order hash IDENTICALLY (sort makes the hash
 //                order-independent — queries.md §4.1).
-//   HASH-DISC    sets differing in any Without role, optional role, or pair-target hash DIFFERENTLY
+//   HASH-DISC    sets differing in any without role, optional role, or pair-target hash DIFFERENTLY
 //                (no collisions over a fuzzed corpus — §4.1 / §4.2).
 //   SS-CHURN     SparseSetU32 add/remove/has invariants under random churn: dense iteration matches a
 //                reference Set, no duplicate in dense[0..size), has() is correct (§7.1).
@@ -15,32 +15,10 @@
 
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
-import {
-  Buffers,
-  QueryEngine,
-  SparseSetU32,
-  buildSigWords,
-  canonicalize,
-  compileQuery,
-  defineComponent,
-  probeCapabilities,
-  read,
-  With,
-  Without,
-  optional,
-  write,
-} from '@ecsia/core'
-import type {
-  Archetype,
-  ComponentDef,
-  ComponentId,
-  CompileContext,
-  EntityHandle,
-  QueryTerm,
-  RegionKey,
-  Schema,
-  Signature,
-} from '@ecsia/core'
+import { defineComponent, read, has, without, optional, write } from '@ecsia/core'
+import { Buffers, QueryEngine, SparseSetU32, buildSigWords, canonicalize, compileQuery, probeCapabilities } from '../src/internal.js'
+import type { ComponentDef, ComponentId, EntityHandle, QueryTerm, RegionKey, Schema } from '@ecsia/core'
+import type { Archetype, CompileContext, Signature } from '../src/internal.js'
 
 // --- a CompileContext that resolves ids by registration order, no world needed -------------------
 
@@ -82,9 +60,9 @@ describe('HASH-ORDER canonical hash is order-independent', () => {
               case 'read':
                 return read(def)
               case 'with':
-                return With(def)
+                return has(def)
               case 'without':
-                return Without(def)
+                return without(def)
               default:
                 return optional(def)
             }
@@ -97,7 +75,7 @@ describe('HASH-ORDER canonical hash is order-independent', () => {
     )
   })
 
-  test('read/write/bare collapse to one match-hash; With/Without/optional are distinct roles', () => {
+  test('read/write/bare collapse to one match-hash; has/without/optional are distinct roles', () => {
     const defs = freshDefs(2)
     const { ctx } = compileCtx(defs)
     const A = defs[0] as ComponentDef<Schema>
@@ -105,12 +83,12 @@ describe('HASH-ORDER canonical hash is order-independent', () => {
     // read == write == bare (same matching constraint, §4.1).
     expect(h([read(A)])).toBe(h([write(A)]))
     expect(h([read(A)])).toBe(h([A]))
-    // With (membership-only) is distinct from read (value), and Without/optional are all distinct.
-    expect(h([With(A)])).not.toBe(h([read(A)]))
-    expect(h([Without(A)])).not.toBe(h([read(A)]))
+    // has (membership-only) is distinct from read (value), and without/optional are all distinct.
+    expect(h([has(A)])).not.toBe(h([read(A)]))
+    expect(h([without(A)])).not.toBe(h([read(A)]))
     expect(h([optional(A)])).not.toBe(h([read(A)]))
-    expect(h([Without(A)])).not.toBe(h([With(A)]))
-    expect(h([optional(A)])).not.toBe(h([Without(A)]))
+    expect(h([without(A)])).not.toBe(h([has(A)]))
+    expect(h([optional(A)])).not.toBe(h([without(A)]))
   })
 })
 
@@ -132,9 +110,9 @@ describe('HASH-DISC distinct constraints hash differently (no collisions)', () =
             return r.role === 'read'
               ? read(def)
               : r.role === 'with'
-                ? With(def)
+                ? has(def)
                 : r.role === 'without'
-                  ? Without(def)
+                  ? without(def)
                   : optional(def)
           }
           const base = baseRaw.map(toTerm)
@@ -329,9 +307,9 @@ describe('OACOST per-archetype match-call count is independent of N (instrumente
       const a = makeArch(0, [1, 2], stride, rowsA) // {c1,c2}
       const b = makeArch(1, [1], stride, rowsB) // {c1}
       const engine = buildEngine([a.arch, b.arch], stride * 32)
-      // Query: With(c1), Without(c2) → matches archetype B only. With(c1) packs to word 0 bit 1.
+      // Query: has(c1), without(c2) → matches archetype B only. has(c1) packs to word 0 bit 1.
       const terms: QueryTerm[] = [
-        { __term: 'with', c: { __id: 1 } } as unknown as QueryTerm,
+        { __term: 'has', c: { __id: 1 } } as unknown as QueryTerm,
         { __term: 'without', c: { __id: 2 } } as unknown as QueryTerm,
       ]
       const q = engine.query(terms)

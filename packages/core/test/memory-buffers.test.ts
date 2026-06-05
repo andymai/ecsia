@@ -1,14 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import {
-  Buffers,
-  decodeEid,
-  encodeEid,
-  makeColumnLayout,
-  probeCapabilities,
-  selectBacking,
-  stringIndexElement,
-  tokenToColumnLayout,
-} from '@ecsia/core'
+import { decodeEid, encodeEid, makeColumnLayout } from '@ecsia/core'
+import { Buffers, probeCapabilities, selectBacking, stringIndexElement, tokenToColumnLayout } from '../src/internal.js'
 import { vec, staticString, object } from '@ecsia/core'
 import type { ColumnKey, RegionKey } from '@ecsia/core'
 

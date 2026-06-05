@@ -4,7 +4,7 @@
 storage with ergonomic typed accessors, first-class relations, and *auto-parallel
 worker execution that is bit-identical to the serial path*.
 
-> Status: feature-complete, API-frozen, experimental. 416 tests, strict-TypeScript,
+> Status: feature-complete, API-frozen, experimental. 761 tests, strict-TypeScript,
 > ESM-only. Not yet published to npm.
 
 ## Why ecsia
@@ -42,9 +42,10 @@ const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
 
 const world = createWorld({ components: [Position, Velocity], maxEntities: 1 << 16 })
 
-// Spawn into an archetype; random-access writes are typed (WriteOf<Velocity>).
+// Spawn into an archetype; random-access writes are typed (WriteOf<Velocity>) — no casts.
 const e = world.spawnWith(Position, Velocity)
-world.entity(e).write(Velocity).dx = 5 // don't hold the ref across calls — it's pooled
+world.entity(e).write(Velocity).dx = 5
+world.entity(e).read(Velocity).dx // typed number; read views are deeply readonly (assigning is a TS error)
 
 // Systems declare their {read, write} access; the scheduler derives a conflict DAG.
 const dt = 1 / 60
@@ -65,6 +66,42 @@ const scheduler = createScheduler(world, [Movement])
 scheduler.update(dt) // run one frame
 ```
 
+> **⚠️ Pooled refs & phases.** `world.entity(h)` returns a **pooled** `EntityRef` — the *same*
+> object, rebound to a new row on every call. Don't hold two live accessors across a
+> `world.entity()` call; read the fields you need out first:
+> ```ts
+> const p = world.entity(a).read(Position)
+> const px = p.x, py = p.y            // pull values out BEFORE the next resolve
+> const v = world.entity(a).read(Velocity)   // rebinds the pooled ref — `p` is now stale
+> ```
+> A stale read/write **throws** (`stale binding for entity … — re-resolve via world.entity(h)`),
+> so misuse fails loud instead of silently reading the wrong row. Separately, structural mutation
+> (`spawn`/`add`/`remove`/`despawn`) is **serial-phase only**: legal before `scheduler.update()`,
+> inside a serial system body via `ctx.world` (see below), or inside an observer handler — but a
+> worker-wave system body cannot mutate structure (it throws).
+
+### In-system structural mutation
+
+The `run({ world, query, dt, tick })` context gives you the same `world` — so spawn/despawn/add/remove
+happen inside a system, applied immediately at the serial slot:
+
+```ts
+import type { EntityHandle } from '@ecsia/ecsia'
+
+const Reaper = defineSystem({
+  name: 'Reaper',
+  read: [Health],
+  write: [],
+  run({ world, query }) {
+    const dead: EntityHandle[] = []
+    for (const e of query(read(Health))) {
+      if (e.health.hp <= 0) dead.push(e.handle) // collect first, mutate after the iteration
+    }
+    for (const h of dead) world.despawn(h)       // despawn / world.remove(h, C) / world.add(h, C)
+  },
+})
+```
+
 ### Go parallel — same user code
 
 ```ts
@@ -80,23 +117,63 @@ command-buffer merge.
 
 ### Relations
 
+`defineRelation` is reached through `createRelations(world)` (relation ids are world-scoped) and takes
+**payload first, options second** — `defineRelation(payload | null, options?)`:
+
 ```ts
 import { createRelations, Wildcard } from '@ecsia/ecsia'
 
 const rel = createRelations(world)
-const ChildOf = rel.defineRelation({ name: 'ChildOf', exclusive: true })
+// Payload-free exclusive relation: pass `null` for the payload. `cascade: 'deleteSubject'` means
+// despawning a PARENT (the target) cascades to its CHILDREN (the subjects pointing at it).
+const ChildOf = rel.defineRelation(null, { exclusive: true, cascade: 'deleteSubject' })
 
 rel.addPair(child, ChildOf, parent)  // exclusive re-parent = in-place write, zero migrations
-rel.targetOf(child, ChildOf)         // → parent
-// query holders of any ChildOf pair via the per-relation presence bit (O(archetypes)):
-//   query(Pair(ChildOf, Wildcard))
+rel.targetOf(child, ChildOf)         // → parent handle (exclusive only), or null
+
+// Query relation holders via rel.Pair(...) (the term constructor lives on the relations API, not the
+// umbrella). Wildcard matches any pair via the per-relation presence bit (O(archetypes)):
+for (const e of world.query(rel.Pair(ChildOf, Wildcard))) {
+  // e.handle is a node that has SOME parent
+}
+```
+
+**Cascade direction.** Cascade is declared on the relation, fired when a participant is despawned:
+- `'deleteSubject'` — despawning a **target** despawns every **subject** that points at it (a parent
+  despawn deletes its children; the cascade is iterative, so deep chains unwind without recursion).
+- `'removeRelation'` — despawning a target only drops the dangling pairs, leaving subjects alive.
+- `'none'` (default) — pairs to a despawned target are dropped; nothing cascades.
+
+Despawning a **subject** always just removes its own outgoing pairs (it never deletes its target).
+
+#### Payloaded relations
+
+`defineRelation` takes a payload schema as the first argument; `addPair` then carries the values:
+
+```ts
+const Likes = rel.defineRelation({ amount: 'f32' })   // payload-first
+rel.addPair(alice, Likes, bob, { amount: 0.8 })
 ```
 
 ### Reactivity & serialization
 
+`onAdd`/`onRemove`/`onChange` only **build** an observer term — you **register** it with
+`world.observe(term, handler)`, which returns a handle with `dispose()`. Handlers fire at a deferred
+serial slot (never mid-system, even under workers); the handler receives the entity ref and a context:
+
 ```ts
+import { onRemove } from '@ecsia/ecsia'
+
+// (e: EntityRef, ctx: { kind, component: ComponentId, tick: number }) => void
+const sub = world.observe(onRemove(Health), (e, ctx) => {
+  console.log(`entity ${e.handle} lost Health at tick ${ctx.tick}`)
+})
+// onRemove(C) fires when C is removed AND when the entity is despawned. Later:
+sub.dispose() // unsubscribe
+
 import { onChange } from '@ecsia/ecsia'
 // onChange/onAdd/onRemove fire at a deferred serial slot (never mid-system, even under workers).
+// Mutations inside a handler stage to a command buffer and apply at the same serial slot.
 
 import { createSnapshotSerializer, createDeltaSerializer } from '@ecsia/ecsia'
 // Snapshot round-trips a world bit-exactly; the version-stamp delta carries value + structural
@@ -145,7 +222,8 @@ pnpm typecheck:extras   # type-check examples/ and bench/
 pnpm bench:macro        # cross-library macro-benchmarks
 ```
 
-Runnable examples in [`examples/`](./examples): boids, scene-graph hierarchy, worker-parallel sim.
+Runnable examples in [`examples/`](./examples): boids, scene-graph hierarchy, worker-parallel sim,
+and a damage-over-time sim (in-system despawn, `onRemove` death observer, and a `ChildOf` cascade).
 
 ## License
 

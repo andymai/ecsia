@@ -38,7 +38,7 @@ export function createSnapshotSerializer(world: World, opts: SnapshotOptions = {
 
   function write(): void {
     if (world.phase !== 'serial') {
-      throw new Error('snapshot() must run at a serial flush point (serialization.md §4.3 / §11 S-11)')
+      throw new Error('snapshot() must run while the world is in its serial phase (outside scheduler.update / worker waves)')
     }
     const s = world.__serialize
     const relProvider = includeRelations ? s.relations() : undefined

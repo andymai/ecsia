@@ -4,20 +4,10 @@
 // coherence), and the cold-archetype fragmentation cap.
 
 import { describe, expect, test } from 'vitest'
-import {
-  canonicalize,
-  createWorld,
-  defineComponent,
-  defineTag,
-  sigEquals,
-  sigHas,
-  sigHash,
-  sigWithAdded,
-  sigWithRemoved,
-  buildSigWords,
-  signatureMatches,
-} from '@ecsia/core'
-import type { ComponentId, Signature } from '@ecsia/core'
+import { createWorld, defineComponent, defineTag } from '@ecsia/core'
+import { canonicalize, sigEquals, sigHas, sigHash, sigWithAdded, sigWithRemoved, buildSigWords, signatureMatches } from '../src/internal.js'
+import type { ComponentId } from '@ecsia/core'
+import type { Signature } from '../src/internal.js'
 
 const sig = (ids: number[]): Signature => canonicalize(ids as unknown as ComponentId[])
 
@@ -58,8 +48,8 @@ describe('Signature (archetype-storage.md §3.2, §3.8, §5.2 — SIG-1)', () =>
 
 describe('Archetype interning + edge graph (AR-1, EDGE-1)', () => {
   test('AR-1: spawnWith two component orders interns the SAME archetype object', () => {
-    const A = defineComponent({ x: 'f32' })
-    const B = defineComponent({ y: 'f32' })
+    const A = defineComponent({ x: 'f32' }, { name: 'c1' })
+    const B = defineComponent({ y: 'f32' }, { name: 'c2' })
     const w = createWorld({ components: [A, B] })
     const store = (w as unknown as { __storageForTest?: never }) // not exposed; assert via record
     void store
@@ -74,7 +64,7 @@ describe('Archetype interning + edge graph (AR-1, EDGE-1)', () => {
   })
 
   test('add then remove round-trips back to the original archetype (edge reverse cached)', () => {
-    const A = defineComponent({ x: 'f32' })
+    const A = defineComponent({ x: 'f32' }, { name: 'c3' })
     const w = createWorld({ components: [A] })
     const e = w.spawn()
     const emptyArch = (w.entity(e) as unknown as { __archetypeId: number }).__archetypeId
@@ -88,8 +78,8 @@ describe('Archetype interning + edge graph (AR-1, EDGE-1)', () => {
 
 describe('migration correctness (MIG-1, ROW-1) + spawnWith', () => {
   test('spawnWith is a SINGLE migration: values written then read back', () => {
-    const Position = defineComponent({ x: 'f32', y: 'f32' })
-    const Velocity = defineComponent({ dx: 'f32', dy: 'f32' })
+    const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c4' })
+    const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'c5' })
     const w = createWorld({ components: [Position, Velocity] })
     const e = w.spawnWith(Position, Velocity)
     const ref = w.entity(e)
@@ -126,8 +116,8 @@ describe('migration correctness (MIG-1, ROW-1) + spawnWith', () => {
   })
 
   test('adding a component PRESERVES existing column values (K-shared copy)', () => {
-    const Position = defineComponent({ x: 'f32' })
-    const Tag = defineComponent({ n: 'i32' })
+    const Position = defineComponent({ x: 'f32' }, { name: 'c6' })
+    const Tag = defineComponent({ n: 'i32' }, { name: 'c7' })
     const w = createWorld({ components: [Position, Tag] })
     const e = w.spawnWith(Position)
     ;(w.entity(e).write(Position) as { x: number }).x = 7
@@ -137,8 +127,8 @@ describe('migration correctness (MIG-1, ROW-1) + spawnWith', () => {
   })
 
   test('swap-pop keeps sibling rows resolvable after a middle entity migrates (ROW-1/MIG-1)', () => {
-    const P = defineComponent({ x: 'f32' })
-    const Q = defineComponent({ q: 'i32' })
+    const P = defineComponent({ x: 'f32' }, { name: 'c8' })
+    const Q = defineComponent({ q: 'i32' }, { name: 'c9' })
     const w = createWorld({ components: [P, Q] })
     const a = w.spawnWith(P)
     const b = w.spawnWith(P)
@@ -154,8 +144,8 @@ describe('migration correctness (MIG-1, ROW-1) + spawnWith', () => {
   })
 
   test('removing a component drops it; the rest survive', () => {
-    const P = defineComponent({ x: 'f32' })
-    const Q = defineComponent({ q: 'i32' })
+    const P = defineComponent({ x: 'f32' }, { name: 'c10' })
+    const Q = defineComponent({ q: 'i32' }, { name: 'c11' })
     const w = createWorld({ components: [P, Q] })
     const e = w.spawnWith(P, Q)
     ;(w.entity(e).write(P) as { x: number }).x = 5
@@ -165,14 +155,14 @@ describe('migration correctness (MIG-1, ROW-1) + spawnWith', () => {
   })
 
   test('idempotent add/remove is a no-op (no spurious migration)', () => {
-    const P = defineComponent({ x: 'f32' })
+    const P = defineComponent({ x: 'f32' }, { name: 'c12' })
     const w = createWorld({ components: [P] })
     const e = w.spawnWith(P)
     const arch1 = (w.entity(e) as unknown as { __archetypeId: number }).__archetypeId
     w.add(e, P) // already held
     expect((w.entity(e) as unknown as { __archetypeId: number }).__archetypeId).toBe(arch1)
-    const P2 = defineComponent({ x: 'f32' })
-    const Q = defineComponent({ q: 'i32' })
+    const P2 = defineComponent({ x: 'f32' }, { name: 'c13' })
+    const Q = defineComponent({ q: 'i32' }, { name: 'c14' })
     const w2 = createWorld({ components: [P2, Q] })
     const e2 = w2.spawnWith(P2)
     const arch2 = (w2.entity(e2) as unknown as { __archetypeId: number }).__archetypeId
@@ -196,8 +186,8 @@ describe('tag components contribute no ColumnSet (§3.4)', () => {
 
 describe('bitmask membership index (§6 — BM-1, BM-2, BM-3)', () => {
   test('BM-2 coherence: bitmask membership matches the entity signature after each op', () => {
-    const P = defineComponent({ x: 'f32' })
-    const Q = defineComponent({ q: 'i32' })
+    const P = defineComponent({ x: 'f32' }, { name: 'c15' })
+    const Q = defineComponent({ q: 'i32' }, { name: 'c16' })
     const w = createWorld({ components: [P, Q] })
     const bm = (w as unknown as { __bm?: never })
     void bm
@@ -214,7 +204,7 @@ describe('bitmask membership index (§6 — BM-1, BM-2, BM-3)', () => {
   })
 
   test('has() returns false for a dead handle without throwing (no bitmask read)', () => {
-    const P = defineComponent({ x: 'f32' })
+    const P = defineComponent({ x: 'f32' }, { name: 'c17' })
     const w = createWorld({ components: [P] })
     const e = w.spawnWith(P)
     w.despawn(e)
@@ -222,7 +212,7 @@ describe('bitmask membership index (§6 — BM-1, BM-2, BM-3)', () => {
   })
 
   test('despawn clears membership; a recycled index starts empty', () => {
-    const P = defineComponent({ x: 'f32' })
+    const P = defineComponent({ x: 'f32' }, { name: 'c18' })
     const w = createWorld({ components: [P] })
     const e = w.spawnWith(P)
     w.despawn(e)
@@ -233,9 +223,9 @@ describe('bitmask membership index (§6 — BM-1, BM-2, BM-3)', () => {
 
 describe('cold-archetype fragmentation cap (FRAG-1, §10.3)', () => {
   test('with maxHotArchetypes=2 the 3rd distinct signature is cold but still queryable via has()', () => {
-    const A = defineComponent({ a: 'f32' })
-    const B = defineComponent({ b: 'f32' })
-    const C = defineComponent({ c: 'f32' })
+    const A = defineComponent({ a: 'f32' }, { name: 'c19' })
+    const B = defineComponent({ b: 'f32' }, { name: 'c20' })
+    const C = defineComponent({ c: 'f32' }, { name: 'c21' })
     // hot budget: EMPTY(0) is created eagerly and counts as 1 hot; {A} is the 2nd hot; {B}/{C} cold.
     const w = createWorld({ components: [A, B, C], maxHotArchetypes: 2 })
     const eA = w.spawnWith(A)

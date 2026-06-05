@@ -18,19 +18,10 @@
 
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
-import {
-  ArchetypeStore,
-  Bitmask,
-  Buffers,
-  ComponentRegistry,
-  canonicalize,
-  defineComponent,
-  probeCapabilities,
-  sigEquals,
-  sigHas,
-  signatureMatches,
-} from '@ecsia/core'
-import type { ComponentDef, ComponentId, RecordSurface, Schema, Signature } from '@ecsia/core'
+import { defineComponent } from '@ecsia/core'
+import { ArchetypeStore, Bitmask, Buffers, ComponentRegistry, canonicalize, probeCapabilities, sigEquals, sigHas, signatureMatches } from '../src/internal.js'
+import type { ComponentDef, ComponentId, Schema } from '@ecsia/core'
+import type { RecordSurface, Signature } from '../src/internal.js'
 
 // --- shared instrumented harness ------------------------------------------------------------------
 
@@ -55,7 +46,7 @@ function makeHarness(componentCount: number, maxHotArchetypes = 1 << 20): Harnes
   const buffers = newBuffers()
   const registry = new ComponentRegistry()
   const defs = Array.from({ length: componentCount }, (_, i) =>
-    defineComponent({ ['f' + i]: 'i32' as const }),
+    defineComponent({ ['f' + i]: 'i32' as const }, { name: 'f' + i }),
   )
   registry.register(defs)
 
@@ -479,7 +470,7 @@ describe('BM-1: any bitmask access with phase !== serial THROWS (Must-Fix #1 gua
           h.setPhase(isSerial ? 'serial' : 'wave')
           const expectThrow = (fn: () => unknown): void => {
             if (isSerial) expect(fn).not.toThrow()
-            else expect(fn).toThrow(/serial-only/)
+            else expect(fn).toThrow(/serial-phase only/)
           }
           expectThrow(() => h.bitmask.bitmaskHas(1, 1 as ComponentId))
           expectThrow(() => h.bitmask.bitmaskApplyDelta(1, empty, one))

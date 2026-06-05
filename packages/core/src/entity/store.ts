@@ -75,6 +75,7 @@ export class EntityStore {
     this.#index = new EntityIndex(config.layout, this.#indexArrays(), bounds, (need) => this.#grow(need))
     this.#records = new EntityRecord(config.layout, this.#recordArrays())
     this.#ref = new EntityRef(this.#records)
+    this.#ref.__setLiveness((handle) => this.#index.isAlive(handle))
   }
 
   /**
@@ -156,7 +157,7 @@ export class EntityStore {
       // the stale handle anyway; the location words are whatever the slot last held).
       if (opts?.lenient !== true) throw new Error(`entity(${handle}): handle is not alive`)
     }
-    return this.#ref.__bind(handle)
+    return this.#ref.__bind(handle, opts?.lenient === true)
   }
 
   encodeHandle(index: number, generation: number): EntityHandle {

@@ -26,7 +26,7 @@ describe('snapshot/delta serializers — serial-phase guard (§11 S-11)', () => 
     const { world } = makeWorld()
     const ser = createSnapshotSerializer(world)
     world.__setPhase('wave')
-    expect(() => ser.snapshot()).toThrow(/serial flush point/)
+    expect(() => ser.snapshot()).toThrow(/serial phase/)
     world.__setPhase('serial')
     expect(() => ser.snapshot()).not.toThrow()
   })
@@ -35,7 +35,7 @@ describe('snapshot/delta serializers — serial-phase guard (§11 S-11)', () => 
     const { world } = makeWorld()
     const ser = createDeltaSerializer(world, world.currentTick(), { includeStructural: false })
     world.__setPhase('wave')
-    expect(() => ser.delta()).toThrow(/serial flush point/)
+    expect(() => ser.delta()).toThrow(/serial phase/)
     world.__setPhase('serial')
     expect(() => ser.delta()).not.toThrow()
   })
@@ -70,7 +70,7 @@ describe('deserialize — header validation gates (§5.2 / §11 S-10)', () => {
     const { world } = makeWorld()
     const bytes = createSnapshotSerializer(world).snapshotCopy()
     world.__setPhase('wave')
-    expect(() => createSnapshotDeserializer(world).load(bytes)).toThrow(/serial flush point/)
+    expect(() => createSnapshotDeserializer(world).load(bytes)).toThrow(/serial phase/)
   })
 
   it('rejects a non-ecsia image (bad magic)', () => {
@@ -179,7 +179,7 @@ describe('applyDelta — header validation (§6.4)', () => {
     const ser = createDeltaSerializer(world, world.currentTick())
     const bytes = ser.deltaCopy()
     world.__setPhase('wave')
-    expect(() => applyDelta(world, bytes, new Map())).toThrow(/serial flush point/)
+    expect(() => applyDelta(world, bytes, new Map())).toThrow(/serial phase/)
   })
 
   it('rejects a non-ecsia delta (bad magic)', () => {

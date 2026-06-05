@@ -55,6 +55,14 @@ export type {
 // ---------------------------------------------------------------------------
 // Definitions called at module scope (public-api.md §3)
 // ---------------------------------------------------------------------------
+// NAMING CONVENTION (define* vs create*): this is intentional and predictable, not arbitrary.
+//   • define*  = MODULE-SCOPE definitions — pure descriptors with no world attached. They can live at
+//                module top-level and be shared/reused: defineComponent, defineTag, defineSystem.
+//   • create*  = WORLD-SCOPED instantiation — they take (or mint) a world and bind runtime state to it:
+//                createWorld, createScheduler, createRelations, createSnapshotSerializer, etc.
+// Rule of thumb: if it needs a world, it's `create*`; if it's a standalone description, it's `define*`.
+// (defineRelation is reached via createRelations(world).defineRelation because the relations runtime
+// mints world-scoped synthetic ids — see the §3.3 reconciliation note below.)
 export { defineComponent, defineTag } from '@ecsia/core'
 export { defineSystem, inAnyOrderWith, beforeWritersOf, afterReadersOf } from '@ecsia/scheduler'
 // NOTE (design latitude, public-api.md §3.3 reconciliation): the M8 relations runtime binds
@@ -64,8 +72,12 @@ export { defineSystem, inAnyOrderWith, beforeWritersOf, afterReadersOf } from '@
 // the world-attach entry point (`createRelations`) + `Wildcard`; `defineRelation` + `targetOf` are
 // reached through the returned Relations API. The frozen spec (public-api.md §3.3/§9.3, §12 Q-PA1) has
 // been reconciled to this as-built free-function surface.
-import { createRelations as _mkRel2, Wildcard } from '@ecsia/relations'
-export { Wildcard }
+import { createRelations as _mkRel2, Wildcard as _Wildcard } from '@ecsia/relations'
+import type { WildcardToken as _WildcardToken } from '@ecsia/core'
+// The wildcard target sentinel for `rel.Pair(R, Wildcard)`. Re-typed as the schema-level `WildcardToken`
+// (the exact type `rel.Pair`'s target parameter accepts) so a user passing the umbrella's `Wildcard`
+// into `rel.Pair(...)` type-checks with no cast — the runtime symbol is unchanged.
+export const Wildcard: _WildcardToken = _Wildcard as unknown as _WildcardToken
 export type { PairAccessor, StorageKind } from '@ecsia/relations'
 
 /** Attach the relations runtime to a world (relations.md §2). Accepts the public World facade. */
@@ -88,7 +100,7 @@ export type {
 // ---------------------------------------------------------------------------
 // Query DSL (public-api.md §4.4)
 // ---------------------------------------------------------------------------
-export { read, write, With, Without, optional, MAX_QUERY_ARITY } from '@ecsia/core'
+export { read, write, has, without, optional, MAX_QUERY_ARITY } from '@ecsia/core'
 
 // ---------------------------------------------------------------------------
 // Reactivity / observers (public-api.md §4.6)
@@ -170,6 +182,11 @@ export const bootstrapForWorker: (world: World) => _WorldBootstrap = ((world: Wo
 // ---------------------------------------------------------------------------
 export type { Tick } from '@ecsia/schema'
 export type { EntityHandle }
+
+// The null-handle sentinel + its predicate, surfaced at the umbrella so a user can discriminate an
+// absent handle (returned from e.g. a relation target lookup) without reaching into @ecsia/core or
+// hand-rolling the `0xffffffff as EntityHandle` cast. NULL_ENTITY is an alias of NO_ENTITY.
+export { NO_ENTITY, NULL_ENTITY, isNoEntity } from '@ecsia/core'
 export type {
   EntityIndex,
   ComponentId,
@@ -199,24 +216,3 @@ export type {
 // NOTE: `World` and `EntityRef` are the PUBLIC VIEW types declared at the top of this module (the `__`
 // seams omitted, PA-1..PA-8) — they are intentionally NOT re-exported from @ecsia/core here.
 
-// ---------------------------------------------------------------------------
-// Convenience wiring (public-api.md §10): thin, tree-shakeable helpers that curry a `world`. They add
-// no mechanism — each is a one-liner over the underlying module function — but they let a user write
-// `snapshot(world)` instead of remembering which package owns the serializer. Because they are plain
-// re-exporting functions, a bundle that never calls them drops the entire serialization/relations
-// dependency (Q-PA6).
-// ---------------------------------------------------------------------------
-import { createSnapshotSerializer as _mkSnap } from '@ecsia/serialization'
-import { createRelations as _mkRelations } from '@ecsia/relations'
-
-/** One-call copy snapshot of the whole world (serialization.md §4). Must run at a serial flush point. */
-export function snapshot(world: World): Uint8Array {
-  return _mkSnap(world as unknown as _CoreWorld).snapshot()
-}
-
-/** Attach the first-class relations runtime to a world and return its API (relations.md §2). */
-export function relationsOf(world: World): ReturnType<typeof _mkRelations> {
-  return _mkRelations(world as unknown as _CoreWorld)
-}
-
-export const ECSIA_PACKAGE = 'ecsia' as const

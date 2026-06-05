@@ -5,7 +5,8 @@
 // Every assertion pins a concrete observable outcome so a regression in the branch would fail.
 
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { CapacityExceeded, makeHandle, makeHandleLayout, NO_ENTITY } from '@ecsia/core'
+import { makeHandleLayout, NO_ENTITY } from '@ecsia/core'
+import { CapacityExceeded, makeHandle } from '../src/internal.js'
 import type { EntityHandle, HandleLayout } from '@ecsia/core'
 import { EntityIndex } from '../src/entity/index-allocator.js'
 import { EntityRecord } from '../src/entity/record.js'

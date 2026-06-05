@@ -3,8 +3,8 @@
 // paths (undeclared write, undeclared read) plus production pass-through. scheduler.md §6.6, Must-Fix #2.
 
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { makeScopedQuery } from '@ecsia/scheduler'
-import type { SystemBox } from '@ecsia/scheduler'
+import { makeScopedQuery } from '../src/internal.js'
+import type { SystemBox } from '../src/internal.js'
 import type { World } from '@ecsia/core'
 import type { QueryTerm } from '@ecsia/schema'
 
@@ -89,13 +89,13 @@ describe('guards.ts: term-role resolution (lines 14-26, branches 13/16/19-21)', 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { world } = fakeWorld()
     const Tag = comp(13, 'Tag')
-    // A realistic system: declares read of Position(2), filters by With(Tag)/Without(Other) — Tag and
+    // A realistic system: declares read of Position(2), filters by has(Tag)/without(Other) — Tag and
     // Other are NOT (and should not be) in the declared access set, because presence filters are not
     // data access. Regression guard for the false-positive warning fixed in guards.ts.
     const scoped = makeScopedQuery(world, box('s', [2], []), true)
     scoped(
       { __term: 'read', c: comp(2, 'Position') } as unknown as QueryTerm,
-      { __term: 'with', c: Tag } as unknown as QueryTerm,
+      { __term: 'has', c: Tag } as unknown as QueryTerm,
       { __term: 'without', c: comp(14, 'Other') } as unknown as QueryTerm,
     )
     expect(warnSpy).not.toHaveBeenCalled()

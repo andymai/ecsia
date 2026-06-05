@@ -13,7 +13,13 @@
 import type { ComponentDef, EntityHandle, RelationDef, RelationId, Schema } from '@ecsia/schema'
 
 type DeferredOp =
-  | { readonly kind: 'spawnWith'; readonly handle: EntityHandle; readonly defs: readonly ComponentDef<Schema>[] }
+  | {
+      readonly kind: 'spawnWith'
+      readonly handle: EntityHandle
+      readonly defs: readonly ComponentDef<Schema>[]
+      /** Value-carrying spawn (Item 8): `[def, values]` initializers applied after placement. */
+      readonly values: readonly (readonly [ComponentDef<Schema>, Record<string, unknown>])[]
+    }
   | { readonly kind: 'add'; readonly handle: EntityHandle; readonly def: ComponentDef<Schema> }
   | { readonly kind: 'remove'; readonly handle: EntityHandle; readonly def: ComponentDef<Schema> }
   | { readonly kind: 'despawn'; readonly handle: EntityHandle }
@@ -42,6 +48,8 @@ export interface ObserverCommandApply {
   remove(handle: EntityHandle, def: ComponentDef<Schema>): void
   despawn(handle: EntityHandle): void
   isAlive(handle: EntityHandle): boolean
+  /** Write initializer values through the tracked accessor path (value-carrying spawnWith, Item 8). */
+  writePayload(handle: EntityHandle, def: ComponentDef<Schema>, values: Record<string, unknown>): void
   /** Relation apply seams (undefined in a relation-free world). */
   addPair?(subject: EntityHandle, relationId: RelationId, target: EntityHandle, payload: Record<string, unknown> | undefined): void
   removePair?(subject: EntityHandle, relationId: RelationId, target: EntityHandle): void
@@ -84,8 +92,12 @@ export class ObserverCommandBuffer {
     this.#draining = false
   }
 
-  stageSpawnWith(handle: EntityHandle, defs: readonly ComponentDef<Schema>[]): void {
-    this.#pending.push({ kind: 'spawnWith', handle, defs: defs.slice() })
+  stageSpawnWith(
+    handle: EntityHandle,
+    defs: readonly ComponentDef<Schema>[],
+    values: readonly (readonly [ComponentDef<Schema>, Record<string, unknown>])[] = [],
+  ): void {
+    this.#pending.push({ kind: 'spawnWith', handle, defs: defs.slice(), values: values.slice() })
   }
   stageAdd(handle: EntityHandle, def: ComponentDef<Schema>): void {
     this.#pending.push({ kind: 'add', handle, def })
@@ -129,8 +141,12 @@ export class ObserverCommandBuffer {
     for (const op of ops) {
       switch (op.kind) {
         case 'spawnWith': {
-          // The handle was reserved-alive when the observer called spawn; place it now.
-          if (apply.isAlive(op.handle)) apply.placeReserved(op.handle, op.defs)
+          // The handle was reserved-alive when the observer called spawn; place it now, then write any
+          // value-carrying initializers through the tracked path (Item 8).
+          if (apply.isAlive(op.handle)) {
+            apply.placeReserved(op.handle, op.defs)
+            for (const [def, values] of op.values) apply.writePayload(op.handle, def, values)
+          }
           break
         }
         case 'add':

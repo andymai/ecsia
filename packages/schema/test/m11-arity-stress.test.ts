@@ -4,10 +4,10 @@
 //
 // Three obligations:
 //   (1) the stress fixture type-checks clean — every @ts-expect-error is a REAL error (the
-//       read/write/With/Without/optional/pair fold, the arity cap, the Has/HasWrite escape hatch).
+//       read/write/has/without/optional/pair fold, the arity cap, the Has/HasWrite escape hatch).
 //   (2) DISCRIMINATION (not-any): an @ts-expect-error passes for ANY error, so a clean compile alone
 //       would not prove the elements are PRECISE rather than `any`. We compile a MUTATED fixture in
-//       which every iteration element is rebound to `any`. With `any`, the bogus-method calls guarded
+//       which every iteration element is rebound to `any`. has `any`, the bogus-method calls guarded
 //       by `@ts-expect-error` (el.zzz() / el.nonexistentMethod()) no longer error → those directives
 //       become UNUSED → tsc fails with TS2578. The pair (clean passes, mutated fails-with-2578) proves
 //       the fixture discriminates `any` from a precise/typed element.
@@ -80,7 +80,7 @@ describe('M11 type-arity stress (type-system.md §6.5/§6)', () => {
 
   test('DISCRIMINATION (not-any): collapsing every element to `any` makes the not-any guards UNUSED (TS2578)', () => {
     // Rebuild the fixture so EVERY iteration element is `any` (the bitECS `ComponentRef = any`
-    // failure mode the typed degradation rejects). With `any`, the `@ts-expect-error el.zzz()` /
+    // failure mode the typed degradation rejects). has `any`, the `@ts-expect-error el.zzz()` /
     // `el.nonexistentMethod()` lines no longer error → tsc reports them unused (TS2578).
     const src = readFileSync(stressFixture, 'utf8')
     const mutated = src
@@ -109,16 +109,16 @@ describe('M11 type-arity stress (type-system.md §6.5/§6)', () => {
   test('DISCRIMINATION (readonly carry): stripping readonly from Has makes the shorthand TS2540 guard UNUSED (TS2578)', () => {
     // The (4) READONLY-SHORTHAND carry pins that `Has<A>` shorthand assignment is TS2540. Prove the
     // readonly modifier — not an unrelated error — is what fails: rebind `Has` to a NON-readonly mapped
-    // type. With readonly stripped, `shorthand.a.x = 5` no longer errors → its `@ts-expect-error` is
+    // type. has readonly stripped, `shorthand.a.x = 5` no longer errors → its `@ts-expect-error` is
     // unused → TS2578. (The other not-any expect-errors still error, so the failure is specifically the
     // readonly guard.)
     const src = readFileSync(stressFixture, 'utf8')
     const mutated = src
       .replace("  Has,\n", "") // drop the imported Has
       .replace(
-        "import { read, write, With, Without, optional } from '@ecsia/schema'",
+        "import { read, write, has, without, optional } from '@ecsia/schema'",
         [
-          "import { read, write, With, Without, optional } from '@ecsia/schema'",
+          "import { read, write, has, without, optional } from '@ecsia/schema'",
           "import type { ReadOf as _ReadOf, CompKey as _CompKey } from '@ecsia/schema'",
           '// MUTATION: Has is rebound to a NON-readonly mapped type (readonly stripped from both the',
           '// component-key level and the field level), so shorthand field assignment no longer errors.',

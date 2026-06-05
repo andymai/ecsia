@@ -12,17 +12,10 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { createWorld, defineComponent, handleIndex, NO_ENTITY } from '@ecsia/core'
 import type { EntityHandle, World } from '@ecsia/core'
-import {
-  WorkerPool,
-  flushAll,
-  makeCommandBuffer,
-  makeEncoder,
-  buildFieldCodec,
-  selectWaitTier,
-  makeWaveSync,
-  makeWaveCounter,
-} from '@ecsia/scheduler'
-import type { CommandBuffer, ComponentFieldCodec, PoolSystem, WorldApply } from '@ecsia/scheduler'
+import { WorkerPool } from '@ecsia/scheduler'
+import { flushAll, makeCommandBuffer, makeEncoder, buildFieldCodec, selectWaitTier, makeWaveSync, makeWaveCounter } from '../src/internal.js'
+import type { PoolSystem } from '@ecsia/scheduler'
+import type { CommandBuffer, ComponentFieldCodec, WorldApply } from '../src/internal.js'
 import type { ComponentDef, ComponentId, Schema, SystemId } from '@ecsia/schema'
 
 const WORKER_ENTRY = fileURLToPath(new URL('../dist/workers/worker-entry.js', import.meta.url))
@@ -83,7 +76,7 @@ describe('UNIT — multi-worker disjoint wave is BIT-IDENTICAL to the M6 serial 
       { id: 0 as unknown as SystemId, name: 'Regen', matchComponents: [Health], kernel: () => {}, maxSpawnsPerWave: 0 },
       { id: 1 as unknown as SystemId, name: 'Channel', matchComponents: [Mana], kernel: () => {}, maxSpawnsPerWave: 0 },
     ]
-    pool = new WorkerPool({ world: threaded, workerCount, kernelModule: KERNEL_MODULE, workerEntryUrl: WORKER_ENTRY, systems })
+    pool = new WorkerPool({ world: threaded, workers: workerCount, kernelModule: KERNEL_MODULE, workerEntryUrl: WORKER_ENTRY, systems })
     await pool.ready()
 
     // Two disjoint-write systems in ONE round, dispatched to two distinct workers.
@@ -118,7 +111,7 @@ describe('UNIT — threaded startup without SAB-backed buffers is NEVER silent (
     const diags: string[] = []
     pool = new WorkerPool({
       world,
-      workerCount: 1,
+      workers: 1,
       kernelModule: KERNEL_MODULE,
       workerEntryUrl: WORKER_ENTRY,
       systems: [{ id: 0 as unknown as SystemId, name: 'Regen', matchComponents: [Health], kernel: () => {}, maxSpawnsPerWave: 0 }],

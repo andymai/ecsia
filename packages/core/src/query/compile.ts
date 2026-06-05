@@ -123,7 +123,7 @@ function classifyTerm(t: QueryTerm): Classified {
       return { kind: 'component', def: term.c ?? null, pair: null, role: 'read' }
     case 'write':
       return { kind: 'component', def: term.c ?? null, pair: null, role: 'write' }
-    case 'with':
+    case 'has':
       return { kind: 'component', def: term.c ?? null, pair: null, role: 'none' }
     case 'without':
       return { kind: 'without', def: term.c ?? null, pair: null, role: 'none' }
@@ -163,7 +163,7 @@ function canonicalHash(terms: readonly QueryTerm[], ctx: CompileContext): string
     let cid: number | string
     if (cl.pair !== null) cid = pairHashId(cl.pair)
     else cid = ctx.idOf(cl.def as ComponentDef<Schema>) as number
-    // Role tags keep With (membership) distinct from read; read/write/bare collapse to one P tag
+    // Role tags keep has (membership) distinct from read; read/write/bare collapse to one P tag
     // (same matching constraint, same `current`); without → N; optional → O (§4.1).
     const roleTag =
       cl.kind === 'without'
