@@ -23,6 +23,11 @@ export interface WorkerBootstrap {
   readonly indexBitsMask: number
   /** Dense component-id registry the worker aligns to. */
   readonly components: readonly ComponentManifestEntry[]
+  /**
+   * Registered topic ids the worker aligns its own defineTopic defs to (by name), so OP_PUBLISH
+   * records carry the main thread's topicId. Empty in a topic-free world.
+   */
+  readonly topics: readonly { readonly name: string; readonly id: number }[]
   /** Per-worker control SABs. */
   readonly commandSab: SharedArrayBuffer
   readonly reservationSab: SharedArrayBuffer

@@ -17,8 +17,9 @@
 import { fileURLToPath } from 'node:url'
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
-import { createWorld, defineComponent, handleIndex, onAdd, onRemove, onChange } from '@ecsia/core'
-import type { EntityHandle, World } from '@ecsia/core'
+import { createWorld, defineComponent, defineTopic, buildTopicCodec, handleIndex, onAdd, onRemove, onChange } from '@ecsia/core'
+import type { EntityHandle, TopicDef, World } from '@ecsia/core'
+import type { Schema } from '@ecsia/schema'
 import { WorkerPool } from '@ecsia/scheduler'
 import { flushAll, makeCommandBuffer, makeEncoder, buildFieldCodec } from '../src/internal.js'
 import type { PoolSystem } from '@ecsia/scheduler'
@@ -33,6 +34,7 @@ interface Kit {
   world: World
   Health: ComponentDef<Schema>
   Mana: ComponentDef<Schema>
+  Hits: TopicDef<Schema>
   codecById: Map<number, ComponentFieldCodec>
   seeds: EntityHandle[]
 }
@@ -40,7 +42,9 @@ interface Kit {
 function makeKit(seedCount: number): Kit {
   const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
   const Mana = defineComponent({ mp: 'i32' }, { name: 'mana' })
+  const Hits = defineTopic('hits', { amount: 'i32' }) as unknown as TopicDef<Schema>
   const world = createWorld({ components: [Health, Mana], maxEntities: 1 << 13 })
+  world.__topics.register(Hits)
   const codecById = new Map<number, ComponentFieldCodec>([
     [(Health as unknown as { id: number }).id, buildFieldCodec(Health)],
     [(Mana as unknown as { id: number }).id, buildFieldCodec(Mana)],
@@ -51,7 +55,7 @@ function makeKit(seedCount: number): Kit {
     ;(world.entity(h).write(Health) as { hp: number }).hp = i
     seeds.push(h)
   }
-  return { world, Health, Mana, codecById, seeds }
+  return { world, Health, Mana, Hits, codecById, seeds }
 }
 
 function worldApplyOf(world: World, codecById: ReadonlyMap<number, ComponentFieldCodec>, warn: (m: string) => void): WorldApply {
@@ -69,11 +73,12 @@ function worldApplyOf(world: World, codecById: ReadonlyMap<number, ComponentFiel
     has: (h, def) => world.has(h, def),
     writePayload: (h, def, values) => apply.writePayload(h, def, values),
     returnUnused: () => {},
+    stagePublish: (topicId, systemId, words, at, f) => world.__topics.stageWords(topicId, systemId, words, at, f),
     warn,
   }
 }
 
-function encoderOver(cb: CommandBuffer, codecOf: (id: number) => ComponentFieldCodec, warn: (m: string) => void): CommandEncoder {
+function encoderOver(cb: CommandBuffer, codecOf: (id: number) => ComponentFieldCodec, warn: (m: string) => void, kit?: Kit): CommandEncoder {
   return makeEncoder({
     cb,
     infoOf: (def) => {
@@ -81,6 +86,10 @@ function encoderOver(cb: CommandBuffer, codecOf: (id: number) => ComponentFieldC
       return { id: id as unknown as ComponentId, codec: codecOf(id) }
     },
     relationCodec: () => undefined,
+    topicInfoOf: kit === undefined ? undefined : (def) => ({ id: def.id as number, codec: buildTopicCodec(def.fields) }),
+    // OP_PUBLISH stamps the WORKER INDEX as the publishing SystemId in this rig (one system per
+    // worker) — the canonical stream must then equal SystemId order despite shuffled apply order.
+    publisherSystemId: kit === undefined ? undefined : () => cb.workerIndex,
     warn,
   })
 }
@@ -91,6 +100,7 @@ type ProgOp =
   | { kind: 'add'; seed: number; hp: number }
   | { kind: 'setpayload'; seed: number; hp: number }
   | { kind: 'create-add' } // reserved create, then add Mana to the fresh handle (create-then-use)
+  | { kind: 'publish'; amount: number } // OP_PUBLISH to the kit topic (rides the same buffer)
 
 const progOp = (seedCount: number): fc.Arbitrary<ProgOp> =>
   fc.oneof(
@@ -98,6 +108,7 @@ const progOp = (seedCount: number): fc.Arbitrary<ProgOp> =>
     fc.record({ kind: fc.constant('add' as const), seed: fc.integer({ min: 0, max: seedCount - 1 }), hp: fc.integer({ min: -1000, max: 1000 }) }),
     fc.record({ kind: fc.constant('setpayload' as const), seed: fc.integer({ min: 0, max: seedCount - 1 }), hp: fc.integer({ min: -1000, max: 1000 }) }),
     fc.record({ kind: fc.constant('create-add' as const) }),
+    fc.record({ kind: fc.constant('publish' as const), amount: fc.integer({ min: -1000, max: 1000 }) }),
   )
 
 function encodeProgram(
@@ -106,6 +117,7 @@ function encodeProgram(
   seeds: readonly EntityHandle[],
   Health: ComponentDef<Schema>,
   Mana: ComponentDef<Schema>,
+  Hits?: TopicDef<Schema>,
 ): void {
   for (const op of ops) {
     switch (op.kind) {
@@ -123,6 +135,9 @@ function encodeProgram(
         if ((child as unknown as number) >>> 0 !== 0xffffffff) enc.add(child, Mana, { mp: 7 })
         break
       }
+      case 'publish':
+        if (Hits !== undefined) enc.publish(Hits, { amount: op.amount })
+        break
     }
   }
 }
@@ -189,8 +204,8 @@ describe('SERIAL-EQUIVALENCE (headline)', () => {
             perWorker.forEach((ops, wi) => {
               const cb = makeCommandBuffer(wi, 256, false)
               fillReservationFor(k.world, cb, 8)
-              const enc = encoderOver(cb, (id) => k.codecById.get(id)!, () => {})
-              encodeProgram(enc, ops, k.seeds, k.Health, k.Mana)
+              const enc = encoderOver(cb, (id) => k.codecById.get(id)!, () => {}, k)
+              encodeProgram(enc, ops, k.seeds, k.Health, k.Mana, k.Hits)
               bufs.push(cb)
             })
             return bufs
@@ -201,6 +216,7 @@ describe('SERIAL-EQUIVALENCE (headline)', () => {
           const da = captureReactivity(a.world, a.Health, a.Mana)
           const bufsA = buildBuffers(a)
           flushAll(worldApplyOf(a.world, a.codecById, () => {}), bufsA)
+          a.world.__topics.mergeStaged()
           drainReactivity(a.world)
           const fa = fingerprint(a.world, a.Health, a.Mana)
 
@@ -209,6 +225,7 @@ describe('SERIAL-EQUIVALENCE (headline)', () => {
           const db = captureReactivity(b.world, b.Health, b.Mana)
           const bufsB = buildBuffers(b)
           flushAll(worldApplyOf(b.world, b.codecById, () => {}), [...bufsB].reverse())
+          b.world.__topics.mergeStaged()
           drainReactivity(b.world)
           const fb = fingerprint(b.world, b.Health, b.Mana)
 
@@ -218,6 +235,10 @@ describe('SERIAL-EQUIVALENCE (headline)', () => {
           // observed exactly once per change, in the deterministic ascending-worker-index merge order
           // (flushAll re-sorts both runs to the same order). A reorder or double-emit would diverge.
           expect(db).toEqual(da)
+          // DEEP-COMPARE (3, topics): the canonical EVENT STREAM is byte-identical despite the
+          // reversed apply order — OP_PUBLISH records canonicalize by publishing SystemId at the
+          // serial-slot merge, not by buffer arrival order.
+          expect([...b.world.__topics.streamWords(b.Hits)]).toEqual([...a.world.__topics.streamWords(a.Hits)])
         },
       ),
       { numRuns: 120 },

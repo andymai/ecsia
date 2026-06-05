@@ -12,7 +12,7 @@ import type { SystemBox, SystemDef } from '../planner/index.js'
 import { resolveOrdering, buildEdges, buildDAG, buildPlan } from '../graph/index.js'
 import type { SchedulePlan } from '../graph/index.js'
 import { directApplySink } from '../commands/index.js'
-import { buildScopedQueries } from './run-wave.js'
+import { buildScopedQueries, buildTopicCtx } from './run-wave.js'
 import { runUpdate } from './update.js'
 import { runUpdateThreaded } from './update-threaded.js'
 import type { RoundDispatcher } from './update-threaded.js'
@@ -91,6 +91,19 @@ export function createScheduler(
 
   const accessStrideWords = strideFor(lowerSystems(defs, 1), opts?.registeredComponentCount)
   const systems = resolveOrdering(lowerSystems(defs, accessStrideWords), defs)
+
+  // Register every declared topic with the world (idempotent — re-plans and world.publish-first
+  // topics share the same store), then position each consumer's cursor at the CURRENT visible head:
+  // a system added by a re-plan sees only events published after it joined, never a stale replay.
+  const topics = world.__topics
+  for (const sb of systems) {
+    for (const t of sb.publishTopics) topics.register(t)
+    for (const t of sb.consumeTopics) topics.register(t)
+  }
+  for (const sb of systems) {
+    for (const t of sb.consumeTopics) topics.initCursor(t, sb.name)
+  }
+
   const plan = buildSchedulePlan(systems, { accessStrideWords, workers })
 
   const env = {
@@ -100,6 +113,7 @@ export function createScheduler(
     observerCadence: world.options.reactivity.observerCadence,
     systems: plan.systems,
     scopedQueries: buildScopedQueries(world, plan.systems, dev),
+    topicCtx: buildTopicCtx(world, plan.systems, dev),
   }
 
   return {

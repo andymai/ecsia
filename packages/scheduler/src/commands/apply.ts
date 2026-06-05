@@ -56,6 +56,12 @@ export interface WorldApply {
   /** Relation apply (best-effort; relations land at ). */
   addPair?(subject: EntityHandle, relationId: RelationId, target: EntityHandle, payload: Record<string, unknown> | undefined): void
   removePair?(subject: EntityHandle, relationId: RelationId, target: EntityHandle): void
+  /**
+   * Topic publish staging (OP_PUBLISH): hand the raw payload field words to the world's topic
+   * store, keyed by topicId + publishing SystemId, for the wave's serial-slot canonical merge.
+   * Undefined in a topic-free wiring.
+   */
+  stagePublish?(topicId: number, systemId: number, words: Uint32Array, at: number, fieldWords: number): void
   warn(message: string): void
 }
 
@@ -236,6 +242,16 @@ function applyBuffer(world: WorldApply, cb: CommandBuffer, newlyCreated: Set<num
           drain(s)
           if (world.removePair !== undefined) world.removePair(s, rid, t)
         }
+        break
+      }
+      case Op.PUBLISH: {
+        // Not entity-targeted: skips validateSubject entirely. eid payload fields carry handles with
+        // no liveness check — an event is a fact about the past; consumers check isAlive if needed.
+        const topicId = words[at + 1] as number
+        const systemId = words[at + 2] as number
+        const f = words[at + 3] as number
+        if (world.stagePublish !== undefined) world.stagePublish(topicId, systemId, words, at + 4, f)
+        else world.warn('OP_PUBLISH encountered but topics are not wired')
         break
       }
       default:

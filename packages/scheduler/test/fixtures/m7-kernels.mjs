@@ -6,10 +6,11 @@
 // The SAME defineComponent calls run here and on the main thread (the test mirrors them); ids are
 // aligned from the manifest by name, so view.readField/writeField address the right shared columns.
 
-import { defineComponent } from '@ecsia/core'
+import { defineComponent, defineTopic } from '@ecsia/core'
 
 const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
 const Mana = defineComponent({ mp: 'i32' }, { name: 'mana' })
+const Hits = defineTopic('hits', { n: 'i32' })
 
 // Two DISJOINT-WRITE systems: Regen writes Health (reads nothing else), Channel writes Mana. They
 // touch different components, so the scheduler runs them concurrently on two workers in ONE round.
@@ -41,17 +42,28 @@ function spawnerKernel(view, indices) {
   }
 }
 
+// A PUBLISHING kernel: one OP_PUBLISH per matched entity, payload = the entity index — rides the
+// worker's command buffer; the main thread canonicalizes by SystemId at the wave's serial slot.
+function hitterKernel(view, indices) {
+  const cmd = view.commands
+  for (let i = 0; i < indices.length; i++) {
+    cmd.publish(Hits, { n: indices[i] })
+  }
+}
+
 export function buildWorkerKernels() {
   const kernels = new Map([
     ['Regen', regenKernel],
     ['Channel', channelKernel],
     ['Spawner', spawnerKernel],
+    ['Hitter', hitterKernel],
   ])
   const components = new Map([
     ['health', Health],
     ['mana', Mana],
   ])
-  return { kernels, components }
+  const topics = new Map([['hits', Hits]])
+  return { kernels, components, topics }
 }
 
 export function systemNames() {
