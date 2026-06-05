@@ -104,6 +104,10 @@ for (const e of world.query(read(Velocity), write(Position))) {
 Other query terms — `has(C)`, `without(C)`, and `optional(C)` — refine which entities
 match without (or optionally) binding accessors.
 
+For the rare loop that needs every nanosecond, queries also offer a bind-once fast path,
+[`bindColumns`](/guide/performance#bind-your-loop-once-bindcolumns) — the
+[performance page](/guide/performance) covers it.
+
 ## Systems
 
 A system is a `run` body plus its declared `{ read, write }` access. The declaration
