@@ -23,6 +23,24 @@ export type { DeltaSerializer, DeltaOptions } from './delta.js'
 // Rich-field serialization policy hook — shared by SnapshotOptions + DeltaOptions.
 export type { OnUnserializable, UnserializableContext } from './rich.js'
 
+// ---- Replication envelope (Layer 3 recipe: ordered-reliable transports) ----
+export {
+  createReplicationStream,
+  createReplicationReceiver,
+  encodeReplicationMessage,
+  decodeReplicationMessage,
+  REPLICATION_MAGIC,
+  REPLICATION_ENVELOPE_VERSION,
+  REPLICATION_HEADER_BYTES,
+} from './replication.js'
+export type {
+  ReplicationMessage,
+  ReplicationStream,
+  ReplicationStreamOptions,
+  ReplicationReceiver,
+  ReplicationApplyResult,
+} from './replication.js'
+
 // ---- Structural delta stream / observer log (Layer 2) ----
 export { encodeStructuralOps, applyStructuralOps, createObserverLog } from './structural.js'
 export type { ObserverLog, DeltaRecord } from './structural.js'

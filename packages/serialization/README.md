@@ -14,6 +14,13 @@ compare against. Deltas are version-stamped, and entity ids and relation targets
 remapped on load. It can also hand a world to a worker thread without copying the
 data.
 
+For network sync, `createReplicationStream` / `createReplicationReceiver` wrap the two
+codecs into a broadcast recipe for ordered-reliable transports: schema validation on
+every message, tick-chained deltas with an in-band `needBaseline` resync signal, an
+automatic full baseline when structural churn outruns the delta journal, and a
+receiver-owned entity remap — plus `encodeReplicationMessage` /
+`decodeReplicationMessage` for binary transports.
+
 > **Status:** 0.1.0, unpublished. New to ecsia? Start with the umbrella package
 > [`ecsia`](https://www.npmjs.com/package/ecsia), which re-exports
 > `createSnapshotSerializer`, `createDeltaSerializer`, `applyDelta`, and friends.
