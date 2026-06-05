@@ -6,7 +6,7 @@
     "declaration": false,
     "declarationMap": false,
     "sourceMap": false,
-    "types": ["node"],
+    "types": ["node", "three"],
     "baseUrl": "..",
     "paths": {
       "@ecsia/ecsia": ["packages/ecsia/src/index.ts"],
@@ -14,7 +14,8 @@
       "@ecsia/schema": ["packages/schema/src/index.ts"],
       "@ecsia/relations": ["packages/relations/src/index.ts"],
       "@ecsia/scheduler": ["packages/scheduler/src/index.ts"],
-      "@ecsia/serialization": ["packages/serialization/src/index.ts"]
+      "@ecsia/serialization": ["packages/serialization/src/index.ts"],
+      "@ecsia/three": ["packages/three/src/index.ts"]
     }
   },
   "include": ["**/*.ts"]

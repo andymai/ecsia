@@ -24,11 +24,13 @@
   "devDependencies": {
     "@playwright/test": "1.49.1",
     "@types/node": "^22.10.0",
+    "@types/three": "^0.169.0",
     "@vitest/coverage-v8": "2.1.9",
     "bitecs": "^0.3.40",
     "esbuild": "0.21.5",
     "fast-check": "^3.23.0",
     "miniplex": "^2.0.0",
+    "three": "^0.169.0",
     "tinybench": "^3.0.0",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0"

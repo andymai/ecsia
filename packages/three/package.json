@@ -1,0 +1,23 @@
+{
+  "name": "@ecsia/three",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": { "build": "tsc -b" },
+  "dependencies": {
+    "@ecsia/core": "workspace:*",
+    "@ecsia/schema": "workspace:*"
+  },
+  "peerDependencies": {
+    "three": "^0.169"
+  },
+  "devDependencies": {
+    "three": "^0.169.0",
+    "@types/three": "^0.169.0"
+  }
+}
