@@ -49,6 +49,7 @@ function makeReactivity(opts?: Partial<ReactivityDeps>): Harness {
       return r
     },
     resolveHandle: (index): number => 0xabc0000 + index,
+    tracking: { active: false },
     ...opts,
   }
   const r = new Reactivity(deps)

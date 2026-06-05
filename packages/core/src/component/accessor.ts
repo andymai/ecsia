@@ -29,6 +29,13 @@ import type { RichKind, SidecarKey } from './sidecar.js'
 export interface AccessorWorld {
   trackWrite(index: number, componentId: ComponentId, fieldIndex?: number): void
   handleIndex(handle: EntityHandle): number
+  // Shared single-bit "any write consumer exists" cell (recomputed on flavor/observer/changeVersion
+  // (de)registration, NEVER per write). When `active` is false the entire trackWrite chain is provably
+  // dead (write-log push gated off AND changeVersion stamping disabled), so the setter skips the
+  // handleIndex decode + closure hops entirely — the per-write hot-path fast-out (P7). Reading a live
+  // shared cell (not a snapshot) keeps the semantics: the instant a consumer registers, `active` flips
+  // and the very next write tracks, identical to calling trackWrite unconditionally.
+  readonly tracking: { readonly active: boolean }
   // The rich-field seam (rich-fields.md §5.1): getters/setters for sidecar-backed fields delegate here
   // so accessor.ts stays free of any direct sidecar/entity dependency (same discipline as trackWrite).
   sidecarRead(key: SidecarKey, index: number, gen: number): unknown
@@ -186,6 +193,9 @@ export function makeAccessorFactory<S extends Schema>(def: ComponentDef<S>): Acc
       const track = (self: Accessor, withField: boolean): void => {
         const b = self.__binding
         if (b === null) return
+        // Fast-out: no write consumer ⇒ trackWrite is a no-op anyway, so skip the handleIndex decode
+        // and the two closure hops entirely (P7 write-path gate). See AccessorWorld.tracking.
+        if (!b.world.tracking.active) return
         if (withField) b.world.trackWrite(b.world.handleIndex(self.__eid), componentId, fieldIndex)
         else b.world.trackWrite(b.world.handleIndex(self.__eid), componentId)
       }

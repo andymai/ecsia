@@ -327,6 +327,10 @@ export function createWorld(options: WorldOptions = {}): World {
   const trackWrite = (index: number, componentId: ComponentId, fieldIndex?: number): void => {
     reactivity?.trackWrite(index, componentId, fieldIndex)
   }
+  // The shared "any write consumer exists" cell the accessor setters read to fast-out the trackWrite
+  // chain (P7). Reactivity owns recomputing `.active` on every flavor/observer/changeVersion
+  // (de)registration; until reactivity is wired it stays false (no consumers can exist yet).
+  const tracking = { active: false }
   // The rich-field sidecar (rich-fields.md §4). Created BEFORE accessorWorld so the accessor's rich
   // getters/setters can delegate through the seam (G-8). Main-thread-only; never shared with workers.
   const sidecar = new SidecarStore()
@@ -335,6 +339,7 @@ export function createWorld(options: WorldOptions = {}): World {
   // pending window is open and through the generation-guarded read otherwise.
   const accessorWorld: AccessorWorld = {
     trackWrite,
+    tracking,
     handleIndex: (handle) => handleIndex(handle, handleLayout) as number,
     sidecarRead: (key, index, gen) =>
       sidecar.hasPending() ? sidecar.readForObserver(key, index, gen) : sidecar.read(key, index, gen),
@@ -504,6 +509,7 @@ export function createWorld(options: WorldOptions = {}): World {
     },
     refOf: (index) => entities.entity(entities.handleOfIndex(index), { lenient: true }),
     resolveHandle: (index) => entities.handleOfIndex(index) as number,
+    tracking,
   })
   // The shape-log drain re-runs the same idempotent single-entity maintenance the M4 synchronous
   // hook performs; the conservative overflow path needs a "current matches" source for change
