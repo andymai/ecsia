@@ -49,6 +49,7 @@ import type {
 import type { Column } from './memory/index.js'
 import type { ComponentRuntime } from './component/index.js'
 import { IS_DEV } from './env.js'
+import { isSharedBacking } from './memory/buffers.js'
 
 /** world.md §4: 'serial' during the serial slot (and always, single-threaded); 'wave' only while the scheduler dispatches worker waves. */
 export type WorldPhase = 'serial' | 'wave'
@@ -848,10 +849,10 @@ export function createWorld(options: WorldOptions = {}): World {
       // merge them into the manifest here — a worker needs them to resolve (archetypeId, row).
       const rec = entities.sharedRecordRegions()
       const extra: SharedHandleManifest['regions'][number][] = []
-      if (rec.archetypeId instanceof (typeof SharedArrayBuffer === "undefined" ? class None {} : SharedArrayBuffer)) {
+      if (isSharedBacking(rec.archetypeId)) {
         extra.push({ key: 'entity.archetypeId' as RegionKey, backing: rec.archetypeId, element: 'u32' })
       }
-      if (rec.archetypeRow instanceof (typeof SharedArrayBuffer === "undefined" ? class None {} : SharedArrayBuffer)) {
+      if (isSharedBacking(rec.archetypeRow)) {
         extra.push({ key: 'entity.archetypeRow' as RegionKey, backing: rec.archetypeRow, element: 'u32' })
       }
       return { columns: base.columns, regions: [...base.regions, ...extra] }

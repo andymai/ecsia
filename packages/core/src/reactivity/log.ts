@@ -7,6 +7,7 @@
 // is allocated and merged trivially so the M7 multi-worker merge slots in unchanged.
 
 import type { Buffers, Region, RegionKey } from '../memory/index.js'
+import { isSharedBacking } from '../memory/buffers.js'
 
 /** ShapeKind ordinals — SHARED across command Op / serialization DeltaOp / reactivity (world.md §9.4). */
 export enum ShapeKind {
@@ -246,7 +247,7 @@ export class LogRing {
         // fall through to re-allocate
       }
     }
-    const isShared = region.backing instanceof SharedArrayBuffer
+    const isShared = isSharedBacking(region.backing)
     const fresh: ArrayBufferLike = isShared
       ? (new SharedArrayBuffer(required) as ArrayBufferLike)
       : (new ArrayBuffer(required) as ArrayBufferLike)

@@ -8,6 +8,7 @@
 // set grows to the entity-index high-water as entities are added, never eagerly to maxEntities (§7.3).
 
 import type { Buffers, Region, RegionKey } from '../memory/index.js'
+import { isSharedBacking } from '../memory/buffers.js'
 
 const GROWTH = 2
 
@@ -117,7 +118,7 @@ function growRegion(buffers: Buffers, region: Region<Uint32Array>, newLength: nu
     }
   }
   // Fallback: re-allocate a fresh backing and copy. Serial-flush only (V-2); workers never maintain.
-  const isShared = region.backing instanceof SharedArrayBuffer
+  const isShared = isSharedBacking(region.backing)
   const fresh: ArrayBufferLike = isShared
     ? (new SharedArrayBuffer(required) as ArrayBufferLike)
     : (new ArrayBuffer(required) as ArrayBufferLike)
