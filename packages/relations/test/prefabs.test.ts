@@ -452,4 +452,128 @@ describe('prefabs — spawnFrom inside an observer handler stages to the deferre
     expect((world.entity(e).read(Health) as { hp: number }).hp).toBe(35)
     expect(rel.hasPair(e, rel.IsA, goblin)).toBe(true)
   })
+
+  it('staged despawn(prefab) before a staged spawnFrom in ONE drain: defaulted values, NO IsA edge, dev warn', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const { world, rel, Health, Hostile } = makeKit()
+      const goblin = rel.definePrefab([Health, { hp: 35, regen: 0.5 }])
+
+      let staged: EntityHandle | null = null
+      world.observe(onAdd(Hostile), () => {
+        world.despawn(goblin) // stages; goblin is still alive for the rest of the handler
+        staged = rel.spawnFrom(goblin) // passes the liveness check, stages the build
+      })
+
+      world.spawnWith(Hostile)
+      world.observerDrain()
+      world.frameReset()
+      world.observerDrain() // flush FIFO: the despawn applies first, the build sees a dead source
+
+      const e = staged as unknown as EntityHandle
+      expect(world.isAlive(e)).toBe(true)
+      expect(world.has(e, Health)).toBe(true) // the component set still attaches…
+      expect((world.entity(e).read(Health) as { hp: number; regen: number }).hp).toBe(0) // …with defaulted values
+      expect((world.entity(e).read(Health) as { hp: number; regen: number }).regen).toBe(0)
+      expect(rel.hasRelation(e, rel.IsA)).toBe(false) // the dead ancestor's pair is dropped
+      expect(world.query(rel.Pair(rel.IsA, Wildcard)).count).toBe(0)
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining(`prefab ${goblin as number}`))
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('DEFAULTED'))
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('staged despawn of an ANCESTOR (source survives): values copy, only the dead Pair(IsA, …) drops, dev warn', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const { world, rel, Health, Hostile } = makeKit()
+      const monster = rel.definePrefab([Health, { hp: 10 }])
+      const goblin = rel.definePrefab({ extends: monster }, [Health, { hp: 35 }])
+
+      let staged: EntityHandle | null = null
+      world.observe(onAdd(Hostile), () => {
+        world.despawn(monster)
+        staged = rel.spawnFrom(goblin)
+      })
+
+      world.spawnWith(Hostile)
+      world.observerDrain()
+      world.frameReset()
+      world.observerDrain()
+
+      const e = staged as unknown as EntityHandle
+      expect((world.entity(e).read(Health) as { hp: number }).hp).toBe(35) // the live source still copies
+      expect(rel.hasPair(e, rel.IsA, goblin)).toBe(true)
+      expect(rel.hasRelation(e, rel.IsA)).toBe(true)
+      expect([...rel.targetsOf(e, rel.IsA)]).toEqual([goblin]) // the dead ancestor's pair is dropped
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining(`ancestor prefab ${monster as number}`))
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('staged spawnFrom then staged despawn of the SAME reserved handle in one drain: clean pair bookkeeping', () => {
+    const { world, rel, Health, Hostile } = makeKit()
+    const goblin = rel.definePrefab([Health, { hp: 35 }])
+
+    world.observe(onAdd(Hostile), () => {
+      const e = rel.spawnFrom(goblin)
+      world.despawn(e) // stages AFTER the build — the instance lives for exactly one flush step
+    })
+
+    world.spawnWith(Hostile)
+    world.observerDrain()
+    world.frameReset()
+    world.observerDrain() // flush: the build materializes the instance, the despawn tears it down
+
+    expect(world.query(rel.Pair(rel.IsA, Wildcard)).count).toBe(0)
+    expect([...rel.subjectsOf(rel.IsA, goblin)]).toEqual([]) // back-ref bucket reclaimed
+    // The pair id was refcounted down: a later query sees ONLY fresh instances.
+    const fresh = rel.spawnFrom(goblin)
+    const matched: number[] = []
+    world.query(rel.Pair(rel.IsA, goblin)).each((m) => matched.push(m.handle as number))
+    expect(matched).toEqual([fresh as number])
+  })
+})
+
+describe('prefabs — mid-drain chained definePrefab → spawnFrom dev errors', () => {
+  it('inside ONE handler: the error says the staged prefab materializes at the next flush', () => {
+    const { world, rel, Health, Hostile } = makeKit()
+    let spawnMsg = ''
+    let extendMsg = ''
+    world.observe(onAdd(Hostile), () => {
+      const p = rel.definePrefab([Health, { hp: 35 }])
+      try {
+        rel.spawnFrom(p)
+      } catch (err) {
+        spawnMsg = (err as Error).message
+      }
+      try {
+        rel.definePrefab({ extends: p })
+      } catch (err) {
+        extendMsg = (err as Error).message
+      }
+    })
+    world.spawnWith(Hostile)
+    world.observerDrain()
+    expect(spawnMsg).toMatch(/materializes at the next observer flush/)
+    expect(spawnMsg).not.toMatch(/not a Prefab-tagged/)
+    expect(extendMsg).toMatch(/materializes at the next observer flush/)
+    expect(extendMsg).not.toMatch(/not a Prefab-tagged/)
+  })
+
+  it('after the drain but BEFORE the flush: same staged-prefab error; genuinely untagged keeps the old message', () => {
+    const { world, rel, Health, Hostile } = makeKit()
+    let p: EntityHandle | null = null
+    world.observe(onAdd(Hostile), () => {
+      p = rel.definePrefab([Health, { hp: 1 }])
+    })
+    world.spawnWith(Hostile)
+    world.observerDrain() // the define is still staged — its flush is pending
+    expect(() => rel.spawnFrom(p as unknown as EntityHandle)).toThrow(/materializes at the next observer flush/)
+    // A live non-prefab entity keeps the untagged message even while a flush is pending.
+    const plain = world.spawnWith([Health, { hp: 5 }])
+    expect(() => rel.spawnFrom(plain)).toThrow(/not a Prefab-tagged/)
+  })
 })

@@ -132,6 +132,12 @@ export interface RelationsHost {
    */
   deferTemplateSpawn(build: (handle: EntityHandle) => void): EntityHandle | null
   /**
+   * True while an observer drain is deferring OR staged ops await the next serial flush. Lets the
+   * relations dev errors distinguish a reserved (staged, not-yet-materialized) template handle —
+   * alive but with an empty signature — from a genuinely untagged entity.
+   */
+  hasPendingDeferred(): boolean
+  /**
    * deferral seam: while an observer drain is running, structural relation
    * ops issued by a handler must STAGE to the world's deferred command buffer rather than mutate the
    * world mid-drain. The relations runtime calls this at the top of addPair/removePair; if it returns
@@ -990,6 +996,7 @@ export function createWorld(options: WorldOptions = {}): World {
           observerCommands.stageBuildReserved(handle, build)
           return handle
         },
+        hasPendingDeferred: () => observerCommands.deferring || observerCommands.pendingCount > 0,
         deferRelationOp: (op, subject, relation, target, payload) => {
           if (!observerCommands.deferring) return false
           const relationId = relation.id as RelationId

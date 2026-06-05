@@ -165,7 +165,10 @@ interface RelationsApi {
    * the `spawnWith` tuple form. With `{ extends: Base }` the new prefab starts from Base's full
    * flattened component set and values, applies its own inits on top (the child wins), and records
    * `Pair(IsA, Base)` plus Base's own IsA pairs — the full ancestor set, flattened at define time.
-   * Editing a prefab later affects FUTURE spawns only. Serial-phase, main-thread.
+   * Editing a prefab later affects FUTURE spawns only. Inside an observer handler the define
+   * STAGES: the returned handle is reserved-alive but materializes at the next flush, and a base
+   * despawned before that flush degrades to defaulted values with its IsA pair dropped.
+   * Serial-phase, main-thread.
    */
   definePrefab<const T extends readonly SpawnArg[]>(
     opts: DefinePrefabOptions,
@@ -178,7 +181,9 @@ interface RelationsApi {
    * overrides on top. Overrides use the `spawnWith` tuple form and may both override copied values
    * and add components the prefab lacks. The instance records `Pair(IsA, ancestor)` for the full
    * chain. The prefab's own non-IsA relation pairs are NOT copied. A despawned/stale prefab handle
-   * throws in dev and returns NO_ENTITY in production. Serial-phase, main-thread.
+   * throws in dev and returns NO_ENTITY in production. Inside an observer handler the spawn
+   * STAGES to the next flush; a source despawned before that flush degrades the instance to
+   * defaulted values (dev warn), and a dead ancestor drops its IsA pair. Serial-phase, main-thread.
    */
   spawnFrom<const T extends readonly SpawnArg[]>(
     prefab: EntityHandle,
@@ -1055,9 +1060,23 @@ export function createRelations(world: World): RelationsApi {
       // defaulted values (the components still attach); a dead ancestor drops its IsA pair, exactly
       // as addPair would refuse a dead target.
       const liveSource = copySource !== null && host.isAlive(copySource) ? copySource : null
+      if (IS_DEV && copySource !== null && liveSource === null) {
+        console.warn(
+          `[ecsia] prefab spawn: prefab ${copySource as number} was despawned before the staged build flushed — ` +
+            'the instance materializes with DEFAULTED values and no IsA edge to it',
+        )
+      }
       const liveAncestors: number[] = []
       for (let i = 0; i < ancestors.length; i++) {
-        if (host.isAlive(ancestorHandles[i] as EntityHandle)) liveAncestors.push(ancestors[i] as number)
+        const ancestor = ancestorHandles[i] as EntityHandle
+        if (host.isAlive(ancestor)) {
+          liveAncestors.push(ancestors[i] as number)
+        } else if (IS_DEV && ancestor !== copySource) {
+          console.warn(
+            `[ecsia] prefab spawn: ancestor prefab ${ancestor as number} was despawned before the staged build flushed — ` +
+              'its Pair(IsA, ancestor) is dropped from the instance',
+          )
+        }
       }
 
       const defs: ComponentDef<Schema>[] = []
@@ -1124,6 +1143,9 @@ export function createRelations(world: World): RelationsApi {
       return NO_ENTITY
     }
     if (IS_DEV && base !== null && prefabDef !== null && !host.bitmaskHas(host.handleIndex(base), prefabDef.id)) {
+      if (host.componentIdsOf(base).length === 0 && host.hasPendingDeferred()) {
+        throw new Error('definePrefab: { extends } target is a STAGED prefab that materializes at the next observer flush — extend it after the flush (e.g. next frame)')
+      }
       throw new Error('definePrefab: { extends } target is not a Prefab-tagged entity — pass a handle returned by definePrefab()')
     }
     const { defs: initDefs, values: initValues } = splitInits(initArgs)
@@ -1142,6 +1164,9 @@ export function createRelations(world: World): RelationsApi {
       return NO_ENTITY
     }
     if (IS_DEV && prefabDef !== null && !host.bitmaskHas(host.handleIndex(prefab), prefabDef.id)) {
+      if (host.componentIdsOf(prefab).length === 0 && host.hasPendingDeferred()) {
+        throw new Error('spawnFrom: the prefab is STAGED and materializes at the next observer flush — spawn from it after the flush (e.g. next frame)')
+      }
       throw new Error('spawnFrom: the source is not a Prefab-tagged entity — pass a handle returned by definePrefab()')
     }
     const { defs: overrideDefs, values: overrideValues } = splitInits(overrides)
