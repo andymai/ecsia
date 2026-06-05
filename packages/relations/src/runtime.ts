@@ -116,7 +116,7 @@ interface RelationsApi {
    * points at `target` through several relations. Reads the same target→subjects index the
    * despawn cascade uses — the typed form is O(1) to the subject set; the wildcard form is
    * O(R) bucket lookups (R = registered relations) — never an entity scan. When the loop body
-   * mutates pairs (despawn / removePair / exclusive re-target), snapshot first
+   * mutates pairs in ANY way (despawn / addPair / removePair / exclusive re-target), snapshot first
    * (`[...rel.subjectsOf(Wildcard, t)]`), then mutate — the cascade discipline.
    */
   subjectsOf(relation: RelationDef<Schema | void> | WildcardToken, target: EntityHandle): Iterable<EntityHandle>

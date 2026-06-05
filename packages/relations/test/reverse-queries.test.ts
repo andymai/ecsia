@@ -273,4 +273,25 @@ describe('subjectsOf(relation, target) — typed per-relation form stays scoped'
     expect(new Set([...rel.subjectsOf(Likes, target)])).toEqual(new Set(subjects))
     expect([...rel.subjectsOf(Likes, target)]).toHaveLength(subjects.length)
   })
+  it('addPair mid-iteration: snapshot-first is the documented discipline (greptile P1)', () => {
+    // The lazy dedup pre-scan commits before the loop body runs, so adding a pair to a SECOND
+    // relation mid-iteration could re-yield an already-seen subject. The contract (JSDoc/guide/spec)
+    // is snapshot-first for ALL pair mutations; this pins the safe pattern.
+    const world = createWorld()
+    const rel = createRelations(world)
+    const Likes = rel.defineRelation(null)
+    const Follows = rel.defineRelation(null)
+
+    const target = world.spawn()
+    const s = world.spawn()
+    rel.addPair(s, Likes, target)
+
+    const snapshot = [...rel.subjectsOf(Wildcard, target)]
+    for (const subj of snapshot) {
+      rel.addPair(subj, Follows, target) // mutation AFTER the snapshot: safe
+    }
+    expect(snapshot).toEqual([s])
+    expect([...rel.subjectsOf(Wildcard, target)]).toEqual([s]) // fresh walk still deduped
+  })
+
 })

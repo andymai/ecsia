@@ -134,7 +134,7 @@ through several relations.
 Both forms read the same target→subjects index the despawn cascade uses, so the lookup never
 scans the world no matter how many entities exist: the typed form is O(1) to the subject set,
 the wildcard form is O(R) bucket lookups (R = registered relations). If the loop body mutates
-pairs (despawn, `removePair`, exclusive re-target), snapshot first —
+pairs in any way (despawn, `addPair`, `removePair`, exclusive re-target), snapshot first —
 `[...rel.subjectsOf(Wildcard, t)]` — then mutate, matching the cascade discipline.
 
 ```ts
