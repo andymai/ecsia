@@ -87,13 +87,16 @@ export const createRelations: (world: World) => ReturnType<typeof _mkRel2> = ((w
 // ---------------------------------------------------------------------------
 // Field tokens (public-api.md §3.1)
 // ---------------------------------------------------------------------------
-export { vec, vec2, vec3, vec4, staticString, object } from '@ecsia/core'
+export { vec, vec2, vec3, vec4, staticString, object, field } from '@ecsia/core'
 export type {
   ScalarToken,
   VecToken,
   StaticStringToken,
   ObjectToken,
+  RichToken,
   FieldToken,
+  FieldSpec,
+  FieldValue,
   Schema,
 } from '@ecsia/core'
 
@@ -106,6 +109,19 @@ export { read, write, has, without, optional, MAX_QUERY_ARITY } from '@ecsia/cor
 // Reactivity / observers (public-api.md §4.6)
 // ---------------------------------------------------------------------------
 export { onAdd, onRemove, onChange } from '@ecsia/core'
+
+// ---------------------------------------------------------------------------
+// Stable IDs (rich-fields.md §8) — id→entity index built on observers, re-exported from the umbrella.
+// ---------------------------------------------------------------------------
+import { createStableIndex as _createStableIndex } from '@ecsia/core'
+import type { ComponentDef as _ComponentDef, Schema as _Schema, SchemaOf as _SchemaOf, FieldValue as _FieldValue } from '@ecsia/core'
+export type { StableIndex } from '@ecsia/core'
+/** Build a world-level `idField → entity` index over a stable-id-carrying component (rich-fields.md §8). */
+export const createStableIndex: <C extends _ComponentDef<_Schema>, F extends keyof _SchemaOf<C> & string>(
+  world: World,
+  component: C,
+  idField: F,
+) => import('@ecsia/core').StableIndex<_FieldValue<_SchemaOf<C>[F]>> = _createStableIndex as never
 
 // ---------------------------------------------------------------------------
 // Scheduler — the opt-in frame loop over the single-threaded kernel (public-api.md §5, §6)

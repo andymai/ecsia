@@ -25,6 +25,8 @@ import { Buffers, probeCapabilities } from './memory/index.js'
 import type { WorkerMode, SharedHandleManifest, RegionKey } from './memory/index.js'
 import { ComponentRegistry } from './registry.js'
 import type { AccessorWorld } from './component/index.js'
+import { SidecarStore, sidecarKey } from './component/index.js'
+import type { SidecarKey } from './component/index.js'
 import { Bitmask } from './bitmask/index.js'
 import { Storage } from './storage/index.js'
 import type { Archetype, Signature } from './storage/index.js'
@@ -41,6 +43,7 @@ import type {
   SerializeArchetype,
   SerializeComponentColumns,
   SerializeComponentMeta,
+  SerializeRichField,
   SerializeRelationProvider,
 } from './serialize-surface.js'
 import type { Column } from './memory/index.js'
@@ -324,14 +327,36 @@ export function createWorld(options: WorldOptions = {}): World {
   const trackWrite = (index: number, componentId: ComponentId, fieldIndex?: number): void => {
     reactivity?.trackWrite(index, componentId, fieldIndex)
   }
+  // The rich-field sidecar (rich-fields.md §4). Created BEFORE accessorWorld so the accessor's rich
+  // getters/setters can delegate through the seam (G-8). Main-thread-only; never shared with workers.
+  const sidecar = new SidecarStore()
+  // During an observer drain the rich getter must read the DYING entity's value (RF-REMOVE-READ); the
+  // sidecar disambiguates via its pending-clear table, so route reads through readForObserver while a
+  // pending window is open and through the generation-guarded read otherwise.
   const accessorWorld: AccessorWorld = {
     trackWrite,
     handleIndex: (handle) => handleIndex(handle, handleLayout) as number,
+    sidecarRead: (key, index, gen) =>
+      sidecar.hasPending() ? sidecar.readForObserver(key, index, gen) : sidecar.read(key, index, gen),
+    sidecarWrite: (key, index, gen, value) => sidecar.write(key, index, gen, value),
+    generationOf: (index) => entities.decodeHandle(entities.handleOfIndex(index)).generation as number,
   }
 
   // --- registry (world.md §7 step 1): mint dense user ids, wire accessor factories ---
   const registry = new ComponentRegistry()
   registry.register(resolved.components as readonly ComponentDef<Schema>[])
+
+  // Declare a sidecar column per rich field of every registered component (rich-fields.md §4.6). This
+  // is the single place the sidecar learns about a rich column; ensureColumn is idempotent.
+  for (const def of resolved.components as readonly ComponentDef<Schema>[]) {
+    const id = registry.idOf(def)
+    if (id === undefined) continue
+    let fieldIndex = 0
+    for (const f of def.fields as readonly FieldDescriptor[]) {
+      if (f.rich !== undefined) sidecar.ensureColumn(sidecarKey(id as number, fieldIndex), f.rich, f.default)
+      fieldIndex += 1
+    }
+  }
 
   // --- bitmask + storage (world.md §7 steps 2-3): the per-entity membership index and the
   // archetype tables. The bitmask stride = ceil(nextComponentId/32) (CANON C4); both derive from
@@ -410,6 +435,33 @@ export function createWorld(options: WorldOptions = {}): World {
     },
   })
 
+  // Rich-field despawn clear (rich-fields.md §4.3 / §4.3a). Walk the dying entity's signature for rich
+  // fields and decide whether to DEFER the clear: when any held component has a remove-observer, the
+  // R-8 deferred row reclaim keeps numeric values readable in onRemove, so the sidecar must stash the
+  // dying rich values for the same observer window (RF-REMOVE-READ). The decision mirrors storage's
+  // `defer` gate exactly so rich and numeric parity holds.
+  const sidecarOnDespawn = (handle: EntityHandle): void => {
+    const index = handleIndexOf(handle as number)
+    const archId = records.archetypeIdOf(index)
+    const arch = storage.archetypes.byId[archId] as Archetype | undefined
+    if (arch === undefined) return
+    const richKeys: SidecarKey[] = []
+    let defer = false
+    for (let i = 0; i < arch.signature.length; i++) {
+      const c = arch.signature[i] as number as ComponentId
+      const def = registry.defOf(c) as ComponentRuntime<Schema> | undefined
+      if (def !== undefined && def.hasRichFields) {
+        let fieldIndex = 0
+        for (const f of def.fields as readonly FieldDescriptor[]) {
+          if (f.rich !== undefined) richKeys.push(sidecarKey(c as number, fieldIndex))
+          fieldIndex += 1
+        }
+      }
+      if (reactivity?.hasRemoveObserver(c as number) === true) defer = true
+    }
+    if (richKeys.length > 0) sidecar.onDespawn(index, richKeys, defer)
+  }
+
   entities.setAccessorResolver(storage)
   entities.setLifecycle({
     onSpawn: (handle) => storage.onSpawn(handle),
@@ -417,6 +469,9 @@ export function createWorld(options: WorldOptions = {}): World {
       // relations.md §7.4 ordering: preDespawn (cascade + pair teardown) runs WHILE `dying` is still
       // alive/resolvable, BEFORE storage.onDespawn shuffle-pops the row and the entity layer frees it.
       preDespawnHook?.(handle)
+      // The rich clear runs BEFORE storage.onDespawn so the dying entity's signature is still resolvable
+      // (storage.onDespawn shuffle-pops the row; the entity index record is unchanged either way).
+      sidecarOnDespawn(handle)
       storage.onDespawn(handle)
     },
   })
@@ -498,6 +553,21 @@ export function createWorld(options: WorldOptions = {}): World {
     if (id !== undefined) componentIdByName.set(def.name, id)
   }
 
+  // Rich-field enumeration for the serialization sidecar section (rich-fields.md §7.1 / G-4). Built once
+  // from the registered defs in (componentId, fieldIndex) order; the snapshot/delta writers join this
+  // with each entity's signature — they MUST NOT read `archetypeView().components`, which strips rich
+  // fields (and drops rich-only components entirely).
+  const richFieldList: SerializeRichField[] = []
+  for (const def of userComponents) {
+    const id = registry.idOf(def)
+    if (id === undefined) continue
+    let fieldIndex = 0
+    for (const f of def.fields as readonly FieldDescriptor[]) {
+      if (f.rich !== undefined) richFieldList.push({ componentId: id, fieldIndex, name: f.name, kind: f.rich })
+      fieldIndex += 1
+    }
+  }
+
   const computeSchemaHash = (): number => {
     // FNV-1a over the canonical (componentName, fieldName, token)* + relation names (§3.2). The receiver
     // recomputes it from ITS defineComponent set and must match — a fail-fast guard against stale code.
@@ -575,6 +645,37 @@ export function createWorld(options: WorldOptions = {}): World {
     },
     relations() {
       return serializationProvider ?? undefined
+    },
+    richFields() {
+      return richFieldList
+    },
+    richValueOf(handle, componentId, fieldIndex) {
+      if (!entities.isAlive(handle)) return undefined
+      const index = handleIndexOf(handle as number)
+      const key = sidecarKey(componentId as number, fieldIndex)
+      if (!sidecar.hasColumn(key)) return undefined
+      const gen = entities.decodeHandle(entities.handleOfIndex(index)).generation as number
+      return sidecar.read(key, index, gen)
+    },
+    richIsPresent(handle, componentId, fieldIndex) {
+      if (!entities.isAlive(handle)) return false
+      const index = handleIndexOf(handle as number)
+      const key = sidecarKey(componentId as number, fieldIndex)
+      if (!sidecar.hasColumn(key)) return false
+      const gen = entities.decodeHandle(entities.handleOfIndex(index)).generation as number
+      return sidecar.isPresent(key, index, gen)
+    },
+    setRichValue(handle, componentId, fieldIndex, value) {
+      if (!entities.isAlive(handle)) return
+      const index = handleIndexOf(handle as number)
+      const key = sidecarKey(componentId as number, fieldIndex)
+      if (!sidecar.hasColumn(key)) return
+      const gen = entities.decodeHandle(entities.handleOfIndex(index)).generation as number
+      sidecar.write(key, index, gen, value)
+      // Mark the loaded value changed identically to a live write so a delta from THIS receiver re-emits
+      // it (parity with the column path, which writes through tracked accessor setters). Whole-entity
+      // changeVersion stamp; fieldIndex forwarded but discarded downstream as for numeric fields (§5.3).
+      trackWrite(index, componentId as ComponentId, fieldIndex)
     },
     enableStructuralJournal() {
       ;(reactivity as Reactivity).enableStructuralJournal()
@@ -894,6 +995,11 @@ export function createWorld(options: WorldOptions = {}): World {
         }
       } finally {
         observerCommands.exitDrain()
+        // rich-fields.md §4.3a: flush the deferred rich-field clears now that onRemove handlers have run
+        // — the same post-observer point storage's deferred row reclaim ceases to be readable. After this
+        // the dying entity's rich values are gone (RF-REMOVE-READ window closes); a recycled index reads
+        // the default via the generation guard regardless.
+        sidecar.flushPending()
       }
     },
     flushLogs() {

@@ -40,6 +40,9 @@ export {
   defineTag,
 } from './component/index.js'
 
+export { createStableIndex } from './util/stable-index.js'
+export type { StableIndex } from './util/stable-index.js'
+
 export {
   ShapeKind,
   onAdd,
@@ -62,6 +65,7 @@ export {
   vec4,
   staticString,
   object,
+  field,
   MAX_QUERY_ARITY,
   read,
   write,
@@ -74,7 +78,10 @@ export type {
   VecToken,
   StaticStringToken,
   ObjectToken,
+  RichToken,
   FieldToken,
+  FieldSpec,
+  FieldValue,
   Schema,
   ComponentDef,
   ComponentOptions,
@@ -110,6 +117,7 @@ export type {
   SerializeArchetype,
   SerializeComponentColumns,
   SerializeComponentMeta,
+  SerializeRichField,
   SerializePair,
   SerializeRelationProvider,
   SerializeStructuralRecord,

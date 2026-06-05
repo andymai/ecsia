@@ -36,11 +36,31 @@ export interface ObjectToken<T> {
   readonly __t?: T
 }
 
-export type FieldToken =
+// Free-form rich tokens: sidecar-backed, non-shareable, main-thread-pinned (rich-fields.md §2.1).
+// `'string'` is a bare string literal token (used like 'f32') holding an arbitrary JS string; it is
+// distinct from the enum-choices staticString. object<T> is the other rich kind.
+export type RichToken = 'string'
+
+// A token wrapped with a user-overridable default (component-schema.md §4.1; rich-fields.md §3.1 / G-1).
+// `field('string', { default: 'x' })` or `field(object<T>(), { default: ... })`. The inner token drives
+// every inference path through TokenOf; the default is consumed only at descriptor resolution.
+export interface FieldSpec<F extends BaseFieldToken> {
+  readonly __fieldSpec: true
+  readonly token: F
+  readonly default: unknown
+}
+
+export type BaseFieldToken =
   | ScalarToken
+  | RichToken
   | VecToken<ScalarToken, number>
   | StaticStringToken<readonly string[]>
   | ObjectToken<unknown>
+
+export type FieldToken = BaseFieldToken | FieldSpec<BaseFieldToken>
+
+/** Unwrap a {@link FieldSpec} to its inner token; a bare token passes through. */
+export type TokenOf<F extends FieldToken> = F extends FieldSpec<infer T> ? T : F
 
 // Token constructors — keep call-sites literal-typed without caller `as const` (type-system.md §1.1).
 export const vec = <E extends ScalarToken, N extends number>(elem: E, len: N): VecToken<E, N> => ({
@@ -59,6 +79,14 @@ export const staticString = <const C extends readonly string[]>(...choices: C): 
   choices,
 })
 export const object = <T>(): ObjectToken<T> => ({ kind: 'object' })
+
+// Wrap any token with a user-overridable default (rich-fields.md §3.1). Additive: bare tokens still
+// work unwrapped; `field(token, { default })` carries the default through to the FieldDescriptor.
+export const field = <const F extends BaseFieldToken>(token: F, opts: { default: FieldValue<F> }): FieldSpec<F> => ({
+  __fieldSpec: true,
+  token,
+  default: opts.default,
+})
 
 // ---------------------------------------------------------------------------
 // §8 Branded ID contracts (zero runtime cost; prevent cross-assignment)
@@ -105,15 +133,19 @@ export interface ReadonlyVecView<E extends ScalarToken, N extends number> {
   readonly w: N extends 1 | 2 | 3 ? never : ScalarValue<E>
 }
 
-export type FieldValue<F extends FieldToken> = F extends ScalarToken
-  ? ScalarValue<F>
-  : F extends VecToken<infer E, infer N>
-    ? VecView<E, N>
-    : F extends StaticStringToken<infer C>
-      ? C[number]
-      : F extends ObjectToken<infer T>
-        ? T
-        : never
+export type FieldValue<F extends FieldToken> = F extends FieldSpec<infer Inner>
+  ? FieldValue<Inner>
+  : F extends 'string'
+    ? string
+    : F extends ScalarToken
+      ? ScalarValue<F>
+      : F extends VecToken<infer E, infer N>
+        ? VecView<E, N>
+        : F extends StaticStringToken<infer C>
+          ? C[number]
+          : F extends ObjectToken<infer T>
+            ? T
+            : never
 
 // ---------------------------------------------------------------------------
 // §1.4 Runtime field descriptor (value-level layout contract)
@@ -138,8 +170,13 @@ export interface FieldDescriptor {
   readonly bytesPerElem: number
   /** Slots per row: 1 scalar, N vec, 1 staticString index, 0 object. */
   readonly stride: number
-  /** false for object-token; gates worker use. */
+  /** false for object-token AND 'string'; gates worker use. */
   readonly shareable: boolean
+  /**
+   * The sidecar kind for a non-column rich field; undefined for column-backed fields (rich-fields.md
+   * §2.3). RF-DESC: `ctor === null ⟺ rich !== undefined ⟺ shareable === false`.
+   */
+  readonly rich?: 'string' | 'object'
   readonly encode: (v: unknown) => number
   readonly decode: (slot: number) => unknown
   /** staticString only. */
@@ -165,15 +202,17 @@ export type Schema = Readonly<Record<string, FieldToken>>
 
 // §2.2 inferred views. ReadView is deeply readonly; WriteView is mutable; vec/object fields switch
 // their container readonly-ness through the per-token read/write fork (FieldValueRW).
-type FieldValueRW<F extends FieldToken, RW extends 'r' | 'w'> = F extends VecToken<infer E, infer N>
-  ? RW extends 'r'
-    ? ReadonlyVecView<E, N>
-    : VecView<E, N>
-  : F extends ObjectToken<infer T>
+type FieldValueRW<F extends FieldToken, RW extends 'r' | 'w'> = F extends FieldSpec<infer Inner>
+  ? FieldValueRW<Inner, RW>
+  : F extends VecToken<infer E, infer N>
     ? RW extends 'r'
-      ? Readonly<T>
-      : T
-    : FieldValue<F>
+      ? ReadonlyVecView<E, N>
+      : VecView<E, N>
+    : F extends ObjectToken<infer T>
+      ? RW extends 'r'
+        ? Readonly<T>
+        : T
+      : FieldValue<F>
 
 export type ReadView<S extends Schema> = { readonly [K in keyof S]: FieldValueRW<S[K], 'r'> }
 export type WriteView<S extends Schema> = { -readonly [K in keyof S]: FieldValueRW<S[K], 'w'> }

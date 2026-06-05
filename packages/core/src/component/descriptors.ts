@@ -67,6 +67,25 @@ function isZeroEquivalentDefault(d: unknown): boolean {
 }
 
 export function resolveDescriptor(name: string, token: FieldToken, userDefault?: unknown): FieldDescriptor {
+  // The free-form 'string' rich token MUST be matched before the scalar dispatch below (it is a
+  // `typeof === 'string'` value that scalarRow would reject as an unknown scalar token, rich-fields.md
+  // §3). Sidecar-backed: no column (ctor null), not shareable, identity encode/decode never invoked.
+  if (token === 'string') {
+    return {
+      name,
+      token,
+      ctor: null,
+      bytesPerElem: 0,
+      stride: 0,
+      shareable: false,
+      rich: 'string',
+      encode: (v) => v as unknown as number,
+      decode: (s) => s as unknown,
+      default: userDefault ?? '',
+      needsExplicitInit: false,
+    }
+  }
+
   if (typeof token === 'string') {
     const row = scalarRow(token)
     const def = userDefault ?? row.default
@@ -140,6 +159,7 @@ export function resolveDescriptor(name: string, token: FieldToken, userDefault?:
       bytesPerElem: 0,
       stride: 0,
       shareable: false,
+      rich: 'object',
       encode: (v) => v as unknown as number,
       decode: (s) => s as unknown,
       default: userDefault,

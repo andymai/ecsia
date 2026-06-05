@@ -42,6 +42,21 @@ export interface SerializeArchetype {
   readonly components: readonly SerializeComponentColumns[]
 }
 
+/**
+ * One rich (sidecar-backed) field across the registered component set (rich-fields.md §7.1). The
+ * snapshot/delta JSON sidecar section enumerates these — CRITICALLY independent of `SerializeArchetype`,
+ * because `archetypeView`/`SerializeComponentColumns` skip no-ColumnSet components and strip `ctor===null`
+ * fields, so a rich-ONLY component (e.g. `{ name: 'string' }`) never appears in `a.components` (G-4). The
+ * writer joins `a.signature ∩ richFields()` per entity rather than reading `a.components`.
+ */
+export interface SerializeRichField {
+  readonly componentId: ComponentId
+  /** The field's index in `def.fields` (declaration order) — parallel on producer + receiver (§4.2). */
+  readonly fieldIndex: number
+  readonly name: string
+  readonly kind: 'string' | 'object'
+}
+
 /** Component-registry metadata for the snapshot registry section (serialization.md §4.1). */
 export interface SerializeComponentMeta {
   readonly name: string
@@ -104,6 +119,31 @@ export interface SerializationSurface {
 
   /** Relation provider, or undefined in a relation-free world. */
   relations(): SerializeRelationProvider | undefined
+
+  // --- rich fields (rich-fields.md §7.1): the JSON sidecar section's enumeration + read/write ---
+  /**
+   * Rich-field descriptors across ALL registered components, in (componentId, fieldIndex) order. The
+   * snapshot/delta rich-value walk MUST use this, NOT `archetypes()[].components`, which cannot surface
+   * rich-only components (G-4). Empty in a world with no `'string'`/`object<T>` fields.
+   */
+  richFields(): readonly SerializeRichField[]
+  /**
+   * Read a live entity's rich value by (handle, componentId, fieldIndex). Returns the field default for a
+   * never-written / recycled slot (RF-HYGIENE). Returns `undefined` for an unknown column or dead handle.
+   */
+  richValueOf(handle: EntityHandle, componentId: ComponentId, fieldIndex: number): unknown
+  /**
+   * Whether a live entity has a WRITTEN rich value (vs the lazy default) at (handle, componentId,
+   * fieldIndex). The snapshot/delta writers emit only present values (rich-fields.md §7.2) — a
+   * default/empty slot is skipped and re-defaulted on the receiver.
+   */
+  richIsPresent(handle: EntityHandle, componentId: ComponentId, fieldIndex: number): boolean
+  /**
+   * Write a rich value on a deserialize/apply receiver. Routes through the sidecar AND `trackWrite` so the
+   * loaded value is change-tracked identically to a live write (a subsequent delta from the receiver picks
+   * it up). No-op for a dead handle / unknown column.
+   */
+  setRichValue(handle: EntityHandle, componentId: ComponentId, fieldIndex: number, value: unknown): void
 
   /**
    * Turn on the persistent structural journal (serialization.md §6.4): the since-T STRUCTURAL source a

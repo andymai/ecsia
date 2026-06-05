@@ -41,3 +41,35 @@ export const _s1: 'idle' | 'run' = rBody.state
 
 // A ComponentDef is assignable to the generic def (query/scheduler seam).
 export const _asDef: ComponentDef<PosSchema> = Position
+
+// --- Rich fields (rich-fields.md §2.2): 'string' types as string; object<T> read=Readonly<T>, write=T ---
+import { object, field } from '@ecsia/core'
+import type { ObjectToken } from '@ecsia/core'
+
+export const _rich1: FieldValue<'string'> = 'hello'
+export const _rich1b: string = _rich1
+// @ts-expect-error 'string' is not a number
+export const _rich1c: FieldValue<'string'> = 5
+export const _rich2: FieldValue<ObjectToken<{ tags: string[] }>> = { tags: ['a'] }
+
+// A FieldSpec wrapper unwraps to the inner token's value type.
+export const _rich3: FieldValue<typeof _wrappedToken> = 'x'
+const _wrappedToken = field('string', { default: 'd' })
+
+const Label = defineComponent({ text: 'string' }, { name: 'rich_label' })
+declare const rLabel: ReadOf<typeof Label>
+declare const wLabel: WriteOf<typeof Label>
+export const _rl1: string = rLabel.text
+wLabel.text = 'mutable on write'
+
+const Node = defineComponent({ meta: object<{ tags: string[] }>() }, { name: 'rich_node' })
+declare const rNode: ReadOf<typeof Node>
+declare const wNode: WriteOf<typeof Node>
+export const _rn1: Readonly<{ tags: string[] }> = rNode.meta
+export const _rn2: { tags: string[] } = wNode.meta
+wNode.meta = { tags: ['w'] } // re-assignable on write
+// @ts-expect-error the object<T> read fork is Readonly<T> (no top-level re-assign)
+rNode.meta = { tags: ['x'] }
+
+// A rich-field-bearing def is still assignable to the generic def.
+export const _asRichDef: ComponentDef<{ text: 'string' }> = Label

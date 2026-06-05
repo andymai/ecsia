@@ -8,3 +8,6 @@ export type { AccessorWorld, AccessorBinding, AccessorInstanceBase } from './acc
 
 export { buildColumnSet, bindAccessorRow } from './column-set.js'
 export type { ColumnSet, BuildColumnSetParams } from './column-set.js'
+
+export { SidecarStore, sidecarKey } from './sidecar.js'
+export type { SidecarKey, RichKind } from './sidecar.js'

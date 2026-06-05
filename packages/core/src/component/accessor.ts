@@ -21,12 +21,20 @@ import type {
 import type { Backing, ColumnLayout, TypedArray } from '../memory/index.js'
 import { columnKey, elementCtor } from '../memory/index.js'
 import type { ElementKind } from '../memory/index.js'
+import { sidecarKey } from './sidecar.js'
+import type { RichKind, SidecarKey } from './sidecar.js'
 
 // The seam the world hands the accessor: how a setter reports a tracked write. trackWrite is a
 // no-op stub until M5 (world.md §9.1 canonical signature); the call SITE is present and correct.
 export interface AccessorWorld {
   trackWrite(index: number, componentId: ComponentId, fieldIndex?: number): void
   handleIndex(handle: EntityHandle): number
+  // The rich-field seam (rich-fields.md §5.1): getters/setters for sidecar-backed fields delegate here
+  // so accessor.ts stays free of any direct sidecar/entity dependency (same discipline as trackWrite).
+  sidecarRead(key: SidecarKey, index: number, gen: number): unknown
+  sidecarWrite(key: SidecarKey, index: number, gen: number, value: unknown): void
+  /** Low generationBits of the live handle at `index` — the RF-HYGIENE stamp source. */
+  generationOf(index: number): number
 }
 
 // The per-(archetype, component) binding context the world/storage builds. M3 owns binding this
@@ -62,6 +70,15 @@ interface FieldPlan {
   readonly isVec: boolean
 }
 
+// A sidecar-backed (rich) field's plan — installed as a getter/setter pair targeting the SidecarStore,
+// independent of the column binding (rich-fields.md §5.2 option b). The column-count assert is unchanged.
+interface RichPlan {
+  readonly fieldIndex: number
+  readonly name: string
+  readonly rich: RichKind
+  readonly sidecarKey: SidecarKey
+}
+
 function columnElementOf(f: FieldDescriptor): ElementKind {
   const ctor = f.ctor
   if (ctor === Float32Array) return 'f32'
@@ -76,14 +93,14 @@ function columnElementOf(f: FieldDescriptor): ElementKind {
   throw new Error('unsupported column element ctor')
 }
 
-function planFields(def: ComponentDef<Schema>): FieldPlan[] {
-  const plans: FieldPlan[] = []
+function planFields(def: ComponentDef<Schema>): { columnPlans: FieldPlan[]; richPlans: RichPlan[] } {
+  const columnPlans: FieldPlan[] = []
+  const richPlans: RichPlan[] = []
+  const componentId = def.id as ComponentId as unknown as number
   let fieldIndex = 0
   for (const f of def.fields as readonly FieldDescriptor[]) {
-    // object<T> contributes no column (§3.8); skipped from the column-bound plan but its field
-    // index is still consumed so column keys stay stable across the field set.
     if (f.ctor !== null) {
-      plans.push({
+      columnPlans.push({
         fieldIndex,
         name: f.name,
         stride: f.stride,
@@ -92,10 +109,14 @@ function planFields(def: ComponentDef<Schema>): FieldPlan[] {
         decode: f.decode,
         isVec: f.stride > 1,
       })
+    } else if (f.rich !== undefined) {
+      // Rich (sidecar-backed) field: gets a getter/setter pair targeting the sidecar (rich-fields.md
+      // §5.2/§5.3). Its field index is still consumed so column keys stay stable across the field set.
+      richPlans.push({ fieldIndex, name: f.name, rich: f.rich, sidecarKey: sidecarKey(componentId, fieldIndex) })
     }
     fieldIndex += 1
   }
-  return plans
+  return { columnPlans, richPlans }
 }
 
 // Build the per-(archetype, component) ColumnBinding[] for a column set the caller allocated. The
@@ -114,10 +135,12 @@ export function bindingsFor(
 const AXIS_NAMES = ['x', 'y', 'z', 'w'] as const
 
 export function makeAccessorFactory<S extends Schema>(def: ComponentDef<S>): AccessorFactory<S> {
-  const plans = planFields(def as ComponentDef<Schema>)
+  const { columnPlans: plans, richPlans } = planFields(def as ComponentDef<Schema>)
   const componentId = def.id as ComponentId
 
   return ((columns: ReadonlyArray<ColumnBinding>) => {
+    // The assert counts ONLY column-bearing plans (rich-fields.md §5.2 option b): a rich-only or mixed
+    // component binds against its column subset, and the rich getters install independently below.
     if (columns.length !== plans.length) {
       throw new Error(`accessor factory for '${def.name}': expected ${plans.length} columns, got ${columns.length}`)
     }
@@ -201,6 +224,32 @@ export function makeAccessorFactory<S extends Schema>(def: ComponentDef<S>): Acc
           },
         })
       }
+    })
+
+    // Rich (sidecar-backed) getters/setters (rich-fields.md §5.3). The getter returns the live JS
+    // reference (string primitive / object<T>); the setter writes the sidecar slot AND routes through
+    // the SAME field-granular trackWrite numeric setters use, so Changed/observers fire identically
+    // (RF-CHANGED). In-place mutation of an object<T> reference is NOT tracked — only re-assignment is.
+    richPlans.forEach((plan) => {
+      const key = plan.sidecarKey
+      const fieldIndex = plan.fieldIndex
+      Object.defineProperty(Accessor.prototype, plan.name, {
+        enumerable: true,
+        configurable: true,
+        get(this: Accessor): unknown {
+          const b = this.__binding
+          if (b === null) return undefined
+          const idx = b.world.handleIndex(this.__eid)
+          return b.world.sidecarRead(key, idx, b.world.generationOf(idx))
+        },
+        set(this: Accessor, value: unknown): void {
+          const b = this.__binding
+          if (b === null) return
+          const idx = b.world.handleIndex(this.__eid)
+          b.world.sidecarWrite(key, idx, b.world.generationOf(idx), value)
+          b.world.trackWrite(idx, componentId, fieldIndex)
+        },
+      })
     })
 
     return Accessor as unknown as new () => never

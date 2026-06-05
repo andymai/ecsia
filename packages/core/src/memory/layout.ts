@@ -123,6 +123,8 @@ function isObjectToken(t: FieldToken): boolean {
 export function tokenToColumnLayout(token: FieldToken, fillOnInit = 0): ColumnLayout | null {
   if (typeof token === 'string') {
     if (isObjectToken(token)) return null
+    // The 'string' rich token projects to no column, like object<T> (rich-fields.md §3).
+    if (token === 'string') return null
     const element = SCALAR_ELEMENT[token]
     if (element === undefined) throw new Error(`unknown scalar token: ${token}`)
     return makeColumnLayout(element, 1, fillOnInit)

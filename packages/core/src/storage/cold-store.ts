@@ -62,7 +62,9 @@ export function blockFor(cold: ColdStore, c: ComponentId, deps: ColdDeps): Colum
   const def = deps.defOf(c)
   if (def === undefined) return null
   const rt = def as ComponentRuntime<Schema>
-  if (rt.columnLayouts.length === 0) return null // tag: pure membership, no cold columns
+  // Pure tag: no cold block. A rich-only/mixed component DOES get one so its accessor (carrying the
+  // sidecar getters) is resolvable cold; the 0-column block allocates no column storage (rich-fields.md).
+  if (rt.columnLayouts.length === 0 && !rt.hasRichFields) return null
   block = buildColumnSet({
     buffers: deps.buffers,
     archetypeId: COLD_ARCHETYPE_ID,

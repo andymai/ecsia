@@ -30,6 +30,8 @@ export interface ComponentRuntime<S extends Schema> extends ComponentDef<S> {
   readonly columnLayouts: readonly ColumnLayout[]
   readonly defKind: DefKind
   readonly restrictedToMainThread: boolean
+  /** True iff the component carries >=1 rich (sidecar-backed) field (rich-fields.md §4.6). */
+  readonly hasRichFields: boolean
 }
 
 const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/
@@ -52,7 +54,16 @@ function validateSchema(schema: Schema): void {
   }
 }
 
+function isFieldSpec(token: unknown): token is { __fieldSpec: true; token: FieldToken; default: unknown } {
+  return typeof token === 'object' && token !== null && (token as { __fieldSpec?: unknown }).__fieldSpec === true
+}
+
 function validateToken(name: string, token: FieldToken): void {
+  // A FieldSpec wrapper carries a user default; validate its inner token (rich-fields.md §3.1 / G-1).
+  if (isFieldSpec(token)) {
+    validateToken(name, token.token)
+    return
+  }
   if (typeof token === 'string') return
   if (typeof token !== 'object' || token === null) {
     throw new Error(`defineComponent: field '${name}' is not a valid field token`)
@@ -109,7 +120,12 @@ export function defineComponent<
 
   const fields: FieldDescriptor[] = []
   for (const name of Object.keys(schema)) {
-    fields.push(resolveDescriptor(name, schema[name] as FieldToken))
+    const raw = schema[name] as FieldToken
+    if (isFieldSpec(raw)) {
+      fields.push(resolveDescriptor(name, raw.token, raw.default))
+    } else {
+      fields.push(resolveDescriptor(name, raw))
+    }
   }
 
   const isTag = fields.length === 0
@@ -125,6 +141,7 @@ export function defineComponent<
   }
 
   const restrictedToMainThread = fields.some((f) => !f.shareable)
+  const hasRichFields = fields.some((f) => f.rich !== undefined)
 
   const def = {
     schema,
@@ -134,6 +151,7 @@ export function defineComponent<
     columnLayouts: Object.freeze(columnLayouts),
     defKind: 'component' as const,
     restrictedToMainThread,
+    hasRichFields,
   } as ComponentRuntime<S>
 
   // `id` and `accessorFactory` are the only mutable fields — the registry's single commit point
