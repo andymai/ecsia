@@ -1,0 +1,27 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "plugin": ["typedoc-plugin-markdown"],
+  "tsconfig": "./tsconfig.typedoc.json",
+  "entryPointStrategy": "resolve",
+  "entryPoints": [
+    "packages/ecsia/src/index.ts",
+    "packages/three/src/index.ts",
+    "packages/devtools/src/index.ts"
+  ],
+  "out": "website/reference",
+  "readme": "none",
+  "githubPages": false,
+  "hideGenerator": true,
+  "excludeInternal": true,
+  "excludePrivate": true,
+  "excludeExternals": true,
+  "skipErrorChecking": true,
+  "sort": ["source-order"],
+  "entryFileName": "index",
+  "hidePageHeader": true,
+  "useCodeBlocks": true,
+  "expandObjects": true,
+  "parametersFormat": "table",
+  "sanitizeComments": true,
+  "useHTMLEncodedBrackets": true
+}

@@ -1,0 +1,32 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "types": ["node", "three"],
+    "baseUrl": ".",
+    "paths": {
+      "@ecsia/ecsia": ["packages/ecsia/src/index.ts"],
+      "@ecsia/core": ["packages/core/src/index.ts"],
+      "@ecsia/schema": ["packages/schema/src/index.ts"],
+      "@ecsia/relations": ["packages/relations/src/index.ts"],
+      "@ecsia/scheduler": ["packages/scheduler/src/index.ts"],
+      "@ecsia/serialization": ["packages/serialization/src/index.ts"],
+      "@ecsia/three": ["packages/three/src/index.ts"],
+      "@ecsia/devtools": ["packages/devtools/src/index.ts"]
+    }
+  },
+  "include": [
+    "packages/ecsia/src/**/*",
+    "packages/three/src/**/*",
+    "packages/devtools/src/**/*",
+    "packages/core/src/**/*",
+    "packages/schema/src/**/*",
+    "packages/relations/src/**/*",
+    "packages/scheduler/src/**/*",
+    "packages/serialization/src/**/*"
+  ]
+}
