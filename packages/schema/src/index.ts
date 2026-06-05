@@ -506,6 +506,20 @@ export interface QueryChunk {
   stride<S extends Schema>(def: ComponentDef<S>, field: string): number
 }
 
+// The derived-query result: combined arity within MAX_QUERY_ARITY stays fully inferred; past the
+// cap it degrades to the typed LooseQuery — the same 1..8 / 9+ split as the WorldQuery family.
+export type DerivedQuery<Terms extends readonly QueryTerm[]> = Terms['length'] extends
+  | 1
+  | 2
+  | 3
+  | 4
+  | 5
+  | 6
+  | 7
+  | 8
+  ? Query<Terms>
+  : LooseQuery
+
 // (runtime side lands in @ecsia/core; this fixes the typed shape).
 export interface Query<Terms extends readonly QueryTerm[]> {
   readonly terms: Terms
@@ -525,6 +539,47 @@ export interface Query<Terms extends readonly QueryTerm[]> {
       factory: (views: ColumnViews<Specs>, meta: BoundColumnsMeta) => () => void,
     ]
   ): () => void
+  /**
+   * Derive a narrower query: the cached query for [...this query's terms, ...terms] — pure sugar
+   * over `world.query` with the merged term list, riding the same canonical-hash dedup (deriving
+   * is reference-identical to writing the combined query directly). Flavors are per cached query,
+   * NOT inherited from this one. Combined arity past MAX_QUERY_ARITY degrades to LooseQuery.
+   */
+  derive(): this
+  derive<N0 extends QueryTerm>(...terms: [N0]): DerivedQuery<[...Terms, N0]>
+  derive<N0 extends QueryTerm, N1 extends QueryTerm>(...terms: [N0, N1]): DerivedQuery<[...Terms, N0, N1]>
+  derive<N0 extends QueryTerm, N1 extends QueryTerm, N2 extends QueryTerm>(
+    ...terms: [N0, N1, N2]
+  ): DerivedQuery<[...Terms, N0, N1, N2]>
+  derive<N0 extends QueryTerm, N1 extends QueryTerm, N2 extends QueryTerm, N3 extends QueryTerm>(
+    ...terms: [N0, N1, N2, N3]
+  ): DerivedQuery<[...Terms, N0, N1, N2, N3]>
+  derive<N0 extends QueryTerm, N1 extends QueryTerm, N2 extends QueryTerm, N3 extends QueryTerm, N4 extends QueryTerm>(
+    ...terms: [N0, N1, N2, N3, N4]
+  ): DerivedQuery<[...Terms, N0, N1, N2, N3, N4]>
+  derive<
+    N0 extends QueryTerm,
+    N1 extends QueryTerm,
+    N2 extends QueryTerm,
+    N3 extends QueryTerm,
+    N4 extends QueryTerm,
+    N5 extends QueryTerm,
+  >(
+    ...terms: [N0, N1, N2, N3, N4, N5]
+  ): DerivedQuery<[...Terms, N0, N1, N2, N3, N4, N5]>
+  derive<
+    N0 extends QueryTerm,
+    N1 extends QueryTerm,
+    N2 extends QueryTerm,
+    N3 extends QueryTerm,
+    N4 extends QueryTerm,
+    N5 extends QueryTerm,
+    N6 extends QueryTerm,
+  >(
+    ...terms: [N0, N1, N2, N3, N4, N5, N6]
+  ): DerivedQuery<[...Terms, N0, N1, N2, N3, N4, N5, N6]>
+  /** 8+ new terms: combined arity is necessarily past the cap → LooseQuery (the catch-all). */
+  derive(...terms: QueryTerm[]): LooseQuery
   /** Flavor declarations (chainable). */
   added(): this
   removed(): this
@@ -558,6 +613,8 @@ export interface LooseQuery {
       factory: (views: ColumnViews<Specs>, meta: BoundColumnsMeta) => () => void,
     ]
   ): () => void
+  /** See {@link Query.derive}. Arity is already past the cap, so the result stays loose. */
+  derive(...terms: QueryTerm[]): LooseQuery
   /** Flavor declarations (chainable). */
   added(): this
   removed(): this

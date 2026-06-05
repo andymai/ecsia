@@ -77,7 +77,7 @@ export class QueryEngine {
     const denseKey = `query.${id}.dense` as RegionKey
     const sparseKey = `query.${id}.sparse` as RegionKey
     const current = new SparseSetU32(this.#deps.buffers, denseKey, sparseKey, 64, this.#deps.maxEntities)
-    const lq = new LiveQuery(compiled, terms, current, this.#deps.byId, this.#deps)
+    const lq = new LiveQuery(compiled, terms, current, this.#deps.byId, this.#deps, (t) => this.query(t))
     lq.ensureValueSignature(compiled)
     if (this.#reactivity !== null) lq.__setReactivity(this.#reactivity)
 

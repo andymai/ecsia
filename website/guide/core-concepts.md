@@ -107,6 +107,35 @@ match without (or optionally) binding accessors.
 For the rare loop that needs every nanosecond, queries also offer a bind-once fast path,
 [`bindColumns`](/guide/performance#bind-your-loop-once-bindcolumns) — the
 [performance page](/guide/performance) covers it.
+### Deriving narrower queries
+
+`query.derive(...terms)` builds the query for *this query's terms plus the new ones*.
+It's pure sugar over `world.query` with the merged term list: queries are cached by
+their term set, so deriving hands you the exact same object as writing the combined
+query directly — no extra matching work, and derived queries chain.
+
+```ts
+import { createWorld, defineComponent, read, write } from 'ecsia'
+
+const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
+const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
+const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
+const world = createWorld({ components: [Position, Velocity, Health], maxEntities: 1 << 16 })
+
+const moving = world.query(read(Velocity), write(Position))
+const movingMortals = moving.derive(read(Health))
+
+// Identical to writing the combined query yourself — same cached query object:
+movingMortals === world.query(read(Velocity), write(Position), read(Health)) // true
+
+for (const e of movingMortals) {
+  e.position.x += e.velocity.dx
+  e.health.hp                     // the derived term is bound and typed too
+}
+```
+
+Filters like `.added()` / `.changed()` belong to the combined query you derived, not to
+the query you derived it from — declare them on the result.
 
 ## Systems
 

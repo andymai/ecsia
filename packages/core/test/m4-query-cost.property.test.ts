@@ -144,8 +144,10 @@ describe('HASH-DISC distinct constraints hash differently (no collisions)', () =
                 (r.role === 'read' ? 'P' : r.role === 'with' ? 'M' : r.role === 'without' ? 'N' : 'O') +
                 ':' +
                 (r.comp % universe)
-              const baseKeys = [...baseRaw.map(key)].sort().join('|')
-              const mutKeys = [...baseRaw.map((r, i) => (i === 0 ? key(swapRole(r)) : key(r)))].sort().join('|')
+              // canonicalHash dedupes identical parts (queries.md §4.1), so two lists that are
+              // equal AS SETS legitimately hash identically — the oracle compares sets, not multisets.
+              const baseKeys = [...new Set(baseRaw.map(key))].sort().join('|')
+              const mutKeys = [...new Set(baseRaw.map((r, i) => (i === 0 ? key(swapRole(r)) : key(r))))].sort().join('|')
               if (baseKeys !== mutKeys) {
                 expect(compileQuery(mutated, ctx).hash).not.toBe(baseHash)
               }

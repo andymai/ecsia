@@ -102,6 +102,7 @@ export type {
   ColumnViewOf,
   ColumnViews,
   BoundColumnsMeta,
+  DerivedQuery,
   Has,
   HasWrite,
   RelationDef,
