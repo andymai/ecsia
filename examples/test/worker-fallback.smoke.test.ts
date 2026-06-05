@@ -1,16 +1,16 @@
-// M12 worker example — the no-silent-failure threading gate (public-api.md §7, PA-4). The worker-sim
+// Worker example — the no-silent-failure threading gate. The worker-sim
 // example's main() runs the SAME disjoint-write workload under two transports:
 //
 //   SAB lane          (parallel: true)  — threaded:true + scheduler.workers:2, driven by the in-process
 //                                          RoundDispatcher the example ships (the wave/round/dispatch path
-//                                          a real WorkerPool parallelizes; PA-4 says the user code is the
+//                                          a real WorkerPool parallelizes; the contract is that user code is the
 //                                          same shape regardless of transport).
 //   single-thread     (parallel: false) — the v1 baseline serial executor.
 //
 // This file ADDS the third documented lane — the no-SAB fallback — and proves it is NOT a
 // silent failure: `createWorld({ threaded:true, scheduler:{ workers:'no-sab' } })` builds a
 // correct world and the identical workload through the threaded frame loop reproduces the single-thread
-// result byte-for-byte (public-api.md §7 "Never silent"). Run twice for stability (the task's gate).
+// result byte-for-byte (never silent). Run twice for stability.
 
 import { describe, expect, test } from 'vitest'
 import {
@@ -119,7 +119,7 @@ function runSingleThread(opts: { perGroup: number; ticks: number; seed: number }
 }
 
 // The threaded lane (no-sab OR explicit numeric pool): identical workload, awaited frame
-// loop, driven by an in-process RoundDispatcher (PA-4: the dispatcher is the transport, not a code shape).
+// loop, driven by an in-process RoundDispatcher (the dispatcher is the transport, not a code shape).
 async function runThreaded(opts: {
   perGroup: number
   ticks: number
@@ -228,7 +228,7 @@ async function runThreaded(opts: {
   return { totalEnergy: energy, built }
 }
 
-describe('worker example: SAB lane vs fallback lanes — identical results, never silent (PA-4, §7)', () => {
+describe('worker example: SAB lane vs fallback lanes — identical results, never silent', () => {
   test('SAB-lane (example main, threaded:true) === single-thread fallback (run twice for stability)', async () => {
     for (let pass = 0; pass < 2; pass++) {
       const sab = await workerSim({ perGroup: 256, ticks: 40, parallel: true, seed: 11 })
@@ -250,7 +250,7 @@ describe('worker example: SAB lane vs fallback lanes — identical results, neve
       // Never silent: the threaded:true + no-SAB request still builds a correct world...
       expect(fallback.built).toBe(true)
       expect(single.built).toBe(true)
-      // ...and the workload reproduces the single-thread answer exactly (PA-4).
+      // ...and the workload reproduces the single-thread answer exactly.
       expect(fallback.totalEnergy).toBeCloseTo(single.totalEnergy, 5)
       expect(fallback.totalEnergy).toBeGreaterThan(0)
       expect(Number.isFinite(fallback.totalEnergy)).toBe(true)

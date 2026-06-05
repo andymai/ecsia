@@ -1,4 +1,4 @@
-// M12 EXECUTION-BACKED threaded smoke (review medium #6 / public-api.md §7, PA-4). The other worker
+// Execution-backed threaded smoke. The other worker
 // smoke tests drive scheduler.updateThreaded with an IN-PROCESS RoundDispatcher — they exercise the
 // wave/round/dispatch frame loop but NOT a real OS-thread pool. This test closes that gap: it stands up
 // the genuine @ecsia/scheduler WorkerPool (node:worker_threads + Atomics wave-sync) and drives a real
@@ -6,9 +6,9 @@
 // single-thread executor's column state byte-for-byte. So the umbrella's "genuinely runs threaded"
 // claim is backed by EXECUTION on real threads, not by construction.
 //
-// Reuses the built worker-entry (dist) + the M7 kernel fixture (a .mjs a raw worker_threads Worker can
+// Reuses the built worker-entry (dist) + the scheduler's kernel fixture (a .mjs a raw worker_threads Worker can
 // load without a TS transform), exactly as packages/scheduler/test/m7-threaded-update.integration.test.ts
-// does — the same real-pool path, now reached at the M12 integration level.
+// does — the same real-pool path, reached from the umbrella's public surface.
 
 import { fileURLToPath } from 'node:url'
 import { describe, expect, test, afterEach } from 'vitest'
@@ -46,7 +46,7 @@ function seed(threaded: boolean, workers: number, n: number) {
   return { world, Health, Mana, handles }
 }
 
-describe('M12 worker example genuinely runs threaded on a REAL WorkerPool (execution-backed PA-4)', () => {
+describe('worker example genuinely runs threaded on a REAL WorkerPool', () => {
   test('disjoint-write wave on real OS threads reproduces the single-thread column state', async () => {
     const N = 32
     const FRAMES = 3

@@ -1,4 +1,4 @@
-// M12 over-cap query escape hatch (review specGap / public-api.md §4.4, PA-6). MAX_QUERY_ARITY = 8;
+// Over-cap query escape hatch. MAX_QUERY_ARITY = 8;
 // past it the per-element tuple inference degrades to a typed LooseQueryElement — NEVER `any`. The
 // other suites only validate the cap at the TYPE level; this one EXERCISES a 9-term query at runtime
 // through the umbrella and proves the degraded element is still typed (the Has<C>/HasWrite<C>
@@ -20,7 +20,7 @@ const H = defineComponent({ v: 'f32' }, { name: 'wq_h' })
 const I = defineComponent({ v: 'f32' }, { name: 'wq_i' })
 const J = defineComponent({ v: 'f32' }, { name: 'wq_j' })
 
-describe('M12 over-cap query: a 9-term query degrades to a TYPED element, never `any` (PA-6)', () => {
+describe('over-cap query: a 9-term query degrades to a TYPED element, never `any`', () => {
   test(`MAX_QUERY_ARITY is 8 and a 9-term query runs + reads typed fields via the annotation escape hatch`, () => {
     expect(MAX_QUERY_ARITY).toBe(8)
 

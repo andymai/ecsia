@@ -1,4 +1,4 @@
-// Example: boids flocking bound to real THREE.js objects (P4). This is the @ecsia/three bridge end to
+// Example: boids flocking bound to real THREE.js objects. This is the @ecsia/three bridge end to
 // end — the SAME flocking sim as boids.ts, but each boid is mirrored into a THREE.Object3D AND a
 // THREE.InstancedMesh every frame. Everything runs HEADLESS: we use three's math + scene-graph core
 // only (Object3D/InstancedMesh/Matrix4), never a WebGLRenderer, so it runs in Node with no GPU.

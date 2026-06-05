@@ -6,7 +6,7 @@
 //
 // Design latitude (the "demonstrates the parallel path" gate): a real @ecsia/scheduler WorkerPool
 // needs a built worker-entry module + SAB-shared columns + a cross-origin-isolated host, which is
-// brittle to spin up inside a smoke test. The spec's parallel-readiness contract (public-api.md PA-4)
+// brittle to spin up inside a smoke test. The parallel-readiness contract
 // is that the SAME user code runs under an in-process dispatcher and an OS-thread pool — the mode is a
 // dispatcher choice, not a code-shape change. This example therefore drives updateThreaded with an
 // IN-PROCESS RoundDispatcher that runs each disjoint worker batch's kernel directly. It exercises the
@@ -69,7 +69,7 @@ export async function main(opts: WorkerSimOptions = {}): Promise<WorkerSimResult
   // Per-call defs (component ids are world-scoped). Two groups with DISJOINT component sets so their
   // update systems have disjoint write-sets ⇒ they share one schedule wave and split into two worker
   // batches. VelocityX is BOTH read+write because the gravity term writes velocity (honest to the
-  // scheduler, Must-Fix #2).
+  // scheduler).
   const PositionA = defineComponent({ x: 'f32', y: 'f32' }, { name: 'positionA' })
   const VelocityA = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocityA' })
   const PositionB = defineComponent({ x: 'f32', y: 'f32' }, { name: 'positionB' })

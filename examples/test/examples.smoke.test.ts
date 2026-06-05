@@ -1,4 +1,4 @@
-// The "examples run green in CI" gate (build-plan.md M12). Each example's main() is imported through
+// The "examples run green in CI" gate. Each example's main() is imported through
 // ecsia and asserted to run + produce the expected observable end state. These are smoke tests:
 // they prove the umbrella surface wires up boids (components + movement + scheduler), the scene-graph
 // hierarchy (ChildOf exclusive relation + transform propagation + depthOf), and the worker-parallel

@@ -1,5 +1,5 @@
 // Example: a scene-graph hierarchy. A `ChildOf` EXCLUSIVE relation (one parent per node) wires the
-// tree; a transform-propagation pass walks nodes in depth order (relations.md depthOf) so a child's
+// tree; a transform-propagation pass walks nodes in depth order so a child's
 // world transform = parent world transform ∘ local transform. Demonstrates the first-class relations
 // runtime (createRelations), exclusive-relation re-target without archetype churn, depthOf, and
 // targetsOf for parent resolution — all through the ecsia umbrella.
@@ -71,7 +71,7 @@ export function main(opts: SceneGraphOptions = {}): SceneGraphResult {
   for (const { h, depth } of order) {
     if (depth > maxDepth) maxDepth = depth
 
-    // The EntityRef + its accessors are pooled per-world (public-api.md §4.1): a later world.entity()
+    // The EntityRef + its accessors are pooled per-world: a later world.entity()
     // call rebinds the SAME singleton to a new row, and the stale-ref guard now THROWS if you read a
     // ref after it rebound. So resolve every input to PLAIN NUMBERS before binding the next view —
     // never hold two live accessors across a world.entity() call.
