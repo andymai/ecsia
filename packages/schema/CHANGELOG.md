@@ -3,6 +3,13 @@
 ## [0.1.0](https://github.com/andymai/ecsia/compare/schema-v0.1.0...schema-v0.1.0) (2026-06-05)
 
 
+### Features
+
+* pinned-columns API (bindColumns) — bind-once loops that out-iterate bitECS ([#8](https://github.com/andymai/ecsia/issues/8)) ([2ff5b5a](https://github.com/andymai/ecsia/commit/2ff5b5a039b4201f15bbcad9bfada70ed3c9deb4))
+
+## [0.1.0](https://github.com/andymai/ecsia/compare/schema-v0.1.0...schema-v0.1.0) (2026-06-05)
+
+
 ### ⚠ BREAKING CHANGES
 
 * rename umbrella package to 'ecsia'; prepare 0.1.0
