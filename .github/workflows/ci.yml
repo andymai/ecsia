@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Node >=20 for resizable SharedArrayBuffer + Atomics.waitAsync.
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build (tsc -b, all packages)
+        run: pnpm build
+
+      - name: Type-check examples + bench
+        run: pnpm typecheck:extras
+
+      - name: Test (unit + property + worker + type-level)
+        run: pnpm test
