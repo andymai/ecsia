@@ -423,6 +423,76 @@ export type LooseQueryElement = Readonly<Record<string, Readonly<Record<string, 
   handle: EntityHandle
 }
 
+// ---------------------------------------------------------------------------
+// bindColumns (pinned columns): [ComponentDef, fieldName] specs → typed-array view tuple.
+// Each spec's view type is resolved from its field token through the SAME token→ctor table the
+// runtime uses (descriptors.ts SCALAR_ROWS) — keep the two in sync. vec fields resolve to their
+// ELEMENT array type (the raw view; row r occupies [r*stride, (r+1)*stride)). staticString stores a
+// choice INDEX whose width depends on the runtime choice count, so it degrades to the ctor union.
+// ---------------------------------------------------------------------------
+
+type ScalarColumnView<T extends ScalarToken> = T extends 'f32'
+  ? Float32Array
+  : T extends 'f64'
+    ? Float64Array
+    : T extends 'i8'
+      ? Int8Array
+      : T extends 'bool' | 'u8'
+        ? Uint8Array
+        : T extends 'u8c'
+          ? Uint8ClampedArray
+          : T extends 'i16'
+            ? Int16Array
+            : T extends 'u16'
+              ? Uint16Array
+              : T extends 'i32' | 'eid'
+                ? Int32Array
+                : T extends 'u32'
+                  ? Uint32Array
+                  : never
+
+export type ColumnViewOf<F extends FieldToken> = TokenOf<F> extends infer T
+  ? T extends ScalarToken
+    ? ScalarColumnView<T>
+    : T extends VecToken<infer E, number>
+      ? ScalarColumnView<E>
+      : T extends StaticStringToken<readonly string[]>
+        ? Uint8Array | Uint16Array | Uint32Array
+        : never
+  : never
+
+/** The column-backed field names of a schema ('string'/object fields carry no column). */
+export type ColumnFieldName<S extends Schema> = {
+  [K in keyof S & string]: TokenOf<S[K]> extends 'string' | ObjectToken<unknown> ? never : K
+}[keyof S & string]
+
+/** One pinned-column spec: a `[ComponentDef, fieldName]` pair. */
+export type ColumnSpec = readonly [ComponentDef<Schema>, string]
+
+/**
+ * Per-element constraint (the SpawnArgFor pattern): re-type each spec's field slot as the
+ * column-backed field names of THAT spec's component, so `[Position, 'nope']` is a compile error.
+ */
+export type ColumnSpecFor<P> = P extends readonly [infer C, string]
+  ? C extends ComponentDef<infer S>
+    ? readonly [C, ColumnFieldName<S>]
+    : P
+  : P
+
+/** The factory's `views` tuple: each spec's field token resolved to its typed-array view type. */
+export type ColumnViews<Specs extends readonly ColumnSpec[]> = {
+  [I in keyof Specs]: Specs[I] extends readonly [ComponentDef<infer S>, infer F]
+    ? F extends keyof S
+      ? ColumnViewOf<S[F]>
+      : never
+    : never
+}
+
+/** The per-binding meta box: identity-stable across rebinds; `count` is the live row count. */
+export interface BoundColumnsMeta {
+  readonly count: number
+}
+
 // One reused chunk per matched hot archetype exposing raw SoA
 // columns + a row span. The runtime class lands in @ecsia/core; this fixes the structural shape.
 export interface QueryChunk {
@@ -445,6 +515,16 @@ export interface Query<Terms extends readonly QueryTerm[]> {
   /** Opt-in SoA fast path: one reused {@link QueryChunk} per matched hot archetype, with
    * raw typed column views + a row span. Bypasses the per-row accessor AND the reactivity write log. */
   eachChunk(fn: (chunk: QueryChunk) => void): void
+  /** Pinned columns: resolve each `[ComponentDef, field]` spec's column views ONCE per matched hot
+   * archetype, invoke `factory(views, meta)` to mint a persistent zero-argument runner, and return a
+   * `run()` that re-checks the bindings and runs each archetype's runner. See the runtime doc on the
+   * core LiveQuery for the full contract (zero-arg runner, `meta.count`, invalidation, caveats). */
+  bindColumns<const Specs extends readonly ColumnSpec[]>(
+    ...args: [
+      ...specs: { [I in keyof Specs]: ColumnSpecFor<Specs[I]> },
+      factory: (views: ColumnViews<Specs>, meta: BoundColumnsMeta) => () => void,
+    ]
+  ): () => void
   /** Flavor declarations (chainable). */
   added(): this
   removed(): this
@@ -471,6 +551,13 @@ export interface LooseQuery {
   [Symbol.iterator](): Iterator<LooseQueryElement>
   /** Opt-in SoA fast path: see {@link Query.eachChunk}. */
   eachChunk(fn: (chunk: QueryChunk) => void): void
+  /** Pinned columns: see {@link Query.bindColumns}. */
+  bindColumns<const Specs extends readonly ColumnSpec[]>(
+    ...args: [
+      ...specs: { [I in keyof Specs]: ColumnSpecFor<Specs[I]> },
+      factory: (views: ColumnViews<Specs>, meta: BoundColumnsMeta) => () => void,
+    ]
+  ): () => void
   /** Flavor declarations (chainable). */
   added(): this
   removed(): this

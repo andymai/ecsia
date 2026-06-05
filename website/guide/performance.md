@@ -26,12 +26,15 @@ cost, not garbage collection.
   contiguous array (a column), a layout called Structure-of-Arrays (SoA). `eachChunk` hands you those
   raw typed-array columns plus a row span, and the loop indexes `Float32Array` directly — bypassing
   the per-row accessor and the reactivity write-log push.
+- **ecsia `bindColumns`** — the bind-once fast path: the same raw columns as `eachChunk`, but resolved
+  once up front instead of on every call, so the engine can compile the loop with them baked in. See
+  [Bind your loop once](#bind-your-loop-once-bindcolumns) below.
 - **miniplex** — array-of-objects iteration.
-- **bitECS** — a raw SoA loop over a flat query result. The reference single-thread ceiling.
+- **bitECS** — a raw SoA loop over a flat query result. The reference single-thread baseline.
 
-Before timing, the harness cross-validates one full step of `eachChunk` against `.each` at the bench's
-own N (which crosses the 1024-row column-growth boundary). A fast-but-wrong cursor fails the run
-instead of silently reporting a misleading number.
+Before timing, the harness cross-validates one full step of `eachChunk` and of `bindColumns` against
+`.each` at the bench's own N (which crosses the 1024-row column-growth boundary). A fast-but-wrong
+loop fails the run instead of silently reporting a misleading number.
 
 **Why per-entity work matters for the speedup bench.** The worker-pool bench is not a toy doing
 trivial arithmetic per entity. Each entity runs an iterated damped-oscillator integrator (a small
@@ -59,15 +62,20 @@ number.
 
 ## Honest analysis
 
-- **bitECS wins raw single-thread iteration.** Its flat SoA loop is the ceiling for a JavaScript ECS,
-  and we do not pretend otherwise. If your entire workload is one tight integrate loop on a single
-  thread, bitECS is the fastest tool here.
+- **bitECS wins the default-path comparison.** Its flat SoA loop out-iterates both `.each` and
+  `eachChunk`, and we do not pretend otherwise. If your entire workload is one tight integrate loop
+  on a single thread and you never reach for `bindColumns`, bitECS is the fastest tool here.
+- **ecsia `bindColumns` edges ahead of bitECS** on this bench. Once the loop is bound, it is the same
+  raw-typed-array shape bitECS uses with one less indirection — ecsia walks its rows densely where
+  bitECS indexes through an entity list. The edge comes with homework: keep the loop closure
+  persistent and pre-size before binding. See
+  [Bind your loop once](#bind-your-loop-once-bindcolumns).
 - **ecsia `.each` beats miniplex.** The ergonomic accessor path — proxies, write-log awareness, and
   all — still out-iterates miniplex's array-of-objects walk. You do not pay for ecsia's ergonomics by
   dropping below the closest ergonomic competitor.
-- **ecsia `eachChunk` lands within ~1.4× of bitECS on a modern V8** (and on some machines/runs edges
-  *ahead*, because it is the same raw-typed-array shape bitECS uses). The column cursor is the answer
-  when a hot loop needs bitECS-class throughput without leaving ecsia's type-safe storage.
+- **ecsia `eachChunk` lands within ~1.4× of bitECS on a modern V8.** The column cursor re-resolves
+  its columns every call — that re-resolution is what keeps it safe under storage growth with zero
+  setup, and what `bindColumns` trades away for the last ~30%.
 - **The tracked-write row is the cost you opt into.** Attaching a `.changed()` filter and draining it
   each frame is markedly more expensive than the bare integrate loop — that is the write-log doing
   real work so reactivity, deltas, and change observers are available. You pay it only when you ask
@@ -89,6 +97,62 @@ number.
   per-column growth cap is retired — growing past 1024 rows is covered directly by
   `packages/scheduler/test/worker-growth-boundary.test.ts` (1024 in-place grow + 1025/1040 re-backing)
   and the above-reservation case in the heavy-pool smoke test.
+
+## Bind your loop once: `bindColumns`
+
+`eachChunk` looks its columns up again on every call. That re-lookup is the safe default — a column's
+array can be replaced when storage grows — but it stops V8 from compiling your loop with the arrays
+baked in as constants, and that compilation is worth about 30% on the iteration bench. `bindColumns`
+gets it back without giving up the safety: you hand the query the columns you want and a factory
+function; ecsia resolves the columns once, calls your factory with them, and keeps the loop your
+factory returns. Each `run()` then runs your loop directly — ecsia re-binds it only when storage
+actually moved.
+
+```ts
+import { createWorld, defineComponent, write } from 'ecsia'
+
+const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
+const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
+const world = createWorld({ components: [Position, Velocity], maxEntities: 1 << 16 })
+
+const q = world.query(write(Position), write(Velocity))
+const dt = 1 / 60
+
+const run = q.bindColumns(
+  [Position, 'x'], [Position, 'y'], [Velocity, 'dx'], [Velocity, 'dy'],
+  ([px, py, dx, dy], meta) => () => {
+    const count = meta.count // the live entity count — read it inside the loop
+    for (let i = 0; i < count; i++) {
+      px[i] = px[i]! + dx[i]! * dt
+      py[i] = py[i]! + dy[i]! * dt
+    }
+  },
+)
+
+run() // call once per frame
+```
+
+Two requirements make this fast, and both are part of the contract rather than style:
+
+- **Your loop must persist.** The speed comes from V8 treating the captured arrays as constants, and
+  it only does that for a closure created once and then reused. The API shape makes that the natural
+  thing: ecsia calls your factory, keeps the returned loop, and re-invokes the factory only when a
+  bound column's storage was replaced or a new group of entities starts matching the query. Entities
+  spawning and despawning never re-invoke it — the loop reads the live count from `meta.count`.
+- **The returned loop takes no arguments.** Passing the count in as a parameter measured about 2×
+  slower; reading `meta.count` inside the loop is free.
+
+The trade-offs are the same as `eachChunk`: writes through the bound arrays bypass the write log, so
+`.changed()` filters and observers will not see them, and structural changes during `run()` follow
+the same collect-first, mutate-after rule as every other loop.
+
+::: tip Pre-size before you bind
+The first time a bound column grows *after* you have bound, V8 permanently stops specializing that
+loop — it keeps working, just slower (about 1.7 ns per entity in our profiling, instead of the
+steady-state number in the table). Growth *before* the bind costs nothing. So spawn, or reserve, up
+to your peak entity count first — the world's `maxEntities` is a natural guide — and bind once the
+world is at size.
+:::
 
 ## Reproduce
 
@@ -114,9 +178,10 @@ CI does **not** run `bench:report`. Wall-clock time on shared CI runners is nois
 the runner would flap the suite — so we deliberately **do not assert milliseconds in CI**. What CI
 *does* guard is correctness and behavior, with counter-based assertions: the worker-pool smoke test (a
 quick check that it compiles and runs, not a measurement) asserts every threaded configuration is
-byte-identical to single-thread (the `byte-identical` column above), and the bench builders are pinned
-so `eachChunk` cannot silently diverge from `.each`. Performance regressions are caught by re-running
-`bench:report` on a fixed machine and comparing `RESULTS.json`, not by a CI timer.
+byte-identical to single-thread (the `byte-identical` column above), and the bench builders are
+cross-checked so neither `eachChunk` nor `bindColumns` can silently diverge from `.each`. Performance
+regressions are caught by re-running `bench:report` on a fixed machine and comparing `RESULTS.json`,
+not by a CI timer.
 
 ## See also
 

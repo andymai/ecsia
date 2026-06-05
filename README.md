@@ -162,10 +162,16 @@ to its position, over 50,000 entities. Lower is faster (nanoseconds per entity):
 
 | loop | ns per entity |
 | --- | ---: |
-| bitECS | 1.05 |
-| ecsia `eachChunk` | 1.46 |
+| ecsia `bindColumns` | 0.98 |
+| bitECS | 1.07 |
+| ecsia `eachChunk` | 1.47 |
 | ecsia `.each` | 10.12 |
-| miniplex | 13.30 |
+| miniplex | 13.93 |
+
+`.each` is the ergonomic accessor path from the example above; `eachChunk` loops over
+the raw storage arrays directly; `bindColumns` goes one step further and binds your
+loop to those arrays once, up front — which is what lets it edge ahead of bitECS, so
+long as you size the world before binding.
 
 Worker-thread speedup on a compute-heavy simulation (8,192 entities, 512 physics
 steps per frame, 60 frames), with every threaded run byte-identical to the
@@ -175,8 +181,8 @@ single-threaded result:
 | ---: | ---: |
 | 1 | 0.98x |
 | 2 | 1.89x |
-| 4 | 3.60x |
-| 8 | 6.48x |
+| 4 | 3.55x |
+| 8 | 6.05x |
 
 Methodology and full tables on the [performance page](https://andymai.github.io/ecsia/guide/performance).
 

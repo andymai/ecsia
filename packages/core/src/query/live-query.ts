@@ -11,7 +11,7 @@
 import type { ArchetypeId, ComponentDef, ComponentId, EntityHandle, FieldDescriptor, Schema } from '@ecsia/schema'
 import type { ColumnSet } from '../component/index.js'
 import type { Archetype } from '../storage/index.js'
-import type { TypedArray } from '../memory/index.js'
+import type { Column, TypedArray } from '../memory/index.js'
 import { decodeEid } from '../memory/index.js'
 import type { CompiledQuery, CompiledValueTerm, RowFilterTerm } from './compile.js'
 import type { SparseSetU32 } from './sparse-set.js'
@@ -350,6 +350,198 @@ export class LiveQuery {
     }
   }
 
+  /**
+   * Pinned columns (the persistent-closure fast path). Where {@link eachChunk} re-resolves column
+   * views every call, `bindColumns` resolves each `[ComponentDef, fieldName]` spec ONCE per matched
+   * hot archetype and invokes `factory(views, meta)` to mint that archetype's runner — a persistent
+   * closure capturing the views as constants, which V8 context-specializes. The returned `run()`
+   * walks the bindings (matching `eachChunk` iteration order: cold archetypes never visited, empty
+   * ones skipped) with one cheap safety check per binding per call.
+   *
+   * The two load-bearing contract points:
+   * 1. The runner takes ZERO arguments (a `count` parameter measures 2× slower).
+   * 2. `meta` is identity-stable across rebinds; read `meta.count` (the archetype's live row count)
+   * inside the runner — population churn (spawn/despawn) never re-invokes the factory.
+   *
+   * ```ts
+   * const run = q.bindColumns(
+   * [Position, 'x'], [Velocity, 'dx'],
+   * ([px, dx], meta) => () => {
+   * const count = meta.count
+   * for (let i = 0; i < count; i++) px[i] += dx[i] * dt
+   * },
+   * )
+   * run() // per frame
+   * ```
+   *
+   * The factory is re-invoked ONLY when a bound column re-backs (growth replaced its view) or when
+   * the matched-archetype set changes (a new archetype matched, or a matched cold archetype was
+   * warm-promoted) — never on population change. V8 only context-specializes SINGLETON closures, so
+   * the first re-invocation after binding disables specialization for that binding permanently
+   * (~1.7 ns/entity vs ~1.0 steady-state on the canonical bench): pre-size to peak capacity (spawn
+   * or reserve rows BEFORE binding) so growth never lands in a hot phase — growth before the first
+   * bind is free.
+   *
+   * Vec fields hand their raw view through: row `r` occupies `[r*stride, (r+1)*stride)` where the
+   * stride is the declared vec arity (`vec3()` → 3) — a compile-time constant in the caller's loop.
+   * Rich fields (`'string'`/`object<T>`) carry no column and throw at bind time, as do row-filtered
+   * queries (a pinned runner cannot skip rows; `eachChunk` silently skips, but a silently-skipping
+   * pinned runner is a footgun) and specs naming a component the query does not REQUIRE (an
+   * optional or unreferenced component may be absent from a future matching archetype, which would
+   * only surface mid-run). Writes through pinned views are NOT recorded in the reactivity
+   * write log: a `.changed`/observer consumer will not see them — use `each` when reactivity must
+   * observe the write. Structural changes during `run()` follow the `eachChunk` discipline: collect,
+   * then mutate after the loop (despawn swap-removes rows under the runner's feet).
+   */
+  bindColumns(
+    ...args: [
+      ...specs: ReadonlyArray<readonly [ComponentDef<Schema>, string]>,
+      factory: (views: readonly TypedArray[], meta: { readonly count: number }) => () => void,
+    ]
+  ): () => void {
+    const factory = args[args.length - 1] as (
+      views: readonly TypedArray[],
+      meta: { readonly count: number },
+    ) => () => void
+    const specs = args.slice(0, -1) as ReadonlyArray<readonly [ComponentDef<Schema>, string]>
+    if (this.compiled.rowFilters.length !== 0) {
+      throw new Error('bindColumns: row-filtered queries are not supported (a pinned runner cannot skip rows); use each()')
+    }
+    // Specs must name REQUIRED components: an optional/unreferenced component may be absent from a
+    // FUTURE matching archetype, which would surface as a rebuild() throw mid-run. Required ids are
+    // recovered from the packed with-words (single-bit entries) + the non-negated residual terms.
+    const requiredIds = new Set<number>()
+    for (const w of this.compiled.withWords) {
+      requiredIds.add(w.wordIndex * 32 + (31 - Math.clz32(w.mask)))
+    }
+    for (const r of this.compiled.residualWith) {
+      if (!r.negate) requiredIds.add(r.componentId as number)
+    }
+    for (const [def] of specs) {
+      if (!requiredIds.has(def.id as number)) {
+        throw new Error(
+          `bindColumns: '${def.name}' is not a required component of this query — a future matching archetype may lack it`,
+        )
+      }
+    }
+    // Per-spec column index within the component's ColumnSet (rich fields contribute no column, so
+    // the index counts only ctor-backed fields — same skip rule as the ColumnSet build order).
+    const colIndices = specs.map(([def, field]) => {
+      let idx = 0
+      for (const f of def.fields as readonly FieldDescriptor[]) {
+        if (f.name === field) {
+          if (f.ctor === null) {
+            throw new Error(`bindColumns: '${def.name}.${field}' is a rich field ('string'/object<T>) and has no column`)
+          }
+          return idx
+        }
+        if (f.ctor !== null) idx += 1
+      }
+      throw new Error(`bindColumns: component '${def.name}' has no column-backed field '${field}'`)
+    })
+
+    interface PinnedBinding {
+      readonly arch: Archetype
+      readonly cols: readonly Column[]
+      views: readonly TypedArray[]
+      runner: () => void
+      readonly meta: { readonly count: number }
+    }
+
+    // Bindings are keyed by archetype id and PRESERVED across rebuilds: a rebuild only mints
+    // bindings for archetypes it has not seen, so an archetype-set change never re-invokes the
+    // factories of already-bound archetypes (re-invocation would disable their specialization).
+    const byArch = new Map<number, PinnedBinding>()
+    let bindings: PinnedBinding[] = []
+    // The matched cold archetypes at last rebuild: warm promotion flips `arch.cold` IN PLACE
+    // (same object, same matchingArchetypes slot), so neither the array length nor element identity
+    // signals it — the promoted archetype's own flag is the only observable.
+    let coldMatched: Archetype[] = []
+    let boundMatchCount = -1
+
+    const reinvoke = (b: PinnedBinding): void => {
+      b.views = b.cols.map((c) => c.view)
+      b.runner = factory(b.views, b.meta)
+    }
+
+    const makeBinding = (arch: Archetype): PinnedBinding => {
+      const cols = specs.map(([def, field], i) => {
+        const cs = arch.columnSets.get(def.id as ComponentId)
+        if (cs === undefined) {
+          throw new Error(`bindColumns: archetype lacks component '${def.name}' (not in this query?)`)
+        }
+        const col = cs.columns[colIndices[i] as number]
+        if (col === undefined) throw new Error(`bindColumns: missing column for '${def.name}.${field}'`)
+        return col
+      })
+      const views = cols.map((c) => c.view)
+      const meta = {
+        get count(): number {
+          return arch.count
+        },
+      }
+      return { arch, cols, views, runner: factory(views, meta), meta }
+    }
+
+    // Builds into locals and commits at the end so a makeBinding throw (defensive backstop; the
+    // bind-time required-component check makes it unreachable for absent-component causes) never
+    // leaves bindings/coldMatched/boundMatchCount mutually inconsistent.
+    const rebuild = (): void => {
+      const archs = this.matchingArchetypes
+      const nextBindings: PinnedBinding[] = []
+      const nextColdMatched: Archetype[] = []
+      for (let ai = 0; ai < archs.length; ai++) {
+        const arch = archs[ai] as Archetype
+        if (arch.cold) {
+          nextColdMatched.push(arch)
+          continue
+        }
+        let b = byArch.get(arch.id as number)
+        if (b === undefined) {
+          b = makeBinding(arch)
+          byArch.set(arch.id as number, b)
+        }
+        nextBindings.push(b)
+      }
+      bindings = nextBindings
+      coldMatched = nextColdMatched
+      boundMatchCount = archs.length
+    }
+
+    rebuild()
+
+    return () => {
+      // Archetype-set check: matchingArchetypes is append-only (lastMatchTick is never bumped), so
+      // a length change is the complete new-match signal; the cold flags cover warm promotion.
+      if (this.matchingArchetypes.length !== boundMatchCount) {
+        rebuild()
+      } else {
+        for (let i = 0; i < coldMatched.length; i++) {
+          if (!(coldMatched[i] as Archetype).cold) {
+            rebuild()
+            break
+          }
+        }
+      }
+      const bs = bindings
+      for (let bi = 0; bi < bs.length; bi++) {
+        const b = bs[bi] as PinnedBinding
+        // View-identity check: Column records are stable; only a fallback grow replaces `.view`
+        // (the resizable primary path auto-widens the SAME view, and the SAB #growGeneration never
+        // bumps on the serial grow-patch path — col.view identity is the one correct signal).
+        const cols = b.cols
+        const views = b.views
+        for (let i = 0; i < cols.length; i++) {
+          if ((cols[i] as Column).view !== views[i]) {
+            reinvoke(b)
+            break
+          }
+        }
+        if (b.arch.count !== 0) b.runner()
+      }
+    }
+  }
+
   *[Symbol.iterator](): Iterator<PooledElement> {
     // A simple eager collection of (archetype,row) snapshots would allocate; instead drive `each`
     // through a buffered generator that yields the SAME pooled element per archetype. Single active
@@ -557,7 +749,7 @@ export class LiveQuery {
  * q.eachChunk((c) => {
  * const px = c.column(Position, 'x'), py = c.column(Position, 'y')
  * const dx = c.column(Velocity, 'dx'), dy = c.column(Velocity, 'dy')
- * for (let i = 0; i < c.count; i) { px[i] += dx[i] * dt; py[i] += dy[i] * dt }
+ * for (let i = 0; i < c.count; i++) { px[i] += dx[i] * dt; py[i] += dy[i] * dt }
  * })
  * ```
  *
