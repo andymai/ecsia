@@ -56,7 +56,10 @@ interface ValueBinding {
  */
 interface DeltaLists {
   readonly added: Set<number>
-  readonly removed: Set<number>
+  // index → the handle the entity carried AT removal time. Captured eagerly because despawn bumps the
+  // slot's generation (index-allocator freeEntity) AFTER the removal is recorded — re-deriving the
+  // handle via handleOf(index) post-despawn would surface the next slot generation, not the dead one.
+  readonly removed: Map<number, EntityHandle>
   hasAdded: boolean
   hasRemoved: boolean
 }
@@ -122,7 +125,7 @@ export class LiveQuery {
 
   #ensureDelta(): DeltaLists {
     if (this.#delta === null) {
-      this.#delta = { added: new Set(), removed: new Set(), hasAdded: false, hasRemoved: false }
+      this.#delta = { added: new Set(), removed: new Map(), hasAdded: false, hasRemoved: false }
     }
     return this.#delta
   }
@@ -251,7 +254,9 @@ export class LiveQuery {
     const d = this.#delta
     if (d === null) return
     if (d.added.delete(index)) return // add-then-remove this frame → net no-op
-    if (d.hasRemoved) d.removed.add(index)
+    // Capture the handle now: the entity is still alive (freeEntity runs after this drop, §6.3), so
+    // handleOf(index) resolves the dying entity's own generation rather than the recycled next one.
+    if (d.hasRemoved) d.removed.set(index, this.#deps.handleOf(index))
   }
 
   // --- iteration (queries.md §9) ---------------------------------------------
@@ -382,7 +387,7 @@ export class LiveQuery {
   eachRemoved(fn: (index: number, handle: EntityHandle) => void): void {
     const d = this.#delta
     if (d === null || !d.hasRemoved) return
-    for (const index of d.removed) fn(index, this.#deps.handleOf(index))
+    for (const [index, handle] of d.removed) fn(index, handle)
   }
 
   /**

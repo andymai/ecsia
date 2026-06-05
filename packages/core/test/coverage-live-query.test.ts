@@ -136,11 +136,21 @@ describe('removed delta surfaces the despawned index + handle', () => {
     const { world, Position } = kit()
     const q = world.query(read(Position)).removed()
     const e = world.spawnWith(Position)
+    expect(q.count).toBe(1)
     world.frameReset()
     world.despawn(e)
-    const removed: number[] = []
-    q.eachRemoved((_index, handle) => removed.push(handle as number))
-    expect(removed).toEqual([e as number])
+    expect(q.count).toBe(0)
+    const removedIdx: number[] = []
+    const removedHandles: number[] = []
+    q.eachRemoved((index, handle) => {
+      removedIdx.push(index)
+      removedHandles.push(handle as number)
+    })
+    // The despawned entity (the only one, the first allocated -> index 0) is reported exactly once.
+    expect(removedIdx).toEqual([0])
+    // eachRemoved surfaces the handle of the entity that was actually removed — captured at removal
+    // time, NOT re-derived after despawn bumped the slot's generation.
+    expect(removedHandles).toEqual([e as number])
   })
 
   test('write surfaces in eachChanged after the explicit drain (declared, write happens)', () => {
