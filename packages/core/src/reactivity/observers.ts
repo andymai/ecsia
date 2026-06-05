@@ -64,6 +64,7 @@ export class ObserverRegistry {
   readonly #table = new Map<string, Observer[]>()
   #seq = 0
   #count = 0
+  #changeCount = 0
 
   constructor(deps: ObserverDeps) {
     this.#deps = deps
@@ -71,6 +72,11 @@ export class ObserverRegistry {
 
   get hasObservers(): boolean {
     return this.#count > 0
+  }
+
+  /** True iff any `change`-kind observer is registered — gates the write-log push fast-out (§3.3). */
+  get hasChangeObservers(): boolean {
+    return this.#changeCount > 0
   }
 
   /** True iff any observer subscribes to `kind` events on `componentId` — gates deferred-row reclaim (§7.4). */
@@ -92,6 +98,7 @@ export class ObserverRegistry {
       bucket.push(obs)
     }
     this.#count += 1
+    if (term.kind === 'change') this.#changeCount += 1
     return {
       id: obs.id,
       dispose: (): void => {
@@ -103,6 +110,7 @@ export class ObserverRegistry {
           if (i >= 0) bucket.splice(i, 1)
         }
         this.#count -= 1
+        if (term.kind === 'change') this.#changeCount -= 1
       },
     }
   }

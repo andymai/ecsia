@@ -230,6 +230,7 @@ export type {
   QueryElement,
   UnionToIntersection,
   Query,
+  QueryChunk,
   LooseQuery,
   WorldQuery,
   LooseQueryElement,

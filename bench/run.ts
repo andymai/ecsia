@@ -8,7 +8,7 @@
 // smoke test can drive it at tiny sizes. The full suite uses larger N + more iterations.
 
 import { Bench } from 'tinybench'
-import { makeEcsiaIter, makeMiniplexIter, makeBitEcsIter } from './iterate.js'
+import { makeEcsiaIter, makeEcsiaCursorIter, makeMiniplexIter, makeBitEcsIter } from './iterate.js'
 import { makeEcsiaRelations } from './relations.js'
 import { main as workerSim } from '../examples/worker-sim.js'
 
@@ -71,9 +71,17 @@ export async function main(opts: BenchOptions = {}): Promise<BenchReport> {
   // --- bucket 1: iterate-N ---
   const iterBench = new Bench({ time })
   const ecsiaIter = makeEcsiaIter(entities)
+  const ecsiaCursorIter = makeEcsiaCursorIter(entities)
   const miniIter = makeMiniplexIter(entities)
   const bitIter = makeBitEcsIter(entities)
+  // HONESTY GATE: the showcased ecsia-cursor row must integrate against the SAME data the accessor
+  // path does — a measurement of a fast-but-wrong loop is worthless. Cross-validate one full step of
+  // both ecsia loops at the bench's own N (which crosses the 1024 column-growth boundary) before
+  // timing, so a regression that makes the cursor return corrupt values fails the bench, not silently
+  // reports a misleadingly-fast number.
+  assertCursorMatchesAccessor(entities)
   iterBench.add('ecsia', () => ecsiaIter.step())
+  iterBench.add('ecsia-cursor', () => ecsiaCursorIter.step())
   iterBench.add('miniplex', () => miniIter.step())
   iterBench.add('bitECS', () => bitIter.step())
   await iterBench.run()
@@ -106,6 +114,25 @@ export async function main(opts: BenchOptions = {}): Promise<BenchReport> {
   log('\n' + JSON.stringify(report))
 
   return report
+}
+
+// Run one step of the accessor loop and the cursor loop over freshly-built worlds of N entities and
+// assert their sampled result agrees. They start from identical state (dx=1, dy=0.5, x=y=0) and apply
+// the same integration, so after one step both must read the same x. A mismatch means the cursor (or
+// the storage it reads) is corrupt at N — exactly the failure that lurks above the 1024 growth row.
+function assertCursorMatchesAccessor(n: number): void {
+  const accessor = makeEcsiaIter(n)
+  const cursor = makeEcsiaCursorIter(n)
+  accessor.step()
+  cursor.step()
+  const a = accessor.sampleX()
+  const c = cursor.sampleX()
+  if (Math.abs(a - c) > 1e-9) {
+    throw new Error(
+      `bench honesty gate: ecsia-cursor disagrees with ecsia accessor at n=${n} ` +
+        `(accessor x=${a}, cursor x=${c}); the cursor row would report a fast-but-wrong number`,
+    )
+  }
 }
 
 async function timeMs(fn: () => Promise<unknown>): Promise<number> {
