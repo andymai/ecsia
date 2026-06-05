@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.0](https://github.com/andymai/ecsia/compare/ecsia-v0.1.0...ecsia-v0.2.0) (2026-06-05)
+
+
+### Features
+
+* derive narrower queries from an existing query ([#10](https://github.com/andymai/ecsia/issues/10)) ([1ba68fe](https://github.com/andymai/ecsia/commit/1ba68fe7e9a0865df51d9a28ec192c0d1e114f8e))
+* pinned-columns API (bindColumns) — bind-once loops that out-iterate bitECS ([#8](https://github.com/andymai/ecsia/issues/8)) ([2ff5b5a](https://github.com/andymai/ecsia/commit/2ff5b5a039b4201f15bbcad9bfada70ed3c9deb4))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.2.0
+    * @ecsia/schema bumped to 0.2.0
+    * @ecsia/relations bumped to 0.2.0
+    * @ecsia/scheduler bumped to 0.2.0
+    * @ecsia/serialization bumped to 0.2.0
+
 ## [0.1.0](https://github.com/andymai/ecsia/compare/ecsia-v0.1.0...ecsia-v0.1.0) (2026-06-05)
 
 

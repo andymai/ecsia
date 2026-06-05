@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0](https://github.com/andymai/ecsia/compare/relations-v0.1.0...relations-v0.2.0) (2026-06-05)
+
+
+### Features
+
+* wildcard reverse queries — subjectsOf(Wildcard, target) ([#11](https://github.com/andymai/ecsia/issues/11)) ([0e4295b](https://github.com/andymai/ecsia/commit/0e4295b064d1bd21fab45abbab9d61a0009b22a0))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.2.0
+    * @ecsia/schema bumped to 0.2.0
+
 ## [0.1.0](https://github.com/andymai/ecsia/compare/relations-v0.1.0...relations-v0.1.0) (2026-06-05)
 
 
