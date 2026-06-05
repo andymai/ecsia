@@ -3,6 +3,21 @@
 ## [0.1.0](https://github.com/andymai/ecsia/compare/scheduler-v0.1.0...scheduler-v0.1.0) (2026-06-05)
 
 
+### Miscellaneous
+
+* **scheduler:** Synchronize ecsia versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.1.0
+    * @ecsia/schema bumped to 0.1.0
+
+## [0.1.0](https://github.com/andymai/ecsia/compare/scheduler-v0.1.0...scheduler-v0.1.0) (2026-06-05)
+
+
 ### ⚠ BREAKING CHANGES
 
 * rename scheduler.workers 'postMessage-fallback' to 'no-sab'
