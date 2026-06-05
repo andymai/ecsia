@@ -29,7 +29,8 @@ sub.dispose() // unsubscribe
 ### Handlers fire at a deferred serial slot
 
 Observer handlers never run mid-system — not even under workers. They fire at a **deferred serial
-slot**, and mutations you make inside a handler stage to a command buffer and apply at that same slot.
+slot**, and mutations you make inside a handler stage to a command buffer and apply at the next
+serial flush (the start of the next drain).
 That is what keeps reactivity bit-identical between the serial and parallel executors.
 
 ```ts

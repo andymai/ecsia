@@ -125,8 +125,9 @@ Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
 
-When the context **isn't** cross-origin-isolated, ecsia falls back to a `postMessage` transport rather
-than failing silently — the same systems still run, just without the zero-copy SAB fast path.
+When the context **isn't** cross-origin-isolated, `SharedArrayBuffer` doesn't exist, and the worker
+pool cannot share columns by reference. ecsia logs a warning and runs the same systems
+single-threaded — the fallback is loud, and no work is dropped.
 
 ### Node is the pool path today
 
