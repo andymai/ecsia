@@ -76,7 +76,7 @@ function makeStore(componentCount: number, maxHotArchetypes = 1024): {
   return { store, recordArch, recordRow }
 }
 
-describe('ArchetypeStore edge graph ', () => {
+describe('ArchetypeStore edge graph', () => {
   test(': getOrCreateArchetype interns structurally-equal signatures', () => {
     const { store } = makeStore(3)
     const a = store.getOrCreateArchetype(canonicalize([1, 2]) as Signature)
@@ -98,7 +98,7 @@ describe('ArchetypeStore edge graph ', () => {
   })
 })
 
-describe('multi-id atomic migration ', () => {
+describe('multi-id atomic migration', () => {
   test('migrateAddingMany lands a pair of ids in ONE target archetype', () => {
     const { store, recordArch } = makeStore(4)
     const handle = 0x000a // index 10

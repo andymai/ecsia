@@ -406,7 +406,7 @@ function applyOp(kit: Kit, model: Model, handles: (EntityHandle | undefined)[], 
 // now GREEN every run. Keep numRuns high; do NOT lower it to mask a flake.
 const FUZZ_SEED = 0x12c0ffee
 
-describe(' — cross-package integration fuzz through the ecsia umbrella', () => {
+describe('— cross-package integration fuzz through the ecsia umbrella', () => {
   test('random op sequences preserve entity/bitmask/relation invariants at every step (I*)', () => {
     fc.assert(
       fc.property(fc.array(opArb, { minLength: 1, maxLength: 60 }), (ops) => {

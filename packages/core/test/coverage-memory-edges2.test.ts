@@ -26,7 +26,7 @@ const caps = (backing: RuntimeCapabilities['backing']): RuntimeCapabilities =>
 
 const newBuffers = (): Buffers => new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 20 })
 
-describe('layout — tokenToColumnLayout / fieldToColumnLayout branches ', () => {
+describe('layout — tokenToColumnLayout / fieldToColumnLayout branches', () => {
   test('an unknown scalar token throws (layout.ts:127)', () => {
     expect(() => tokenToColumnLayout('nope' as unknown as FieldToken)).toThrow(/unknown scalar token/)
   })

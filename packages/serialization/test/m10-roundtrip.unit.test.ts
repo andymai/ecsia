@@ -27,7 +27,7 @@ function defs() {
   }
 }
 
-describe(' UNIT — snapshot round-trip is BIT-EXACT on values', () => {
+describe('UNIT — snapshot round-trip is BIT-EXACT on values', () => {
   it('every f32 value survives the round-trip with EXACT bit equality (no precision drift)', () => {
     const D = defs()
     const src = createWorld({ components: [D.Position, D.Velocity, D.Target, D.Tag] as readonly ComponentDef<Schema>[] })
@@ -62,7 +62,7 @@ describe(' UNIT — snapshot round-trip is BIT-EXACT on values', () => {
   })
 })
 
-describe(' UNIT — multi-tick delta applied to a stale copy reconstructs the live world', () => {
+describe('UNIT — multi-tick delta applied to a stale copy reconstructs the live world', () => {
   it('a delta since tick T, applied to a snapshot-bootstrapped mirror, matches the producer', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const src = createWorld({ components: [P as ComponentDef<Schema>] })
@@ -99,7 +99,7 @@ describe(' UNIT — multi-tick delta applied to a stale copy reconstructs the li
   })
 })
 
-describe(' UNIT — late joiner reconstructs full state from the observer-log stream', () => {
+describe('UNIT — late joiner reconstructs full state from the observer-log stream', () => {
   it('ComponentAdd records carry INITIAL VALUES, and replay rebuilds entities + eid refs', () => {
     const Pos = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
     const Tgt = defineComponent({ who: 'eid' }, { name: 'target' })
@@ -141,7 +141,7 @@ describe(' UNIT — late joiner reconstructs full state from the observer-log st
   })
 })
 
-describe(' UNIT — eid + relation-target remap correctness', () => {
+describe('UNIT — eid + relation-target remap correctness', () => {
   it('snapshot remaps a self-referential eid and an exclusive relation target onto receiver handles', () => {
     const Pos = defineComponent({ x: 'f32' }, { name: 'position' })
     const Tgt = defineComponent({ who: 'eid' }, { name: 'target' })

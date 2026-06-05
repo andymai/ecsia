@@ -25,7 +25,7 @@ import { createRelations, Wildcard } from '../src/index.js'
 const idx = (world: World, h: EntityHandle): number => handleIndex(h, world.handleLayout) as number
 
 // --------------------------------------------------------------------------------------------------
-describe(' — presence bit tracks the pair count crossing 0<->1 ', () => {
+describe('— presence bit tracks the pair count crossing 0<->1', () => {
   it('hasRelation(s, R) === (s holds >=1 R-pair) after ANY random add/remove sequence (non-exclusive)', () => {
     fc.assert(
       fc.property(
@@ -109,7 +109,7 @@ describe(' — presence bit tracks the pair count crossing 0<->1 ', () => {
 })
 
 // --------------------------------------------------------------------------------------------------
-describe(' — pair id is idempotent AND stable across a target generation bump ', () => {
+describe('— pair id is idempotent AND stable across a target generation bump', () => {
   it('mintPair(R, t) is idempotent: re-adding the same pair never changes membership/back-ref', () => {
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 20 }), (repeats) => {
@@ -174,7 +174,7 @@ describe(' — pair id is idempotent AND stable across a target generation bump 
 })
 
 // --------------------------------------------------------------------------------------------------
-describe(' — no live pair references a dead target after random despawn-with-cascade ', () => {
+describe('— no live pair references a dead target after random despawn-with-cascade', () => {
   it('after a fuzzed despawn sequence, every surviving subject holds pairs ONLY to live targets', () => {
     fc.assert(
       fc.property(
@@ -245,7 +245,7 @@ describe(' — no live pair references a dead target after random despawn-with-c
 })
 
 // --------------------------------------------------------------------------------------------------
-describe(' — cascade is iterative BFS: terminates & visits each entity once, even on CYCLES ', () => {
+describe('— cascade is iterative BFS: terminates & visits each entity once, even on CYCLES', () => {
   it('a WIDE deleteSubject fan-out despawns in flat breadth (the BFS queue, not the stack)', { timeout: 30_000 }, () => {
     // The per-invocation cascade IS a flat queue across breadth: a root with a huge sibling fan-out
     // drains in one onPreDespawn loop, NOT one stack frame per child. 50k siblings would overflow a
@@ -309,7 +309,7 @@ describe(' — cascade is iterative BFS: terminates & visits each entity once, e
 })
 
 // --------------------------------------------------------------------------------------------------
-describe(' — Pair(R, Wildcard) match cost is O(archetypes), INDEPENDENT of distinct targets T ', () => {
+describe('— Pair(R, Wildcard) match cost is O(archetypes), INDEPENDENT of distinct targets T', () => {
   // The discriminator: an EXCLUSIVE relation stores the target as a column value, so ALL subjects with
   // the same component set share ONE archetype regardless of how many distinct targets exist. The
   // wildcard query's matched-archetype count (its whole match cost) is therefore FLAT as T varies

@@ -81,7 +81,7 @@ function specsConflict(a: SysSpec, b: SysSpec): boolean {
   return false
 }
 
-describe(' — deterministic, repeatable plan across independent builds ', () => {
+describe('— deterministic, repeatable plan across independent builds', () => {
   test('two independent builds of the same systems produce the identical wave/round/batch layout', () => {
     fc.assert(
       fc.property(sysSpecs, (specs) => {
@@ -114,7 +114,7 @@ describe(' — deterministic, repeatable plan across independent builds ', () =>
   })
 })
 
-describe(' — wave levels are a valid topological order of the reduced DAG ', () => {
+describe('— wave levels are a valid topological order of the reduced DAG', () => {
   test('no system runs before one it conflict-precedes; every edge crosses to a strictly later wave', () => {
     fc.assert(
       fc.property(sysSpecs, (specs) => {
@@ -151,7 +151,7 @@ describe(' — wave levels are a valid topological order of the reduced DAG ', (
   })
 })
 
-describe(' — same-round pairs are disjoint per the independent oracle ', () => {
+describe('— same-round pairs are disjoint per the independent oracle', () => {
   test('every pair of systems sharing a round has NO write/write and NO read/write conflict', () => {
     fc.assert(
       fc.property(sysSpecs, fc.integer({ min: 0, max: 4 }), (specs, workers) => {
@@ -203,7 +203,7 @@ function buildOrdered(n: number, afterOf: Map<number, number[]>, closeCycle: boo
   return defs
 }
 
-describe(' — every injected cycle is detected (no false negatives)', () => {
+describe('— every injected cycle is detected (no false negatives)', () => {
   test('a forced back-edge closing a forward chain always throws CycleError', () => {
     fc.assert(
       fc.property(fc.integer({ min: 2, max: 6 }), (n) => {
@@ -249,7 +249,7 @@ describe(' — every injected cycle is detected (no false negatives)', () => {
   })
 })
 
-describe(' — acyclic graphs are never reported cyclic (no false positives)', () => {
+describe('— acyclic graphs are never reported cyclic (no false positives)', () => {
   test('a purely-forward explicit-edge graph never throws', () => {
     fc.assert(
       fc.property(

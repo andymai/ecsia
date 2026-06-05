@@ -165,7 +165,7 @@ function digest(r: CanonRow): string {
 // — round-trip IDENTITY over entity SET, component VALUES, and RELATIONS.
 // ---------------------------------------------------------------------------
 
-describe(' — deserialize(serialize(world)) ≡ world (set, values, relations) for random worlds', () => {
+describe('— deserialize(serialize(world)) ≡ world (set, values, relations) for random worlds', () => {
   test('component round-trip is bit-faithful through the public query surface', () => {
     fc.assert(
       fc.property(worldArb, (specs) => {
@@ -267,7 +267,7 @@ describe(' — deserialize(serialize(world)) ≡ world (set, values, relations) 
 // — delta SOUNDNESS: apply(delta) === replay(writes); version-stamp driven, no shadow memory.
 // ---------------------------------------------------------------------------
 
-describe(' — delta over a random tick range equals replaying the writes; no shadow buffer', () => {
+describe('— delta over a random tick range equals replaying the writes; no shadow buffer', () => {
   test('applying a delta reconstructs the live world from a stale receiver copy', () => {
     fc.assert(
       fc.property(
@@ -408,7 +408,7 @@ function decodeDeltaHandles(bytes: Uint8Array): Set<number> {
 // — remap TOTALITY against a DISJOINT id space.
 // ---------------------------------------------------------------------------
 
-describe(' — every eid / pair-target survives a load into a world with a DISJOINT id space', () => {
+describe('— every eid / pair-target survives a load into a world with a DISJOINT id space', () => {
   test('no dangling reference and no aliasing onto a pre-existing unrelated live entity', () => {
     fc.assert(
       fc.property(

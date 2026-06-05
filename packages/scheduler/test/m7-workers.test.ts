@@ -46,7 +46,7 @@ afterEach(async () => {
   pool = undefined
 })
 
-describe(' worker pool — 2-worker disjoint-write wave (serial-equivalent)', () => {
+describe('worker pool — 2-worker disjoint-write wave (serial-equivalent)', () => {
   test('two disjoint-write systems run concurrently on two workers and match the serial result', async () => {
     const { world, Health, Mana, handles } = makeWorld()
 

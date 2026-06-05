@@ -51,7 +51,7 @@ describe('LogRing.ringWords reports the ring length in words', () => {
   })
 })
 
-describe('hasUpdatesSince fast-out ', () => {
+describe('hasUpdatesSince fast-out', () => {
   test('false when the pointer is at head, true after any push (head moved)', () => {
     const r = ring({ capacityEntries: 4 })
     const ptr = r.makePointer()
@@ -98,7 +98,7 @@ describe('consume — generation mismatch yields the overflow sentinel once and 
   })
 })
 
-describe('consume — headLimit bounds the ring scan and pins the spill ', () => {
+describe('consume — headLimit bounds the ring scan and pins the spill', () => {
   test('entries appended past headLimit are deferred to the next (unbounded) drain', () => {
     const r = ring({ capacityEntries: 8 })
     const ptr = r.makePointer()

@@ -32,7 +32,7 @@ function kit(n: number) {
   return { world, Position, Velocity, handles }
 }
 
-describe('movement pipeline end-to-end ', () => {
+describe('movement pipeline end-to-end', () => {
   test('a movement system integrates Position from Velocity across N entities, deterministically', () => {
     const N = 32
     const { world, Position, Velocity, handles } = kit(N)

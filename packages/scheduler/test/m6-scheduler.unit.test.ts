@@ -38,7 +38,7 @@ function waveOf(waves: readonly ScheduleWave[], id: number): number {
   return waveSets(waves).findIndex((s) => s.has(id))
 }
 
-describe('wave layering ', () => {
+describe('wave layering', () => {
   test('a pure write→read→write chain layers into three single-system waves', () => {
     const { Position, Velocity, Health } = fixture()
     // Producer writes Velocity; Movement reads Velocity, writes Position; Combat reads Position, writes Health.
@@ -75,7 +75,7 @@ describe('wave layering ', () => {
   })
 })
 
-describe('write-before-read ordering ', () => {
+describe('write-before-read ordering', () => {
   test('the WRITER of a component is scheduled in a strictly earlier wave than its READER', () => {
     const { Position, Velocity } = fixture()
     // Reader is registered FIRST (id 0) to prove ordering is by conflict semantics, not registration order.
@@ -106,7 +106,7 @@ describe('write-before-read ordering ', () => {
   })
 })
 
-describe('cycle UX ', () => {
+describe('cycle UX', () => {
   test('a 3-system cycle reports the FULL named chain AND a suggested inAnyOrderWith break edge', () => {
     fixture()
     // A → B (B.after A), B → C (C.after B), then C → A (C.before A) closes the loop. Built in index
@@ -148,7 +148,7 @@ describe('cycle UX ', () => {
   })
 })
 
-describe('undeclared-write dev assertion ', () => {
+describe('undeclared-write dev assertion', () => {
   test('write(C) term where the declaration omits C is FLAGGED in dev mode', () => {
     const { world, Position, Health } = fixture()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -204,7 +204,7 @@ describe('undeclared-write dev assertion ', () => {
 
 // Helper used by the property suite's oracle, exported via a shared local re-impl there. Kept here
 // only as a unit sanity check that the SystemBox masks reflect the declared ids.
-describe('access words reflect declared ids ', () => {
+describe('access words reflect declared ids', () => {
   test('readWords/writeWords bit c is set iff c ∈ readIds/writeIds', () => {
     const { Position, Velocity } = fixture()
     const S = defineSystem({ name: 'S', read: [Velocity], write: [Position], run() {} })

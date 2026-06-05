@@ -70,7 +70,7 @@ describe(': eid columns init new + grown rows to -1 (null), not 0', () => {
     for (const slot of view) expect(decodeEid(slot)).toBeNull()
   })
 
-  test('grown eid column tail is filled with -1 to the FULL grown capacity, not 0 ', () => {
+  test('grown eid column tail is filled with -1 to the FULL grown capacity, not 0', () => {
     const b = newBuffers()
     const col = b.column(k('eid:grow.0'), makeColumnLayout('i32', 1, -1), 4)
     // Write a real handle at row 1 so we can prove the existing rows survive while the tail is -1.

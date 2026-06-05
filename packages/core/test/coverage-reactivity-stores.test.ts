@@ -148,7 +148,7 @@ describe('ObserverRegistry — change dedup, conservative fan-out, dispose (line
     expect(count).toBe(2)
   })
 
-  test('fireAllChangeConservatively fires every change observer for every current member, deduped ', () => {
+  test('fireAllChangeConservatively fires every change observer for every current member, deduped', () => {
     const { reg } = makeRegistry()
     const seen: number[] = []
     reg.observe(onChange(A), (e) => seen.push((e as unknown as { index: number }).index))

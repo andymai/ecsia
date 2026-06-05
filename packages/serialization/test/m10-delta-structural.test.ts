@@ -13,7 +13,7 @@ import {
   applyDelta,
 } from '../src/index.js'
 
-describe(' delta — interleaved STRUCTURAL-since-T section ', () => {
+describe('delta — interleaved STRUCTURAL-since-T section', () => {
   it('reconstructs a SPAWN since T on the stale mirror', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const src = createWorld({ components: [P as ComponentDef<Schema>] })

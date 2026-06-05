@@ -7,7 +7,7 @@ import type { AccessorWorld } from '../src/internal.js'
 const newBuffers = (): Buffers =>
   new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 20 })
 
-describe('defineComponent runtime ', () => {
+describe('defineComponent runtime', () => {
   test('resolves descriptors + column layouts in declaration order', () => {
     const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c1' })
     expect(Position.fields.map((f) => f.name)).toEqual(['x', 'y'])
@@ -18,7 +18,7 @@ describe('defineComponent runtime ', () => {
     ])
   })
 
-  test('eid field default is the null sentinel and needs explicit init ', () => {
+  test('eid field default is the null sentinel and needs explicit init', () => {
     const Ref = defineComponent({ target: 'eid' }, { name: 'c2' })
     const f = Ref.fields[0]!
     expect(f.default).toBe(-1)
@@ -58,7 +58,7 @@ function stubWorld(): AccessorWorld & { calls: Array<[number, number, number?]> 
   }
 }
 
-describe('accessor factory closure ', () => {
+describe('accessor factory closure', () => {
   test('read decodes the column slot at __idx; write encodes + tracks', () => {
     const buffers = newBuffers()
     const world = stubWorld()
@@ -130,7 +130,7 @@ describe('accessor factory closure ', () => {
   })
 })
 
-describe('entity.read / entity.write split ', () => {
+describe('entity.read / entity.write split', () => {
   test('write mutates, read reflects the same slot via the singleton', () => {
     const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'c12' })
     const w = createWorld({ components: [Position] })
@@ -144,7 +144,7 @@ describe('entity.read / entity.write split ', () => {
     expect(read.x).toBe(4)
   })
 
-  test('world.trackWrite is the canonical no-op stub (no throw) until ', () => {
+  test('world.trackWrite is the canonical no-op stub (no throw) until', () => {
     const w = createWorld()
     expect(() => w.trackWrite(0, 1 as never, 0)).not.toThrow()
   })

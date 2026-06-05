@@ -18,7 +18,7 @@ function makeKit(): {
   return { world: createWorld({ components }), Position, Velocity }
 }
 
-describe('eachChunk column-cursor ', () => {
+describe('eachChunk column-cursor', () => {
   test('cursor read/write matches the accessor path', () => {
     const { world, Position, Velocity } = makeKit()
     const n = 1000

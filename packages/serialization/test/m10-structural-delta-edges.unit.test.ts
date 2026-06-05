@@ -18,7 +18,7 @@ import {
   DeltaOp,
 } from '../src/index.js'
 
-describe('structural ops — serial-phase guards ', () => {
+describe('structural ops — serial-phase guards', () => {
   it('encodeStructuralOps and applyStructuralOps both throw off the serial slot', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const world = createWorld({ components: [P as ComponentDef<Schema>] })
@@ -31,7 +31,7 @@ describe('structural ops — serial-phase guards ', () => {
   })
 })
 
-describe('since-T delta carries every structural op kind and the mirror converges ', () => {
+describe('since-T delta carries every structural op kind and the mirror converges', () => {
   function setup() {
     const A = defineComponent({ x: 'f32' }, { name: 'a' })
     const B = defineComponent({ y: 'f32' }, { name: 'b' })
@@ -95,7 +95,7 @@ describe('since-T delta carries every structural op kind and the mirror converge
   })
 })
 
-describe('observer-log decoder — every op branch yields the right record shape ', () => {
+describe('observer-log decoder — every op branch yields the right record shape', () => {
   it('decodes Create, ComponentAdd(+fields), ComponentRemove, PairAdd, and PairRemove records', () => {
     const A = defineComponent({ x: 'f32' }, { name: 'a' })
     const world = createWorld({ components: [A as ComponentDef<Schema>] })
@@ -143,7 +143,7 @@ describe('observer-log decoder — every op branch yields the right record shape
   })
 })
 
-describe('delta — sinceTick advances; eid value changes remap on apply ', () => {
+describe('delta — sinceTick advances; eid value changes remap on apply', () => {
   it('the sinceTick baseline advances to the target tick after each delta()', () => {
     const A = defineComponent({ x: 'f32' }, { name: 'a' })
     const src = createWorld({ components: [A as ComponentDef<Schema>] })
@@ -184,7 +184,7 @@ describe('delta — sinceTick advances; eid value changes remap on apply ', () =
   })
 })
 
-describe('delta structural section — overflow-payload PairAdd / SetPayload carry the payload ', () => {
+describe('delta structural section — overflow-payload PairAdd / SetPayload carry the payload', () => {
   it('a since-T overflow PairAdd then a payload change reconstruct the payload on the mirror', () => {
     const A = defineComponent({ x: 'f32' }, { name: 'a' })
     const src = createWorld({ components: [A as ComponentDef<Schema>] })

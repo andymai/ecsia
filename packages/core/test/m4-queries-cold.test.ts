@@ -25,7 +25,7 @@ function coldKit(): {
   return { world, Position, Velocity }
 }
 
-describe(' cold transparency on the iterator surface', () => {
+describe('cold transparency on the iterator surface', () => {
   test('[...query] equals query.each() over a COLD matching archetype', () => {
     const { world, Position } = coldKit()
     const e0 = world.spawnWith(Position)
@@ -97,7 +97,7 @@ describe(' cold transparency on the iterator surface', () => {
   })
 })
 
-describe('constraint-less query before-spawn / after-spawn symmetry ', () => {
+describe('constraint-less query before-spawn / after-spawn symmetry', () => {
   test('a pure-optional query created BEFORE a plain spawn sees the component-less entity', () => {
     const Position = defineComponent({ x: 'f32' }, { name: 'position' })
     const world = createWorld({ components: [Position] as readonly ComponentDef<Schema>[] })

@@ -9,7 +9,7 @@ import { createWorld } from '@ecsia/core'
 import type { EntityHandle } from '@ecsia/core'
 import { createRelations } from '../src/index.js'
 
-describe('targetOf — exclusive-only, dead-safe ', () => {
+describe('targetOf — exclusive-only, dead-safe', () => {
   it('returns the single current target of an exclusive relation, null when absent', () => {
     const world = createWorld()
     const rel = createRelations(world)
@@ -44,7 +44,7 @@ describe('targetOf — exclusive-only, dead-safe ', () => {
   })
 })
 
-describe('depthOf — chain walk + cache backfill ', () => {
+describe('depthOf — chain walk + cache backfill', () => {
   it('computes hierarchy depth along an exclusive parent chain and caches intermediate depths', () => {
     const world = createWorld()
     const rel = createRelations(world)
@@ -88,7 +88,7 @@ describe('depthOf — chain walk + cache backfill ', () => {
   })
 })
 
-describe('getPair — inert accessors for dead and tag-relation pairs ', () => {
+describe('getPair — inert accessors for dead and tag-relation pairs', () => {
   it('returns an inert accessor when either endpoint is dead', () => {
     const world = createWorld()
     const rel = createRelations(world)
@@ -115,7 +115,7 @@ describe('getPair — inert accessors for dead and tag-relation pairs ', () => {
   })
 })
 
-describe('targetsOf — lazy forward-index build + backfill ', () => {
+describe('targetsOf — lazy forward-index build + backfill', () => {
   it('enumerates all targets of a non-exclusive subject, built lazily from the back-ref index', () => {
     const world = createWorld()
     const rel = createRelations(world)
@@ -161,7 +161,7 @@ describe('targetsOf — lazy forward-index build + backfill ', () => {
   })
 })
 
-describe('overflow payload — refresh on idempotent re-add + release on despawn ', () => {
+describe('overflow payload — refresh on idempotent re-add + release on despawn', () => {
   it('re-adding an existing overflow pair refreshes its payload without a new row', () => {
     const world = createWorld()
     const rel = createRelations(world)

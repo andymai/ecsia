@@ -227,7 +227,7 @@ describe('apply.ts: SET_PAYLOAD edge cases (lines 197-202, branches 197/201)', (
   })
 })
 
-describe('apply.ts: CREATE then ADD/SET in same flush treats the reserved handle as alive ', () => {
+describe('apply.ts: CREATE then ADD/SET in same flush treats the reserved handle as alive', () => {
   test('OP_CREATE makes a reserved handle alive so a following OP_ADD applies (newlyCreated whitelist)', () => {
     const { world, Health, codecById } = kit()
     const block = world.reserveEntityBlock(0, 1)
@@ -330,7 +330,7 @@ describe('apply.ts: corrupt opcode throws (lines 241-242, branch 241)', () => {
   })
 })
 
-describe('apply.ts: deterministic merge order across workers ', () => {
+describe('apply.ts: deterministic merge order across workers', () => {
   test('buffers are applied in ascending workerIndex regardless of array order', () => {
     const { world, Health, codecById } = kit()
     const e = world.spawn() as number

@@ -84,7 +84,7 @@ describe(', applied next flush, observed by onAdd NEXT drain', () => {
   })
 })
 
-describe(' — no observer observes a partially-applied wave (safe despawn inside onRemove)', () => {
+describe('— no observer observes a partially-applied wave (safe despawn inside onRemove)', () => {
   test('an onRemove handler that despawns a sibling does not corrupt later observers in the same drain', () => {
     const { world, Position } = makeKit()
     // Three entities; despawning a triggers onRemove(a). Inside that handler we despawn c. The drain
@@ -123,7 +123,7 @@ describe(' — no observer observes a partially-applied wave (safe despawn insid
   })
 })
 
-describe(' — the drain never re-enters itself', () => {
+describe('— the drain never re-enters itself', () => {
   test('a nested observerDrain() call during a handler is a no-op (re-entrancy guard)', () => {
     const { world, Position } = makeKit()
     let fires = 0
@@ -190,7 +190,7 @@ describe(': an observer-issued write is deferred to the NEXT drain', () => {
   })
 })
 
-describe(' — onChange fires once per coalesced net change', () => {
+describe('— onChange fires once per coalesced net change', () => {
   test('N writes to the same component in one frame fire onChange exactly once', () => {
     const { world, Position } = makeKit()
     let changes = 0

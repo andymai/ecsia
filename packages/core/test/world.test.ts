@@ -12,7 +12,7 @@ describe('createWorld — keystone', () => {
     expect(w.options.reactivity.changeTrackingDefault).toBe('component')
   })
 
-  test('phase and tick at construction ', () => {
+  test('phase and tick at construction', () => {
     const w = createWorld()
     expect(w.phase).toBe('serial')
     expect(w.tick).toBe(0)
@@ -38,7 +38,7 @@ describe('createWorld — keystone', () => {
     expect(Object.isFrozen(createWorld())).toBe(true)
   })
 
-  describe('fail-fast ConfigError ', () => {
+  describe('fail-fast ConfigError', () => {
     test('generationBits out of range', () => {
       expect(() => createWorld({ generationBits: 33 })).toThrow(ConfigError)
       expect(() => createWorld({ generationBits: -1 })).toThrow(ConfigError)

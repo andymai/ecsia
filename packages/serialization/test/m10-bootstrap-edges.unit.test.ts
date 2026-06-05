@@ -9,7 +9,7 @@ import type { ColumnKey, ColumnLayout, ComponentDef, Schema } from '@ecsia/core'
 import { bootstrapForWorker, attachWorld, applyColumnsAdded } from '../src/index.js'
 import type { WorldBootstrap, WorkerWorldView, ColumnsAdded } from '../src/bootstrap.js'
 
-describe('bootstrapForWorker — serial-phase guard + manifest shape ', () => {
+describe('bootstrapForWorker — serial-phase guard + manifest shape', () => {
   it('throws off the serial slot', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const world = createWorld({ components: [P as ComponentDef<Schema>] })
@@ -35,7 +35,7 @@ describe('bootstrapForWorker — serial-phase guard + manifest shape ', () => {
   })
 })
 
-describe('attachWorld — gating ', () => {
+describe('attachWorld — gating', () => {
   it('refuses a non-shared bootstrap (shared backing required)', () => {
     const fake: WorldBootstrap = {
       shared: false,
@@ -85,7 +85,7 @@ describe('attachWorld — gating ', () => {
   })
 })
 
-describe('applyColumnsAdded — re-wraps newly-broadcast column SABs ', () => {
+describe('applyColumnsAdded — re-wraps newly-broadcast column SABs', () => {
   it('adds a live typed-array view over the new backing into the worker view', () => {
     const view: WorkerWorldView = {
       columns: new Map(),

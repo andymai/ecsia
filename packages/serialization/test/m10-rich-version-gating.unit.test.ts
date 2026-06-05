@@ -31,7 +31,7 @@ function toV1(v2: Uint8Array): Uint8Array {
   return out
 }
 
-describe(' RICH — version gating ', () => {
+describe('RICH — version gating', () => {
   it('the v2 writer stamps SERIALIZATION_FORMAT_VERSION = 2', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const src = createWorld({ components: asComps(P) })

@@ -69,7 +69,7 @@ function seedWorld(threaded: boolean, workers: number, n: number, seedMana = tru
 // a double-emit (an extra entry) still diverges.
 const norm = (d: Delta[]): Delta[] => d.slice().sort((a, b) => a.kind.localeCompare(b.kind) || a.index - b.index || a.component - b.component)
 
-describe(' threaded frame loop reproduces the single-thread result via scheduler.updateThreaded ', () => {
+describe('threaded frame loop reproduces the single-thread result via scheduler.updateThreaded', () => {
   test('disjoint-write wave: column state AND ordered reactivity delta stream match the single-thread run', async () => {
     const N = 48
     const FRAMES = 3

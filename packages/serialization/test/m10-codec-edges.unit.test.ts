@@ -7,7 +7,7 @@ import { WriteCursor, ReadCursor } from '../src/cursor.js'
 import { writePairPayload, readPairPayload } from '../src/payload.js'
 import { elementOrdinal, ordinalToElement, assertPlatformLittleEndian } from '../src/format.js'
 
-describe('payload codec — every scalar tag round-trips losslessly ', () => {
+describe('payload codec — every scalar tag round-trips losslessly', () => {
   it('string, boolean (both polarities), and numeric (incl. negative + fractional) survive', () => {
     const w = new WriteCursor(64)
     const payload = { s: 'héllo', tTrue: true, tFalse: false, n: -3.5, z: 0 }
@@ -50,7 +50,7 @@ describe('payload codec — every scalar tag round-trips losslessly ', () => {
   })
 })
 
-describe('format — element ordinal validators reject out-of-range ', () => {
+describe('format — element ordinal validators reject out-of-range', () => {
   it('elementOrdinal round-trips every known kind and throws on an unknown kind', () => {
     for (const e of ['u8', 'u8c', 'i8', 'u16', 'i16', 'u32', 'i32', 'f32', 'f64'] as const) {
       expect(ordinalToElement(elementOrdinal(e))).toBe(e)
@@ -68,7 +68,7 @@ describe('format — element ordinal validators reject out-of-range ', () => {
   })
 })
 
-describe('ReadCursor — seek + atEnd accessors ', () => {
+describe('ReadCursor — seek + atEnd accessors', () => {
   it('seek repositions the cursor and atEnd reports the buffer boundary', () => {
     const w = new WriteCursor(16)
     w.u32(0xdeadbeef)

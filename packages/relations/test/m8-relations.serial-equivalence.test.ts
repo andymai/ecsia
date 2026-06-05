@@ -106,7 +106,7 @@ function fingerprint(kit: Kit): { pairs: string[]; presence: boolean[]; alive: b
   return { pairs, presence, alive }
 }
 
-describe('SERIAL-EQUIVALENCE — worker-staged OP_ADD_PAIR/OP_REMOVE_PAIR vs serial apply ', () => {
+describe('SERIAL-EQUIVALENCE — worker-staged OP_ADD_PAIR/OP_REMOVE_PAIR vs serial apply', () => {
   test('a fuzzed multi-worker relation workload (with dead subjects/targets) matches the serial result', () => {
     fc.assert(
       fc.property(

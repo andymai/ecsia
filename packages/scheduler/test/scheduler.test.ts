@@ -13,7 +13,7 @@ function fixture() {
   return { world, Position, Velocity, Health }
 }
 
-describe('command-buffer op ordinals ', () => {
+describe('command-buffer op ordinals', () => {
   test('CREATE=0 .. SET_PAYLOAD=6', () => {
     expect([Op.CREATE, Op.DESTROY, Op.ADD, Op.REMOVE, Op.ADD_PAIR, Op.REMOVE_PAIR, Op.SET_PAYLOAD]).toEqual([
       0, 1, 2, 3, 4, 5, 6,
@@ -21,7 +21,7 @@ describe('command-buffer op ordinals ', () => {
   })
 })
 
-describe('access aggregation ', () => {
+describe('access aggregation', () => {
   test('readers/writers maps from declared sets only', () => {
     const { Position, Velocity, Health } = fixture()
     const Movement = defineSystem({ name: 'Movement', read: [Velocity], write: [Position], run() {} })
@@ -33,7 +33,7 @@ describe('access aggregation ', () => {
   })
 })
 
-describe('conflict DAG ', () => {
+describe('conflict DAG', () => {
   test('read-after-write serializes Movement before Combat', () => {
     const { Position, Velocity, Health } = fixture()
     const Movement = defineSystem({ name: 'Movement', read: [Velocity], write: [Position], run() {} })
@@ -94,7 +94,7 @@ describe('conflict DAG ', () => {
   })
 })
 
-describe('WAVE-CONFLICT + waves ', () => {
+describe('WAVE-CONFLICT + waves', () => {
   test('concurrencyCompatible: disjoint writes ok, read-vs-write not', () => {
     const { Position, Health } = fixture()
     const A = defineSystem({ name: 'A', write: [Position], run() {} })
@@ -116,7 +116,7 @@ describe('WAVE-CONFLICT + waves ', () => {
     expect(plan.waves[0]!.rounds.flat()).toHaveLength(2)
   })
 
-  test('every same-round pair is concurrencyCompatible ', () => {
+  test('every same-round pair is concurrencyCompatible', () => {
     const { Position, Velocity, Health } = fixture()
     const A = defineSystem({ name: 'A', write: [Position], run() {} })
     const B = defineSystem({ name: 'B', write: [Health], run() {} })
@@ -138,7 +138,7 @@ describe('WAVE-CONFLICT + waves ', () => {
   })
 })
 
-describe('single-thread executor end-to-end ', () => {
+describe('single-thread executor end-to-end', () => {
   test('Movement (wave 0) before Combat (wave 1); state mutates correctly', () => {
     const { world, Position, Velocity, Health } = fixture()
     const order: string[] = []
@@ -195,7 +195,7 @@ describe('single-thread executor end-to-end ', () => {
   })
 })
 
-describe('dev-mode access guards ', () => {
+describe('dev-mode access guards', () => {
   test('a write() term for an undeclared component warns', () => {
     const { world, Position } = fixture()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})

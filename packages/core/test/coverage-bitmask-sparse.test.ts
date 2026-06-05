@@ -13,7 +13,7 @@ const newBuffers = (): Buffers => new Buffers({ capabilities: probeCapabilities(
 // componentCount 4 → stride 1 → fixedBitCount 32. Any id >= 32 is an out-of-stride sparse pair bit.
 const sig = (...ids: number[]): Signature => canonicalize(ids) as Signature
 
-describe('Bitmask out-of-stride sparse pair bits ', () => {
+describe('Bitmask out-of-stride sparse pair bits', () => {
   test('applyDelta sets a high (>= fixedBitCount) id in the sparse vector; bitmaskHas reads it there', () => {
     const bm = new Bitmask(newBuffers(), 4, 1 << 16, () => 'serial')
     expect(bm.stride).toBe(1)

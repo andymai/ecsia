@@ -56,7 +56,7 @@ function archOf(world: World, handle: EntityHandle): number {
   return (world.entity(handle) as unknown as { __archetypeId: number }).__archetypeId
 }
 
-describe(' unit — exclusive re-parent is a FIELD WRITE (ZERO migrations)', () => {
+describe('unit — exclusive re-parent is a FIELD WRITE (ZERO migrations)', () => {
   it('the first attach migrates once; every subsequent re-target migrates ZERO times', () => {
     const { world, rel, counters, reset } = instrumentedRelations()
     const ChildOf = rel.defineRelation({ weight: 'f32' }, { exclusive: true })
@@ -111,7 +111,7 @@ describe(' unit — exclusive re-parent is a FIELD WRITE (ZERO migrations)', () 
   })
 })
 
-describe(' unit — cascade deleteSubject removes a SUBTREE', () => {
+describe('unit — cascade deleteSubject removes a SUBTREE', () => {
   it('despawning the root deletes every descendant in a deep tree (iterative BFS)', () => {
     const { world, rel } = instrumentedRelations()
     const ChildOf = rel.defineRelation(null, { exclusive: true, cascade: 'deleteSubject' })
@@ -156,7 +156,7 @@ describe(' unit — cascade deleteSubject removes a SUBTREE', () => {
   })
 })
 
-describe(' unit — getPair overflow row read/write ', () => {
+describe('unit — getPair overflow row read/write', () => {
   it('Damage(s, t).weight lives in the overflow row, NOT a subject-archetype column', () => {
     const { world, rel, counters, reset } = instrumentedRelations()
     const Damage = rel.defineRelation({ weight: 'u32' }, { exclusive: false }) // → overflow-table
@@ -199,7 +199,7 @@ describe(' unit — getPair overflow row read/write ', () => {
   })
 })
 
-describe(' unit — Pair(R, Wildcard) matches every holder of ANY R-pair', () => {
+describe('unit — Pair(R, Wildcard) matches every holder of ANY R-pair', () => {
   it('a wildcard query counts each holder once, regardless of how many pairs it holds', () => {
     const { world, rel } = instrumentedRelations()
     const Likes = rel.defineRelation(null)
@@ -225,7 +225,7 @@ describe(' unit — Pair(R, Wildcard) matches every holder of ANY R-pair', () =>
   })
 })
 
-describe(' unit — Pair(R, specificTarget) honors the WORLD indexBits (non-default generationBits)', () => {
+describe('unit — Pair(R, specificTarget) honors the WORLD indexBits (non-default generationBits)', () => {
   it('a specific-target pair query resolves correctly when generationBits != 10', () => {
     // DISCRIMINATOR: with generationBits=14 the world's indexBits is 18, so the generation occupies
     // bits 18..31. A target whose slot has been recycled carries generation bits in 18..21 — exactly

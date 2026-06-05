@@ -236,7 +236,7 @@ describe('RF-CHANGED — parity with numeric fields across all three change surf
     expect(changes).toBe(1)
   })
 
-  test('deep in-place object mutation does NOT track; re-assignment DOES ', () => {
+  test('deep in-place object mutation does NOT track; re-assignment DOES', () => {
     const Node = defineComponent({ meta: object<{ tags: string[] }>() }, { name: 'NodeDM' })
     const world = createWorld({ components: asComps(Node) })
     let changes = 0
@@ -357,7 +357,7 @@ describe('createStableIndex — maintenance, lookup, duplicate-id policy', () =>
     idx.dispose()
   })
 
-  test('duplicate id: last writer wins ', () => {
+  test('duplicate id: last writer wins', () => {
     const Id = defineComponent({ id: 'string' }, { name: 'IdD' })
     const world = createWorld({ components: asComps(Id) })
     const idx = createStableIndex(world, Id, 'id')

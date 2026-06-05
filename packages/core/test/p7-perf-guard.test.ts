@@ -53,7 +53,7 @@ function countingWorld(): AccessorWorld & {
   }
 }
 
-describe(' WRITE-PATH-GATE — trackWrite chain is dead-skipped with no consumer (counter-based)', () => {
+describe('WRITE-PATH-GATE — trackWrite chain is dead-skipped with no consumer (counter-based)', () => {
   const N = 256
 
   function writeN(active: boolean): { handleIndexCalls: number; trackWriteCalls: number } {
@@ -125,7 +125,7 @@ describe(' WRITE-PATH-GATE — trackWrite chain is dead-skipped with no consumer
   })
 })
 
-describe(' CHUNK-SETUP-O(A) — eachChunk preamble is independent of N (structural)', () => {
+describe('CHUNK-SETUP-O(A) — eachChunk preamble is independent of N (structural)', () => {
   function build(n: number): { resolves: number; chunkIdentities: Set<unknown>; rows: number } {
     const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'p7cx' })
     const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'p7cv' })

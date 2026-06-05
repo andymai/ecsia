@@ -75,7 +75,7 @@ import type {
   Schema,
 } from 'ecsia'
 
-describe(' umbrella — the documented public surface is importable from ecsia', () => {
+describe('umbrella — the documented public surface is importable from ecsia', () => {
   test('every documented runtime export is a present binding of the right kind', () => {
     const fns = [
       createWorld,

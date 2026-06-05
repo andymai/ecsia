@@ -28,7 +28,7 @@ function fillToLeave(cb: CommandBuffer, free: number): void {
   cb.head = cb.words.length - free
 }
 
-describe('encode.ts: create() reservation exhaustion bails without burning a handle ', () => {
+describe('encode.ts: create() reservation exhaustion bails without burning a handle', () => {
   test('create() past the reservation cap returns NO_ENTITY, warns, emits no record, and does not advance the cursor', () => {
     const cb = makeCommandBuffer(0, 64, false)
     cb.reservation = { handles: [1 as EntityHandle, 2 as EntityHandle] }

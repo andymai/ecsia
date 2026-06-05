@@ -16,7 +16,7 @@ interface Meta {
   n: number
 }
 
-describe(' RICH — round-trip property (RF-ROUNDTRIP)', () => {
+describe('RICH — round-trip property (RF-ROUNDTRIP)', () => {
   it('every string + object<T> value survives a snapshot round-trip for a randomized entity set', () => {
     fc.assert(
       fc.property(

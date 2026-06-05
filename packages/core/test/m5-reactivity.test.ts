@@ -23,7 +23,7 @@ function makeKit(opts?: Parameters<typeof createWorld>[0]): {
   return { world: createWorld({ ...opts, components }), Position, Velocity }
 }
 
-describe(' / — the Changed filter is write-log driven from the mutable setter', () => {
+describe('/ — the Changed filter is write-log driven from the mutable setter', () => {
   test('a mutable setter write surfaces in eachChanged; the readonly path never tracks', () => {
     const { world, Position } = makeKit()
     const q = world.query(read(Position)).changed()
@@ -72,7 +72,7 @@ describe(' / — the Changed filter is write-log driven from the mutable setter'
   })
 })
 
-describe(' — observers are deferred, never synchronous', () => {
+describe('— observers are deferred, never synchronous', () => {
   test('onChange does not fire from the setter; only at observerDrain', () => {
     const { world, Position } = makeKit()
     let fired = 0
@@ -122,7 +122,7 @@ describe(' — observers are deferred, never synchronous', () => {
   })
 })
 
-describe('changeVersion granularity — component-level default ', () => {
+describe('changeVersion granularity — component-level default', () => {
   test('writing one field stamps the whole-entity row (component granularity): changedSince is true for the entity', () => {
     const { world, Position } = makeKit()
     const e = world.spawnWith(Position)
@@ -149,7 +149,7 @@ describe('changeVersion granularity — component-level default ', () => {
   })
 })
 
-describe(' — destroy ordering lets an onRemove handler read the last value', () => {
+describe('— destroy ordering lets an onRemove handler read the last value', () => {
   test('onRemove resolves the dying entity and reads its final component value', () => {
     const { world, Position } = makeKit()
     let seen = -1
@@ -205,7 +205,7 @@ describe(' — destroy ordering lets an onRemove handler read the last value', (
   })
 })
 
-describe(' — add-then-remove within a frame coalesces (off the shape log too)', () => {
+describe('— add-then-remove within a frame coalesces (off the shape log too)', () => {
   test('maintainStructural drain agrees with synchronous maintenance', () => {
     const { world, Position, Velocity } = makeKit()
     const q = world.query(read(Position), read(Velocity)).added().removed()
@@ -223,7 +223,7 @@ describe(' — add-then-remove within a frame coalesces (off the shape log too)'
   })
 })
 
-describe(' — recoverable overflow spill (no hard throw)', () => {
+describe('— recoverable overflow spill (no hard throw)', () => {
   test('writing more entities than the tiny ring holds does not throw and reports all changed', () => {
     const { world, Position } = makeKit({ maxEntities: 64, reactivity: { maxWritesPerFrame: 4 } })
     const q = world.query(read(Position)).changed()

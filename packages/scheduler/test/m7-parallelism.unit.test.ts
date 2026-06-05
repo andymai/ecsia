@@ -50,7 +50,7 @@ afterEach(async () => {
 })
 
 // --------------------------------------------------------------------------------------------------
-describe('UNIT — multi-worker disjoint wave is BIT-IDENTICAL to the serial executor ', () => {
+describe('UNIT — multi-worker disjoint wave is BIT-IDENTICAL to the serial executor', () => {
   // The SAME kernels run on N workers (over the shared SABs) and on the main thread (one "worker" =
   // serial). A 2-worker pool and a serial application of the identical effect must agree byte-for-byte.
   test.each([2, 3, 4])('a %i-worker pool produces the identical Health/Mana column state as the serial oracle', async (workerCount) => {
@@ -99,7 +99,7 @@ describe('UNIT — multi-worker disjoint wave is BIT-IDENTICAL to the serial exe
 })
 
 // --------------------------------------------------------------------------------------------------
-describe('UNIT — threaded startup without SAB-backed buffers is NEVER silent ', () => {
+describe('UNIT — threaded startup without SAB-backed buffers is NEVER silent', () => {
   test('a threaded pool over a world with no SAB manifest emits a clear diagnostic and stays serial', async () => {
     // Force the no-cross-origin-isolation shape: a NON-threaded world has no SAB-backed columns/regions,
     // so __exportShared returns an empty manifest. The pool must DIAGNOSE rather than silently proceed.
@@ -125,7 +125,7 @@ describe('UNIT — threaded startup without SAB-backed buffers is NEVER silent '
 })
 
 // --------------------------------------------------------------------------------------------------
-describe('UNIT — each wait tier is selected by a forced capability probe ', () => {
+describe('UNIT — each wait tier is selected by a forced capability probe', () => {
   test('tier 1 (waitAsync) when the browser-main waitAsync cap is present', () => {
     expect(selectWaitTier({ waitAsync: true, waitBlocking: true, sabAvailable: true })).toBe('waitAsync')
   })

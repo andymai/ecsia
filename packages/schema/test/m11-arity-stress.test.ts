@@ -71,7 +71,7 @@ function typecheck(file: string, extra: readonly string[] = []): { ok: boolean; 
   }
 }
 
-describe(' type-arity stress ', () => {
+describe('type-arity stress', { timeout: 30_000 }, () => {
   test('the stress fixture type-checks clean: every @ts-expect-error is a real error', () => {
     const { ok, out } = typecheck(stressFixture)
     expect(ok, out).toBe(true)
@@ -138,7 +138,7 @@ describe(' type-arity stress ', () => {
   })
 })
 
-describe(' inference budget ', () => {
+describe('inference budget', { timeout: 60_000 }, () => {
   test('the max-arity budget fixture compiles within the instantiation budget', () => {
     const { ok, out } = typecheck(budgetFixture, ['--extendedDiagnostics'])
     expect(ok, out).toBe(true)

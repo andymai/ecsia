@@ -8,7 +8,7 @@ const fixture = resolve(here, 'schema-inference.test-d.ts')
 
 // Gate the: the fixture must type-check under the project's
 // strict flags. It is type-only (no runtime assertions), so we drive tsc on it directly.
-describe('schema inference contracts ', () => {
+describe('schema inference contracts', () => {
   test('the inference fixture type-checks clean', () => {
     let ok = true
     let out = ''

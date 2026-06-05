@@ -97,7 +97,7 @@ describe('add/remove drive the expected migration', () => {
   })
 })
 
-describe('tag / zero-field components contribute NO ColumnSet ', () => {
+describe('tag / zero-field components contribute NO ColumnSet', () => {
   test('a tag adds a distinct archetype but no readable column set', () => {
     const Alive = defineTag('Alive')
     const Health = defineComponent({ hp: 'i32' }, { name: 'c7' })
@@ -159,7 +159,7 @@ describe('EMPTY_ARCHETYPE_ID spawn path', () => {
   })
 })
 
-describe('world.warm(sig) promotes a cold archetype ', () => {
+describe('world.warm(sig) promotes a cold archetype', () => {
   test('a forced-cold archetype is promoted to hot and gains real columns', () => {
     const A = defineComponent({ a: 'f32' }, { name: 'c9' })
     const B = defineComponent({ b: 'f32' }, { name: 'c10' })

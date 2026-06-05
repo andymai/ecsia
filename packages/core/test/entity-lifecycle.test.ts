@@ -311,7 +311,7 @@ describe('capacity & growth (I3 / I9)', () => {
     expect(() => w.spawn()).toThrow(/exhausted/)
   })
 
-  test('threaded worlds reserve maxIndex for the NO_ENTITY sentinel ', () => {
+  test('threaded worlds reserve maxIndex for the NO_ENTITY sentinel', () => {
     // crossOriginIsolated is false in the test env, so threaded arrays are plain ArrayBuffers,
     // but the mint ceiling is still maxIndex (not maxIndex + 1): the sentinel slot is unusable.
     // gen 30 → maxIndex 3; threaded ceiling = 3, so at most 3 distinct mints.

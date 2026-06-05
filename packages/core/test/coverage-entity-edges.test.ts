@@ -23,7 +23,7 @@ function makeAllocator(layout: HandleLayout, capacity = layout.capacity): Entity
   })
 }
 
-describe('codec — makeHandleLayout / makeHandle guards ', () => {
+describe('codec — makeHandleLayout / makeHandle guards', () => {
   test('makeHandleLayout rejects out-of-range / non-integer generationBits', () => {
     expect(() => makeHandleLayout(-1)).toThrow(RangeError)
     expect(() => makeHandleLayout(32)).toThrow(/integer in \[0, 31\]/)

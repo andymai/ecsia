@@ -42,7 +42,7 @@ function makeKit(opts?: Parameters<typeof createWorld>[0]): {
 // — the FILTER and the PREDICATE agree but never touch each other's state.
 // ---------------------------------------------------------------------------
 
-describe(' — .changed FILTER (write log) and changedSince PREDICATE (changeVersion) agree, mechanisms separate', () => {
+describe('— .changed FILTER (write log) and changedSince PREDICATE (changeVersion) agree, mechanisms separate', () => {
   test('for any random write subset, the filter set === the predicate set', () => {
     fc.assert(
       fc.property(
@@ -148,7 +148,7 @@ describe(' — .changed FILTER (write log) and changedSince PREDICATE (changeVer
 // — add-then-remove of the same component in one frame nets to no delta.
 // ---------------------------------------------------------------------------
 
-describe(' — coalescing: add/remove pairs within one frame net to zero (single deferred drain)', () => {
+describe('— coalescing: add/remove pairs within one frame net to zero (single deferred drain)', () => {
   test('any balanced add/remove permutation of one component nets to no added/removed delta', () => {
     fc.assert(
       fc.property(
@@ -198,7 +198,7 @@ describe(' — coalescing: add/remove pairs within one frame net to zero (single
 // public delta is IDENTICAL to the same sequence run on a ring that never overflowed.
 // ---------------------------------------------------------------------------
 
-describe(' — overflow spill preserves the full chronological delta (no entry lost)', () => {
+describe('— overflow spill preserves the full chronological delta (no entry lost)', () => {
   function runChangedDelta(ringEntries: number, indices: readonly number[]): number[] {
     const { world, Position } = makeKit({ maxEntities: 128, reactivity: { maxWritesPerFrame: ringEntries } })
     const q = world.query(read(Position)).changed()
@@ -253,7 +253,7 @@ describe(' — overflow spill preserves the full chronological delta (no entry l
 // — NO per-field atomic on the write-log push path.
 // ---------------------------------------------------------------------------
 
-describe(' — zero Atomics.* on the trackWrite → write-log push path', () => {
+describe('— zero Atomics.* on the trackWrite → write-log push path', () => {
   // Spy on EVERY Atomics method so any atomic touched during a setter→trackWrite→push chain trips.
   const atomicNames = [
     'add',

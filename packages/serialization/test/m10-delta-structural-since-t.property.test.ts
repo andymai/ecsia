@@ -160,7 +160,7 @@ function canon(
   return { rows, pairs }
 }
 
-describe('P-SOUND — delta-with-structure soundness over random value + structural ops ', () => {
+describe('P-SOUND — delta-with-structure soundness over random value + structural ops', () => {
   test('apply(delta) deep-equals the live world (entity set + values + relations)', () => {
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 6 }), fc.array(opArb, { minLength: 1, maxLength: 24 }), (n0, ops) => {
@@ -242,7 +242,7 @@ describe('P-SOUND — delta-with-structure soundness over random value + structu
 // P-NOALLOC — the delta gather path performs no per-tick / per-row heap allocation.
 // ---------------------------------------------------------------------------------------------------
 
-describe('P-NOALLOC — repeated delta() reuses the hoisted buffer; zero per-row Float64Array ', () => {
+describe('P-NOALLOC — repeated delta() reuses the hoisted buffer; zero per-row Float64Array', () => {
   test('no per-row Float64Array allocation across many value-write ticks', () => {
     const P = defineComponent({ pos: 'f64' }, { name: 'p' }) as ComponentDef<Schema>
     const world = createWorld({ components: [P], maxEntities: 256 })
@@ -328,7 +328,7 @@ function valueArbFor(kind: ElementKind): fc.Arbitrary<number> {
   }
 }
 
-describe('P-WIRE — value field round-trips through element-ordinal + native width for every ElementKind ', () => {
+describe('P-WIRE — value field round-trips through element-ordinal + native width for every ElementKind', () => {
   for (const kind of ALL_KINDS) {
     test(`kind ${kind}: producer value arrives bit-faithful through a value-only delta`, () => {
       fc.assert(

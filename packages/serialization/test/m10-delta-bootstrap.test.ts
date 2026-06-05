@@ -13,7 +13,7 @@ import {
   DeltaOp,
 } from '../src/index.js'
 
-describe(' delta — version-stamp driven ', () => {
+describe('delta — version-stamp driven', () => {
   it('carries only rows changed since the baseline tick, and applies them on the receiver', () => {
     const P = defineComponent({ x: 'f32' }, { brand: 'P' })
     const src = createWorld({ components: [P] })
@@ -43,7 +43,7 @@ describe(' delta — version-stamp driven ', () => {
   })
 })
 
-describe(' structural stream — values on add ', () => {
+describe('structural stream — values on add', () => {
   it('a late joiner reconstructs full state from the stream alone', () => {
     const P = defineComponent({ x: 'f32', y: 'f32' }, { brand: 'P' })
     const src = createWorld({ components: [P] })
@@ -95,7 +95,7 @@ describe(' structural stream — values on add ', () => {
   })
 })
 
-describe(' bootstrap — transport separation ', () => {
+describe('bootstrap — transport separation', () => {
   it('bootstrapForWorker returns a manifest + registry, never component value bytes', () => {
     const P = defineComponent({ x: 'f32' }, { brand: 'P' })
     const src = createWorld({ components: [P] })

@@ -9,7 +9,7 @@ const fixture = resolve(here, 'm4-query-inference.test-d.ts')
 // Gate the query DSL inference obligations: the fixture must
 // type-check under the project's strict flags. Type-only — drive tsc on it directly. Every
 // @ts-expect-error is a real error (the read/write split, has/optional contributions, the arity cap).
-describe('query DSL inference contracts ', () => {
+describe('query DSL inference contracts', () => {
   test('the query inference fixture type-checks clean', () => {
     let ok = true
     let out = ''

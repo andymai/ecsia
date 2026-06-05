@@ -128,7 +128,7 @@ afterEach(async () => {
   pool = undefined
 })
 
-describe(' — deferred observers under a REAL multi-worker frame: no re-entrancy, stream === single-thread', () => {
+describe('— deferred observers under a REAL multi-worker frame: no re-entrancy, stream === single-thread', () => {
   test('a fuzzed multi-worker spawner frame: threaded observer stream is IDENTICAL to the single-thread run, and no observer sees a partial wave', async () => {
     await fc.assert(
       fc.asyncProperty(

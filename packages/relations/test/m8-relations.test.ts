@@ -7,8 +7,8 @@ import { describe, it, expect } from 'vitest'
 import { createWorld } from '@ecsia/core'
 import { createRelations, Wildcard } from '../src/index.js'
 
-describe(' relations — storage-kind resolution & structural ops', () => {
-  it('tag relation: addPair sets the pair + presence bits; hasPair / hasRelation track them ', () => {
+describe('relations — storage-kind resolution & structural ops', () => {
+  it('tag relation: addPair sets the pair + presence bits; hasPair / hasRelation track them', () => {
     const world = createWorld()
     const rel = createRelations(world)
     const ChildOf = rel.defineRelation(null) // payload-free → tag
@@ -37,7 +37,7 @@ describe(' relations — storage-kind resolution & structural ops', () => {
     expect([...rel.subjectsOf(Likes, b)]).toEqual([a])
   })
 
-  it('exclusive re-target is a field write, no archetype churn after the first attach ', () => {
+  it('exclusive re-target is a field write, no archetype churn after the first attach', () => {
     const world = createWorld()
     const rel = createRelations(world)
     const ChildOf = rel.defineRelation({ weight: 'f32' }, { exclusive: true })
@@ -64,7 +64,7 @@ describe(' relations — storage-kind resolution & structural ops', () => {
     expect([...rel.subjectsOf(ChildOf, p3)]).toEqual([child])
   })
 
-  it('overflow-table relation: payload lives off-archetype, readable via getPair ', () => {
+  it('overflow-table relation: payload lives off-archetype, readable via getPair', () => {
     const world = createWorld()
     const rel = createRelations(world)
     const Damage = rel.defineRelation({ amount: 'u32' }, { exclusive: false })
@@ -83,8 +83,8 @@ describe(' relations — storage-kind resolution & structural ops', () => {
   })
 })
 
-describe(' relations — wildcard query, cascade, back-ref, depth', () => {
-  it('Pair(R, Wildcard) matches via the presence bit; Pair(R, target) matches the specific pair ', () => {
+describe('relations — wildcard query, cascade, back-ref, depth', () => {
+  it('Pair(R, Wildcard) matches via the presence bit; Pair(R, target) matches the specific pair', () => {
     const world = createWorld()
     const rel = createRelations(world)
     const Likes = rel.defineRelation(null)
@@ -148,7 +148,7 @@ describe(' relations — wildcard query, cascade, back-ref, depth', () => {
     expect(rel.hasRelation(a, Likes)).toBe(false) // dangling pair removed before b's slot recycles
   })
 
-  it('back-ref buckets are reclaimed when empty ', () => {
+  it('back-ref buckets are reclaimed when empty', () => {
     const world = createWorld()
     const rel = createRelations(world)
     const Likes = rel.defineRelation(null)
@@ -160,7 +160,7 @@ describe(' relations — wildcard query, cascade, back-ref, depth', () => {
     expect([...rel.subjectsOf(Likes, b)]).toEqual([]) // empty bucket, no leak
   })
 
-  it('lazy depthOf walks the exclusive parent chain; throws on non-exclusive ', () => {
+  it('lazy depthOf walks the exclusive parent chain; throws on non-exclusive', () => {
     const world = createWorld()
     const rel = createRelations(world)
     const ChildOf = rel.defineRelation(null, { exclusive: true })

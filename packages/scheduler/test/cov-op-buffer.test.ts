@@ -5,7 +5,7 @@ import { describe, expect, test } from 'vitest'
 import { recordLen, Op, makeCommandBuffer, ensureWords } from '../src/internal.js'
 import type { CommandBuffer } from '../src/internal.js'
 
-describe('op.ts: recordLen is self-describing per opcode ', () => {
+describe('op.ts: recordLen is self-describing per opcode', () => {
   test('fixed-arity ops report their constant length', () => {
     const w = new Uint32Array(8)
     w[0] = Op.CREATE

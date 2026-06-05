@@ -31,7 +31,7 @@ function makeKit(): {
   return { world: createWorld({ components }), Position, Velocity, Health, Alive }
 }
 
-describe(' canonical-hash dedup', () => {
+describe('canonical-hash dedup', () => {
   test('identical term sets (order-independent) return the SAME LiveQuery', () => {
     const { world, Position, Velocity } = makeKit()
     const a = world.query(read(Position), read(Velocity))
@@ -55,7 +55,7 @@ describe(' canonical-hash dedup', () => {
   })
 })
 
-describe('iteration correctness + per-archetype matching ', () => {
+describe('iteration correctness + per-archetype matching', () => {
   test('each yields exactly the matching entities with readable value props', () => {
     const { world, Position, Velocity } = makeKit()
     const q = world.query(read(Position), write(Velocity))
@@ -112,7 +112,7 @@ describe('iteration correctness + per-archetype matching ', () => {
   })
 })
 
-describe(' incremental maintenance', () => {
+describe('incremental maintenance', () => {
   test('add/remove migrate the entity in and out of the matching set', () => {
     const { world, Position, Velocity } = makeKit()
     const q = world.query(read(Position), read(Velocity))
@@ -143,7 +143,7 @@ describe(' incremental maintenance', () => {
   })
 })
 
-describe(' current ⟺ matchingArchetypes coherence', () => {
+describe('current ⟺ matchingArchetypes coherence', () => {
   test('the matchingArchetypes walk yields exactly current.size entities', () => {
     const { world, Position, Velocity } = makeKit()
     const q = world.query(read(Position))
@@ -157,7 +157,7 @@ describe(' current ⟺ matchingArchetypes coherence', () => {
   })
 })
 
-describe(' added/removed coalescing', () => {
+describe('added/removed coalescing', () => {
   test('remove-then-add within a frame nets to no delta', () => {
     const { world, Position, Velocity } = makeKit()
     const q = world.query(read(Position), read(Velocity)).added().removed()
@@ -202,7 +202,7 @@ describe(' added/removed coalescing', () => {
   })
 })
 
-describe(' zero-alloc iteration (pooled element + cursor)', () => {
+describe('zero-alloc iteration (pooled element + cursor)', () => {
   test('the pooled element is the SAME object across rows and iterations', () => {
     const { world, Position } = makeKit()
     const q = world.query(read(Position))

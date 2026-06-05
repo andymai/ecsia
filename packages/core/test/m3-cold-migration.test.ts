@@ -95,7 +95,7 @@ function writeField0(s: Store, index: number, c: ComponentId, value: number): vo
   col.view[row * col.layout.stride] = value
 }
 
-describe('hot → cold migration preserves shared-column field VALUES ', () => {
+describe('hot → cold migration preserves shared-column field VALUES', () => {
   test('reviewer repro: spawn {A} a=42, add B into a COLD {A,B}; A.a is still 42, not 0', () => {
     // EMPTY(0) hot, {A} hot (budget 2) => {A,B} is forced cold.
     const s = makeStore(2, 2)
@@ -132,7 +132,7 @@ describe('hot → cold migration preserves shared-column field VALUES ', () => {
   })
 })
 
-describe('cold → hot migration (warm) carries field VALUES out of the overflow store ', () => {
+describe('cold → hot migration (warm) carries field VALUES out of the overflow store', () => {
   test('a populated cold archetype, promoted via warm, keeps every resident entity value', () => {
     // EMPTY hot only => {A} is cold.
     const s = makeStore(2, 1)
@@ -185,7 +185,7 @@ describe('cold → cold migration preserves shared values (rowOf clobber regress
   })
 })
 
-describe('cold-row reclamation: no monotonic leak, freed rows reused ', () => {
+describe('cold-row reclamation: no monotonic leak, freed rows reused', () => {
   test('despawn-style removeRow frees the cold rows; the next cold alloc reuses them', () => {
     const s = makeStore(2, 1) // {A} is cold
     const A = 1 as ComponentId

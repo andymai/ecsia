@@ -21,7 +21,7 @@ function makeWorld() {
   return { world, P }
 }
 
-describe('snapshot/delta serializers — serial-phase guard ', () => {
+describe('snapshot/delta serializers — serial-phase guard', () => {
   it('snapshot() throws when the world is not at a serial flush point', () => {
     const { world } = makeWorld()
     const ser = createSnapshotSerializer(world)
@@ -65,7 +65,7 @@ describe('snapshot — includeRelations=false omits the relations section', () =
   })
 })
 
-describe('deserialize — header validation gates ', () => {
+describe('deserialize — header validation gates', () => {
   it('load() throws off the serial slot', () => {
     const { world } = makeWorld()
     const bytes = createSnapshotSerializer(world).snapshotCopy()
@@ -104,7 +104,7 @@ describe('deserialize — header validation gates ', () => {
 
 })
 
-describe('deserialize — merge mode preserves pre-existing entities ', () => {
+describe('deserialize — merge mode preserves pre-existing entities', () => {
   it("mode:'merge' does NOT clear the receiver; both old and incoming entities are alive", () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const src = createWorld({ components: [P as ComponentDef<Schema>] })
@@ -142,7 +142,7 @@ describe('deserialize — merge mode preserves pre-existing entities ', () => {
   })
 })
 
-describe('deserialize — relation re-establishment + the NO_ENTITY (cleared) target path ', () => {
+describe('deserialize — relation re-establishment + the NO_ENTITY (cleared) target path', () => {
   it('re-establishes an exclusive pair AND a cleared (null-target) exclusive subject loads without a pair', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const src = createWorld({ components: [P as ComponentDef<Schema>] })
@@ -173,7 +173,7 @@ describe('deserialize — relation re-establishment + the NO_ENTITY (cleared) ta
   })
 })
 
-describe('applyDelta — header validation ', () => {
+describe('applyDelta — header validation', () => {
   it('throws off the serial slot', () => {
     const { world } = makeWorld()
     const ser = createDeltaSerializer(world, world.currentTick())

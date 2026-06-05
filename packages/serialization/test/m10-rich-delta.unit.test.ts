@@ -22,7 +22,7 @@ function bootstrap<C extends ComponentDef<Schema>>(srcComps: readonly C[], dstCo
   return { dst, remap: new Map(remap) }
 }
 
-describe(' RICH — delta carries changed rich values (T-RT-DELTA)', () => {
+describe('RICH — delta carries changed rich values (T-RT-DELTA)', () => {
   it('a rich field changed since baseline applies to the stale mirror', () => {
     const Label = defineComponent({ text: 'string' }, { name: 'label' })
     const src = createWorld({ components: asComps(Label) })
@@ -85,7 +85,7 @@ describe(' RICH — delta carries changed rich values (T-RT-DELTA)', () => {
   })
 })
 
-describe(' RICH — epsilon-diff (T-EPSILON-DROP / T-EPSILON-CORE-PURE)', () => {
+describe('RICH — epsilon-diff (T-EPSILON-DROP / T-EPSILON-CORE-PURE)', () => {
   it('a numeric change within epsilon is DROPPED; one exceeding is emitted; shadow accumulates', () => {
     const P = defineComponent({ x: 'f64' }, { name: 'p' })
     const src = createWorld({ components: asComps(P) })

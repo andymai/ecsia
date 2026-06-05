@@ -52,7 +52,7 @@ function typecheck(file: string): { ok: boolean; out: string } {
   }
 }
 
-describe(' readonly shorthand/read is a compile error ', () => {
+describe('readonly shorthand/read is a compile error', () => {
   test('the fixture type-checks clean: every @ts-expect-error is a real error, write paths compile', () => {
     const { ok, out } = typecheck(fixture)
     expect(ok, out).toBe(true)

@@ -11,8 +11,8 @@ import type { Signature } from '../src/internal.js'
 
 const sig = (ids: number[]): Signature => canonicalize(ids as unknown as ComponentId[])
 
-describe('Signature ', () => {
-  test('canonicalize sorts ascending and de-dups ', () => {
+describe('Signature', () => {
+  test('canonicalize sorts ascending and de-dups', () => {
     const s = sig([5, 1, 3, 1, 5, 2])
     expect([...s]).toEqual([1, 2, 3, 5])
   })
@@ -46,7 +46,7 @@ describe('Signature ', () => {
   })
 })
 
-describe('Archetype interning + edge graph ', () => {
+describe('Archetype interning + edge graph', () => {
   test(': spawnWith two component orders interns the SAME archetype object', () => {
     const A = defineComponent({ x: 'f32' }, { name: 'c1' })
     const B = defineComponent({ y: 'f32' }, { name: 'c2' })
@@ -92,7 +92,7 @@ describe('migration correctness + spawnWith', () => {
     expect((w.entity(e).read(Velocity) as { dx: number }).dx).toBe(-1)
   })
 
-  test('column growth past the 1024 reserve keeps per-field views correctly mapped ', () => {
+  test('column growth past the 1024 reserve keeps per-field views correctly mapped', () => {
     // INITIAL_ROWS (64) × GROWTH_RESERVE_FACTOR (16) = 1024 reserved rows; spawning the 1025th entity
     // exhausts the resizable reservation and forces the fallback grow (column re-alloc + view rebind).
     // The rebind must re-point ONLY the grown field's view — a whole-instance rebind aliases the
@@ -126,7 +126,7 @@ describe('migration correctness + spawnWith', () => {
     expect((w.entity(e).read(Position) as { x: number }).x).toBe(7)
   })
 
-  test('swap-pop keeps sibling rows resolvable after a middle entity migrates ', () => {
+  test('swap-pop keeps sibling rows resolvable after a middle entity migrates', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'c8' })
     const Q = defineComponent({ q: 'i32' }, { name: 'c9' })
     const w = createWorld({ components: [P, Q] })
@@ -171,7 +171,7 @@ describe('migration correctness + spawnWith', () => {
   })
 })
 
-describe('tag components contribute no ColumnSet ', () => {
+describe('tag components contribute no ColumnSet', () => {
   test('an entity holding only a tag is in a non-empty archetype with no readable columns', () => {
     const Alive = defineTag('Alive')
     const w = createWorld({ components: [Alive] })
@@ -184,8 +184,8 @@ describe('tag components contribute no ColumnSet ', () => {
   })
 })
 
-describe('bitmask membership index ', () => {
-  test(' coherence: bitmask membership matches the entity signature after each op', () => {
+describe('bitmask membership index', () => {
+  test('coherence: bitmask membership matches the entity signature after each op', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'c15' })
     const Q = defineComponent({ q: 'i32' }, { name: 'c16' })
     const w = createWorld({ components: [P, Q] })
@@ -221,7 +221,7 @@ describe('bitmask membership index ', () => {
   })
 })
 
-describe('cold-archetype fragmentation cap ', () => {
+describe('cold-archetype fragmentation cap', () => {
   test('with maxHotArchetypes=2 the 3rd distinct signature is cold but still queryable via has()', () => {
     const A = defineComponent({ a: 'f32' }, { name: 'c19' })
     const B = defineComponent({ b: 'f32' }, { name: 'c20' })

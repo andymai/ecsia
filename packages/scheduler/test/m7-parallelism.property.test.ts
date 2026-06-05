@@ -272,7 +272,7 @@ describe('COMMAND-BUFFER ENTITY-REF SAFETY (the -gating fuzz, CB-SAFE )', () => 
     )
   })
 
-  test('reserved-ID create-then-use chains within a flush ALWAYS succeed ', () => {
+  test('reserved-ID create-then-use chains within a flush ALWAYS succeed', () => {
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 16 }), (chainLen) => {
         const k = makeKit(0)
@@ -330,7 +330,7 @@ describe('COMMAND-BUFFER ENTITY-REF SAFETY (the -gating fuzz, CB-SAFE )', () => 
 })
 
 // --------------------------------------------------------------------------------------------------
-describe('NO WORKER BITMASK ACCESS during a wave ', () => {
+describe('NO WORKER BITMASK ACCESS during a wave', () => {
   // The bitmask is the single-entity membership substrate; its phase gate throws on ANY read/write
   // while world.phase==='wave'. world.has() → storage.has → bitmaskHas → assertSerial. So any bitmask
   // touch off the serial slot is a HARD ERROR, which is exactly what proves workers never read it.
@@ -397,7 +397,7 @@ describe('NO WORKER BITMASK ACCESS during a wave ', () => {
 })
 
 // --------------------------------------------------------------------------------------------------
-describe('NO MID-WAVE STRUCTURAL MUTATION ', () => {
+describe('NO MID-WAVE STRUCTURAL MUTATION', () => {
   test('any structural mutation attempted while phase==="wave" THROWS — the gate', () => {
     // The load-bearing guard: every storage/entity/bitmask mutation asserts phase==='serial'.
     // While the world is in the wave window, a structural verb (add/remove/despawn) must throw, which
