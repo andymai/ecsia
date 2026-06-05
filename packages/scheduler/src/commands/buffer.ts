@@ -42,6 +42,8 @@ export interface CommandBuffer {
   fixed: boolean
   /** Set by `ensureWords` when a fixed (SAB) buffer could not fit a record: encoding was capped. */
   overflowed: boolean
+  /** Latch so the encoder emits the overflow diagnostic ONCE per wave; cleared by `resetBuffer`. */
+  overflowWarned?: boolean
 }
 
 const EMPTY_RESERVATION: BufferReservation = { handles: [] }
@@ -59,6 +61,7 @@ export function makeCommandBuffer(workerIndex: number, initialWords: number, sha
     appliedCreateCount: 0,
     fixed: shared,
     overflowed: false,
+    overflowWarned: false,
   }
 }
 
@@ -69,6 +72,7 @@ export function resetBuffer(cb: CommandBuffer): void {
   cb.reservationCursor = 0
   cb.appliedCreateCount = 0
   cb.overflowed = false
+  cb.overflowWarned = false
 }
 
 /**

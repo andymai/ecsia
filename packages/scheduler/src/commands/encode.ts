@@ -43,7 +43,8 @@ export function makeEncoder(env: EncoderEnv): CommandEncoder {
 
   /** Emit the overflow diagnostic ONCE per wave (the first capped record); subsequent caps are silent. */
   function onOverflow(): void {
-    if (!cb.overflowed) return
+    if (!cb.overflowed || cb.overflowWarned) return
+    cb.overflowWarned = true
     env.warn('command-buffer: fixed (SAB) buffer full; record dropped (raise commandWords)')
   }
 

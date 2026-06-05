@@ -20,7 +20,7 @@ export default defineConfig({
         // cannot observe it. It IS execution-tested by the real WorkerPool serial-equivalence suite.
         'packages/scheduler/src/workers/worker-entry.ts',
       ],
-      reporter: ['text', 'json-summary'],
+      reporter: ['text', 'json-summary', 'json'],
     },
   },
 })

@@ -120,9 +120,7 @@ umbrella tree-shakes).
 
 ## Design & architecture
 
-The full design lives in [`docs/spec/`](./docs/spec/README.md) — 13 module specs plus a
-[design-research report](./docs/research/DESIGN-RESEARCH.md) dissecting miniplex, bitECS, and
-becsy. Architecture in one line:
+Architecture in one line:
 
 > archetype-table SoA storage (iteration) layered over a serial-only per-entity bitmask
 > (membership), with integer-encoded relation pairs as first-class archetype members, driven
