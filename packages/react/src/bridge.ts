@@ -1,0 +1,499 @@
+// The per-world ReactBridge. Hooks ride the deferred observer layer (never changed filters: a
+// pull-side log pointer that isn't drained every frame pins the write-log ring), and the bridge
+// multiplexes them: ONE refcounted world.observe per (kind, component) in use, fanned out through
+// the bridge's own maps. Two hundred useComponent(h, Health) hooks are one core observer plus a map
+// lookup — core dispatch is O(events x observers-on-that-(kind, comp)), so per-hook core observers
+// would each be invoked for every Health event and self-filter.
+//
+// Fan-out:
+// - per-entity: component -> entityIndex -> Set<watcher>, with a generation check so a recycled
+//   index never wakes a watcher of the dead entity (remove events wake by index alone — the dying
+//   occupant's generation is already bumped by the time the drain runs, and a dead watcher must
+//   still learn it died).
+// - per-query: keyed by the LiveQuery identity world.query returns (canonical term-signature hash —
+//   identical term sets share one LiveQuery, so this IS the term signature). Any add/remove event
+//   touching a term component marks the entry dirty, INCLUDING without() components: an add can
+//   evict a match.
+//
+// Snapshots are cached per store and recomputed only when dirty, so getSnapshot is allocation-free
+// on the happy path (useSyncExternalStore treats a fresh object per call as an endless change).
+
+import { onAdd, onChange, onRemove } from '@ecsia/core'
+import type { ObserverContext, ObserverHandle } from '@ecsia/core'
+import type { ComponentDef, EntityHandle, QueryTerm, Schema } from '@ecsia/schema'
+import { computeSnapshot, snapshotsEqual } from './snapshot.js'
+import type { EcsiaWorld } from './world.js'
+
+type Kind = 'add' | 'remove' | 'change'
+
+const VALUE_KINDS: readonly Kind[] = ['add', 'remove', 'change']
+const PRESENCE_KINDS: readonly Kind[] = ['add', 'remove']
+
+const EMPTY_HANDLES: readonly EntityHandle[] = Object.freeze([])
+
+/** The slice of a LiveQuery the bridge needs; world.query's cached return satisfies it. */
+export interface QueryLike {
+  readonly terms: readonly QueryTerm[]
+  each(fn: (e: { readonly handle: EntityHandle }) => void): void
+}
+
+interface EntityWatcher {
+  readonly watchedIndex: number
+  onEvent(kind: Kind, eventHandle: EntityHandle, ctx: ObserverContext): void
+}
+
+interface ObserverCell {
+  refs: number
+  readonly handle: ObserverHandle
+}
+
+function isComponentDef(value: unknown): value is ComponentDef<Schema> {
+  return typeof value === 'object' && value !== null && 'fields' in value && 'schema' in value
+}
+
+/**
+ * The components whose add/remove events can change the query's membership: every positive term
+ * plus every without() term (an add to a Without component evicts a match). optional() terms never
+ * gate membership. Pair terms are rejected — pair-aware observer terms are not on core's public
+ * surface (relations hooks are deferred to v2).
+ */
+function membershipComponents(terms: readonly QueryTerm[]): readonly ComponentDef<Schema>[] {
+  const out: ComponentDef<Schema>[] = []
+  for (const term of terms) {
+    if (isComponentDef(term)) {
+      out.push(term)
+      continue
+    }
+    if (typeof term === 'object' && term !== null && '__term' in term) {
+      if (term.__term === 'optional') continue
+      const c = (term as { c: unknown }).c
+      if (!isComponentDef(c)) {
+        throw new Error('@ecsia/react useQuery: relation Pair(...) terms are not supported in v1')
+      }
+      out.push(c)
+      continue
+    }
+    throw new Error(
+      '@ecsia/react useQuery: unsupported query term — relation Pair(...) terms are deferred to v2; ' +
+        'pass component defs or read/write/has/without/optional terms',
+    )
+  }
+  return out
+}
+
+function sameMembership(prev: readonly EntityHandle[], next: readonly EntityHandle[]): boolean {
+  if (prev.length !== next.length) return false
+  let elementwise = true
+  for (let i = 0; i < prev.length; i++) {
+    if (prev[i] !== next[i]) {
+      elementwise = false
+      break
+    }
+  }
+  if (elementwise) return true
+  // Same length, different order (e.g. an unrelated migration shuffled archetype rows): membership
+  // is a set — query handles are unique, so a one-direction subset check at equal length suffices.
+  const set = new Set<EntityHandle>(prev)
+  for (const h of next) {
+    if (!set.has(h)) return false
+  }
+  return true
+}
+
+export class ComponentStore {
+  readonly #bridge: ReactBridge
+  readonly #world: EcsiaWorld
+  readonly #def: ComponentDef<Schema>
+  readonly watchedHandle: EntityHandle
+  readonly watchedIndex: number
+  #dirty = true
+  #snapshot: Readonly<Record<string, unknown>> | undefined = undefined
+  #active = false
+  readonly #listeners = new Set<() => void>()
+
+  constructor(bridge: ReactBridge, world: EcsiaWorld, handle: EntityHandle, def: ComponentDef<Schema>) {
+    this.#bridge = bridge
+    this.#world = world
+    this.#def = def
+    this.watchedHandle = handle
+    this.watchedIndex = world.decodeHandle(handle).index
+  }
+
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.#listeners.add(listener)
+    if (!this.#active) {
+      this.#active = true
+      // Re-check on the first post-subscribe getSnapshot: the world may have ticked between the
+      // render that computed the snapshot and this subscription (no observer covered the gap).
+      this.#dirty = true
+      this.#bridge.__activateEntityWatcher(this.#def, this, VALUE_KINDS)
+    }
+    return () => {
+      this.#listeners.delete(listener)
+      if (this.#listeners.size === 0 && this.#active) {
+        this.#active = false
+        this.#bridge.__deactivateEntityWatcher(this.#def, this, VALUE_KINDS)
+        this.#bridge.__evictComponentStore(this.#def, this.watchedHandle, this)
+      }
+    }
+  }
+
+  readonly getSnapshot = (): Readonly<Record<string, unknown>> | undefined => {
+    if (this.#dirty) {
+      const next = computeSnapshot(this.#world, this.watchedHandle, this.#def)
+      if (!snapshotsEqual(this.#snapshot, next)) this.#snapshot = next
+      this.#dirty = false
+    }
+    return this.#snapshot
+  }
+
+  onEvent(kind: Kind, eventHandle: EntityHandle): void {
+    // add/change events describe the slot's CURRENT occupant; a different handle means a recycled
+    // index, and this watcher's entity already got its remove wake-up when it died. Remove events
+    // wake by index alone (see module header).
+    if (kind !== 'remove' && eventHandle !== this.watchedHandle) return
+    if (this.#dirty) return
+    this.#dirty = true
+    for (const listener of this.#listeners) listener()
+  }
+}
+
+export class HasStore {
+  readonly #bridge: ReactBridge
+  readonly #world: EcsiaWorld
+  readonly #def: ComponentDef<Schema>
+  readonly watchedHandle: EntityHandle
+  readonly watchedIndex: number
+  #dirty = true
+  #value = false
+  #active = false
+  readonly #listeners = new Set<() => void>()
+
+  constructor(bridge: ReactBridge, world: EcsiaWorld, handle: EntityHandle, def: ComponentDef<Schema>) {
+    this.#bridge = bridge
+    this.#world = world
+    this.#def = def
+    this.watchedHandle = handle
+    this.watchedIndex = world.decodeHandle(handle).index
+  }
+
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.#listeners.add(listener)
+    if (!this.#active) {
+      this.#active = true
+      this.#dirty = true
+      this.#bridge.__activateEntityWatcher(this.#def, this, PRESENCE_KINDS)
+    }
+    return () => {
+      this.#listeners.delete(listener)
+      if (this.#listeners.size === 0 && this.#active) {
+        this.#active = false
+        this.#bridge.__deactivateEntityWatcher(this.#def, this, PRESENCE_KINDS)
+        this.#bridge.__evictHasStore(this.#def, this.watchedHandle, this)
+      }
+    }
+  }
+
+  readonly getSnapshot = (): boolean => {
+    if (this.#dirty) {
+      this.#value = this.#world.has(this.watchedHandle, this.#def)
+      this.#dirty = false
+    }
+    return this.#value
+  }
+
+  onEvent(kind: Kind, eventHandle: EntityHandle): void {
+    if (kind !== 'remove' && eventHandle !== this.watchedHandle) return
+    if (this.#dirty) return
+    this.#dirty = true
+    for (const listener of this.#listeners) listener()
+  }
+}
+
+export class QueryStore {
+  readonly #bridge: ReactBridge
+  readonly #query: QueryLike
+  readonly #comps: readonly ComponentDef<Schema>[]
+  #dirty = true
+  #handles: readonly EntityHandle[] = EMPTY_HANDLES
+  #active = false
+  readonly #listeners = new Set<() => void>()
+
+  constructor(bridge: ReactBridge, query: QueryLike) {
+    this.#bridge = bridge
+    this.#query = query
+    this.#comps = membershipComponents(query.terms)
+  }
+
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.#listeners.add(listener)
+    if (!this.#active) {
+      this.#active = true
+      this.#dirty = true
+      this.#bridge.__activateQueryWatcher(this.#comps, this)
+    }
+    return () => {
+      this.#listeners.delete(listener)
+      if (this.#listeners.size === 0 && this.#active) {
+        this.#active = false
+        this.#bridge.__deactivateQueryWatcher(this.#comps, this)
+        this.#bridge.__evictQueryStore(this.#query, this)
+      }
+    }
+  }
+
+  readonly getSnapshot = (): readonly EntityHandle[] => {
+    if (this.#dirty) {
+      const next: EntityHandle[] = []
+      this.#query.each((e) => next.push(e.handle))
+      if (!sameMembership(this.#handles, next)) this.#handles = next
+      this.#dirty = false
+    }
+    return this.#handles
+  }
+
+  markDirty(): void {
+    if (this.#dirty) return
+    this.#dirty = true
+    for (const listener of this.#listeners) listener()
+  }
+}
+
+class EffectWatcher implements EntityWatcher {
+  readonly #world: EcsiaWorld
+  readonly #def: ComponentDef<Schema>
+  readonly #handle: EntityHandle
+  readonly watchedIndex: number
+  readonly #callback: (snapshot: Readonly<Record<string, unknown>> | undefined, ctx: ObserverContext) => void
+  #lastWasAbsent = false
+
+  constructor(
+    world: EcsiaWorld,
+    handle: EntityHandle,
+    def: ComponentDef<Schema>,
+    callback: (snapshot: Readonly<Record<string, unknown>> | undefined, ctx: ObserverContext) => void,
+  ) {
+    this.#world = world
+    this.#def = def
+    this.#handle = handle
+    this.watchedIndex = world.decodeHandle(handle).index
+    this.#callback = callback
+  }
+
+  onEvent(kind: Kind, eventHandle: EntityHandle, ctx: ObserverContext): void {
+    if (kind !== 'remove' && eventHandle !== this.#handle) return
+    const snapshot = computeSnapshot(this.#world, this.#handle, this.#def)
+    if (snapshot === undefined) {
+      // A later remove on a recycled slot must not re-notify a watcher that already saw its
+      // entity's component go away.
+      if (kind === 'remove' && this.#lastWasAbsent) return
+      this.#lastWasAbsent = true
+    } else {
+      this.#lastWasAbsent = false
+    }
+    this.#callback(snapshot, ctx)
+  }
+}
+
+export class ReactBridge {
+  readonly #world: EcsiaWorld
+  readonly #observers = new Map<ComponentDef<Schema>, Map<Kind, ObserverCell>>()
+  readonly #entityWatchers = new Map<ComponentDef<Schema>, Map<number, Set<EntityWatcher>>>()
+  readonly #queryWatchers = new Map<ComponentDef<Schema>, Set<QueryStore>>()
+  readonly #componentStores = new Map<ComponentDef<Schema>, Map<EntityHandle, ComponentStore>>()
+  readonly #hasStores = new Map<ComponentDef<Schema>, Map<EntityHandle, HasStore>>()
+  readonly #queryStores = new Map<QueryLike, QueryStore>()
+
+  constructor(world: EcsiaWorld) {
+    this.#world = world
+  }
+
+  componentStore(handle: EntityHandle, def: ComponentDef<Schema>): ComponentStore {
+    let byHandle = this.#componentStores.get(def)
+    if (byHandle === undefined) {
+      byHandle = new Map()
+      this.#componentStores.set(def, byHandle)
+    }
+    let store = byHandle.get(handle)
+    if (store === undefined) {
+      store = new ComponentStore(this, this.#world, handle, def)
+      byHandle.set(handle, store)
+    }
+    return store
+  }
+
+  hasStore(handle: EntityHandle, def: ComponentDef<Schema>): HasStore {
+    let byHandle = this.#hasStores.get(def)
+    if (byHandle === undefined) {
+      byHandle = new Map()
+      this.#hasStores.set(def, byHandle)
+    }
+    let store = byHandle.get(handle)
+    if (store === undefined) {
+      store = new HasStore(this, this.#world, handle, def)
+      byHandle.set(handle, store)
+    }
+    return store
+  }
+
+  queryStore(query: QueryLike): QueryStore {
+    let store = this.#queryStores.get(query)
+    if (store === undefined) {
+      store = new QueryStore(this, query)
+      this.#queryStores.set(query, store)
+    }
+    return store
+  }
+
+  /** Register a useComponentEffect callback; returns its dispose. Not shared — one per hook. */
+  addComponentEffect(
+    handle: EntityHandle,
+    def: ComponentDef<Schema>,
+    callback: (snapshot: Readonly<Record<string, unknown>> | undefined, ctx: ObserverContext) => void,
+  ): () => void {
+    const watcher = new EffectWatcher(this.#world, handle, def, callback)
+    this.__activateEntityWatcher(def, watcher, VALUE_KINDS)
+    return () => {
+      this.__deactivateEntityWatcher(def, watcher, VALUE_KINDS)
+    }
+  }
+
+  // --- store wiring (package-internal; `__` marks it off the public surface) ---
+
+  __activateEntityWatcher(def: ComponentDef<Schema>, watcher: EntityWatcher, kinds: readonly Kind[]): void {
+    for (const kind of kinds) this.#acquire(def, kind)
+    let byIndex = this.#entityWatchers.get(def)
+    if (byIndex === undefined) {
+      byIndex = new Map()
+      this.#entityWatchers.set(def, byIndex)
+    }
+    let set = byIndex.get(watcher.watchedIndex)
+    if (set === undefined) {
+      set = new Set()
+      byIndex.set(watcher.watchedIndex, set)
+    }
+    set.add(watcher)
+  }
+
+  __deactivateEntityWatcher(def: ComponentDef<Schema>, watcher: EntityWatcher, kinds: readonly Kind[]): void {
+    const byIndex = this.#entityWatchers.get(def)
+    const set = byIndex?.get(watcher.watchedIndex)
+    if (byIndex !== undefined && set !== undefined) {
+      set.delete(watcher)
+      if (set.size === 0) byIndex.delete(watcher.watchedIndex)
+      if (byIndex.size === 0) this.#entityWatchers.delete(def)
+    }
+    for (const kind of kinds) this.#release(def, kind)
+  }
+
+  __activateQueryWatcher(comps: readonly ComponentDef<Schema>[], store: QueryStore): void {
+    for (const def of comps) {
+      this.#acquire(def, 'add')
+      this.#acquire(def, 'remove')
+      let set = this.#queryWatchers.get(def)
+      if (set === undefined) {
+        set = new Set()
+        this.#queryWatchers.set(def, set)
+      }
+      set.add(store)
+    }
+  }
+
+  __deactivateQueryWatcher(comps: readonly ComponentDef<Schema>[], store: QueryStore): void {
+    for (const def of comps) {
+      const set = this.#queryWatchers.get(def)
+      if (set !== undefined) {
+        set.delete(store)
+        if (set.size === 0) this.#queryWatchers.delete(def)
+      }
+      this.#release(def, 'add')
+      this.#release(def, 'remove')
+    }
+  }
+
+  __evictComponentStore(def: ComponentDef<Schema>, handle: EntityHandle, store: ComponentStore): void {
+    const byHandle = this.#componentStores.get(def)
+    if (byHandle?.get(handle) === store) {
+      byHandle.delete(handle)
+      if (byHandle.size === 0) this.#componentStores.delete(def)
+    }
+  }
+
+  __evictHasStore(def: ComponentDef<Schema>, handle: EntityHandle, store: HasStore): void {
+    const byHandle = this.#hasStores.get(def)
+    if (byHandle?.get(handle) === store) {
+      byHandle.delete(handle)
+      if (byHandle.size === 0) this.#hasStores.delete(def)
+    }
+  }
+
+  __evictQueryStore(query: QueryLike, store: QueryStore): void {
+    if (this.#queryStores.get(query) === store) this.#queryStores.delete(query)
+  }
+
+  /** Live core-observer count — the dispose-accounting probe the leak tests assert on. */
+  __liveObserverCount(): number {
+    let n = 0
+    for (const kinds of this.#observers.values()) n += kinds.size
+    return n
+  }
+
+  // --- refcounted core observers ---
+
+  #acquire(def: ComponentDef<Schema>, kind: Kind): void {
+    let kinds = this.#observers.get(def)
+    if (kinds === undefined) {
+      kinds = new Map()
+      this.#observers.set(def, kinds)
+    }
+    let cell = kinds.get(kind)
+    if (cell === undefined) {
+      const term = kind === 'add' ? onAdd(def) : kind === 'remove' ? onRemove(def) : onChange(def)
+      cell = {
+        refs: 0,
+        handle: this.#world.observe(term, (e, ctx) => {
+          this.#dispatch(kind, def, e.handle, ctx)
+        }),
+      }
+      kinds.set(kind, cell)
+    }
+    cell.refs += 1
+  }
+
+  #release(def: ComponentDef<Schema>, kind: Kind): void {
+    const kinds = this.#observers.get(def)
+    const cell = kinds?.get(kind)
+    if (kinds === undefined || cell === undefined) return
+    cell.refs -= 1
+    if (cell.refs > 0) return
+    cell.handle.dispose()
+    kinds.delete(kind)
+    if (kinds.size === 0) this.#observers.delete(def)
+  }
+
+  #dispatch(kind: Kind, def: ComponentDef<Schema>, eventHandle: EntityHandle, ctx: ObserverContext): void {
+    const index: number = this.#world.decodeHandle(eventHandle).index
+    const watchers = this.#entityWatchers.get(def)?.get(index)
+    if (watchers !== undefined) {
+      for (const watcher of watchers) watcher.onEvent(kind, eventHandle, ctx)
+    }
+    if (kind !== 'change') {
+      const stores = this.#queryWatchers.get(def)
+      if (stores !== undefined) {
+        for (const store of stores) store.markDirty()
+      }
+    }
+  }
+}
+
+const bridges = new WeakMap<EcsiaWorld, ReactBridge>()
+
+/** The lazily-created bridge for `world`; a discarded world takes its bridge with it. */
+export function bridgeFor(world: EcsiaWorld): ReactBridge {
+  let bridge = bridges.get(world)
+  if (bridge === undefined) {
+    bridge = new ReactBridge(world)
+    bridges.set(world, bridge)
+  }
+  return bridge
+}

@@ -1,0 +1,59 @@
+{
+  "name": "@ecsia/react",
+  "version": "0.2.0",
+  "description": "React bindings for ecsia: render entity lists and component values from hooks, driven by the world's deferred observers.",
+  "keywords": [
+    "ecs",
+    "entity-component-system",
+    "ecsia",
+    "react",
+    "hooks",
+    "gamedev",
+    "simulation",
+    "typescript"
+  ],
+  "license": "MIT",
+  "author": "Andy Aragon",
+  "homepage": "https://github.com/andymai/ecsia",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andymai/ecsia.git",
+    "directory": "packages/react"
+  },
+  "bugs": {
+    "url": "https://github.com/andymai/ecsia/issues"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@ecsia/core": "workspace:*",
+    "@ecsia/schema": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=18 <20"
+  },
+  "devDependencies": {
+    "react": "^19.0.0",
+    "@types/react": "^19.0.0"
+  }
+}

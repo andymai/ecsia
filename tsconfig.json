@@ -8,6 +8,7 @@
     { "path": "./packages/serialization" },
     { "path": "./packages/ecsia" },
     { "path": "./packages/three" },
+    { "path": "./packages/react" },
     { "path": "./packages/devtools" }
   ]
 }
