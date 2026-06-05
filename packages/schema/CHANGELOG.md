@@ -5,6 +5,14 @@
 
 ### Features
 
+* derive narrower queries from an existing query ([#10](https://github.com/andymai/ecsia/issues/10)) ([1ba68fe](https://github.com/andymai/ecsia/commit/1ba68fe7e9a0865df51d9a28ec192c0d1e114f8e))
+* pinned-columns API (bindColumns) — bind-once loops that out-iterate bitECS ([#8](https://github.com/andymai/ecsia/issues/8)) ([2ff5b5a](https://github.com/andymai/ecsia/commit/2ff5b5a039b4201f15bbcad9bfada70ed3c9deb4))
+
+## [0.1.0](https://github.com/andymai/ecsia/compare/schema-v0.1.0...schema-v0.1.0) (2026-06-05)
+
+
+### Features
+
 * pinned-columns API (bindColumns) — bind-once loops that out-iterate bitECS ([#8](https://github.com/andymai/ecsia/issues/8)) ([2ff5b5a](https://github.com/andymai/ecsia/commit/2ff5b5a039b4201f15bbcad9bfada70ed3c9deb4))
 
 ## [0.1.0](https://github.com/andymai/ecsia/compare/schema-v0.1.0...schema-v0.1.0) (2026-06-05)
