@@ -189,7 +189,20 @@ function runSmoke(): SmokeResult {
 // Expose to Playwright (page.evaluate) AND auto-run for manual inspection.
 window.__ecsiaBrowserSmoke = runSmoke
 
-const result = runSmoke()
+// The flag MUST appear even if the smoke crashes — a timeout hides the real error.
+let result: SmokeResult
+try {
+  result = runSmoke()
+} catch (err) {
+  result = {
+    ok: false,
+    isolated: window.crossOriginIsolated === true,
+    sabAvailable: typeof SharedArrayBuffer !== 'undefined',
+    sabPathSelected: false,
+    sabAllocated: false,
+    sections: [{ name: 'module-level crash', ok: false, detail: String(err instanceof Error ? (err.stack ?? err.message) : err) }],
+  }
+}
 const pre = document.createElement('pre')
 pre.id = 'smoke-output'
 pre.textContent = JSON.stringify(result, null, 2)

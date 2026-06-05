@@ -44,12 +44,17 @@ async function runVariant(
 ): Promise<SmokeResult> {
   const server = createSmokeServer({ isolation })
   const port = await listen(server)
+  const diagnostics: string[] = []
+  page.on('pageerror', (err) => diagnostics.push(`pageerror: ${err.stack ?? err.message}`))
+  page.on('console', (msg) => { if (msg.type() === 'error' || msg.type() === 'warning') diagnostics.push(`console.${msg.type()}: ${msg.text()}`) })
   try {
     const expectIsolated = isolation ? '1' : '0'
     await page.goto(`http://localhost:${port}/index.html?isolated=${expectIsolated}`, {
       waitUntil: 'load',
     })
-    await page.waitForSelector('#smoke-result', { timeout: 10_000 })
+    await page.waitForSelector('#smoke-result', { timeout: 10_000 }).catch((e) => {
+      throw new Error(`#smoke-result never appeared. In-page diagnostics:\n${diagnostics.join('\n') || '(none captured)'}\n${e}`)
+    })
     return (await page.evaluate(() => (window as unknown as { __ecsiaBrowserSmoke: () => SmokeResult }).__ecsiaBrowserSmoke())) as SmokeResult
   } finally {
     await close(server)
