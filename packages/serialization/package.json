@@ -39,7 +39,9 @@
   "scripts": { "build": "tsc -b" },
   "dependencies": {
     "@ecsia/core": "workspace:*",
-    "@ecsia/relations": "workspace:*",
     "@ecsia/schema": "workspace:*"
+  },
+  "devDependencies": {
+    "@ecsia/relations": "workspace:*"
   }
 }
