@@ -16,6 +16,7 @@ import { buildScopedQueries } from './run-wave.js'
 import { runUpdate } from './update.js'
 import { runUpdateThreaded } from './update-threaded.js'
 import type { RoundDispatcher } from './update-threaded.js'
+import { IS_DEV } from '@ecsia/core'
 
 export interface SchedulerHandle {
   /** The immutable plan (frozen; rebuilt wholesale on re-plan, never patched — §4.4). */
@@ -86,7 +87,7 @@ export function createScheduler(
   opts?: CreateSchedulerOptions,
 ): SchedulerHandle {
   const workers = opts?.workers ?? 0
-  const dev = opts?.dev ?? (typeof process !== 'undefined' && process.env['NODE_ENV'] !== 'production')
+  const dev = opts?.dev ?? IS_DEV
 
   const accessStrideWords = strideFor(lowerSystems(defs, 1), opts?.registeredComponentCount)
   const systems = resolveOrdering(lowerSystems(defs, accessStrideWords), defs)

@@ -48,6 +48,7 @@ import type {
 } from './serialize-surface.js'
 import type { Column } from './memory/index.js'
 import type { ComponentRuntime } from './component/index.js'
+import { IS_DEV } from './env.js'
 
 /** world.md §4: 'serial' during the serial slot (and always, single-threaded); 'wave' only while the scheduler dispatches worker waves. */
 export type WorldPhase = 'serial' | 'wave'
@@ -492,7 +493,7 @@ export function createWorld(options: WorldOptions = {}): World {
     maxWritesPerFrame: resolved.reactivity.maxWritesPerFrame,
     maxShapeChangesPerFrame: resolved.reactivity.maxShapeChangesPerFrame,
     shrinkRings: resolved.reactivity.shrinkRings,
-    dev: process.env['NODE_ENV'] !== 'production',
+    dev: IS_DEV,
     resolveLocation: (index) => entities.locationOfIndex(index),
     tick: () => state.tick,
     advanceTick: () => {

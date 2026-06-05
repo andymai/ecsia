@@ -4,6 +4,7 @@
 // The handle/index brands are the canonical type-system.md §8 brands, shared with @ecsia/schema so
 // the eid field type, accessors, and the entity layer all agree on one EntityHandle/EntityIndex.
 import type { EntityHandle as SchemaEntityHandle, EntityIndex as SchemaEntityIndex } from '@ecsia/schema'
+import { IS_DEV } from '../env.js'
 
 /** A packed u32: [generation : generationBits][index : indexBits], generation in the HIGH bits. */
 export type EntityHandle = SchemaEntityHandle
@@ -73,7 +74,7 @@ export function makeHandleLayout(generationBits: number): HandleLayout {
 export function makeHandle(index: number, generation: number, layout: HandleLayout): EntityHandle {
   // Dev-mode guard (entity-model.md §2.3): a generation above maxGeneration would overflow the
   // generation field and silently alias another slot's handle. Stripped in production builds.
-  if (process.env['NODE_ENV'] !== 'production' && generation > layout.maxGeneration) {
+  if (IS_DEV && generation > layout.maxGeneration) {
     throw new RangeError(`makeHandle: generation ${generation} exceeds maxGeneration ${layout.maxGeneration}`)
   }
   return (((generation << layout.generationShift) | index) >>> 0) as EntityHandle
