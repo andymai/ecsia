@@ -55,6 +55,8 @@ export interface SerializeRichField {
   readonly fieldIndex: number
   readonly name: string
   readonly kind: 'string' | 'object'
+  /** false ⇒ the snapshot/delta writers skip this field (it re-defaults on load). */
+  readonly persist: boolean
 }
 
 /** Component-registry metadata for the snapshot registry section. */

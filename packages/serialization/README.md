@@ -6,7 +6,8 @@ attached to them, and systems are functions that run over entities with matching
 components.
 
 `@ecsia/serialization` turns world state into payloads you can save or send. A
-**snapshot** — a complete copy of the world at one moment — round-trips bit-exactly. A
+**snapshot** — a complete copy of the world at one moment — round-trips bit-exactly
+(for persisted fields; fields marked `persist: false` are skipped and re-default on load). A
 **delta** carries just the changes, both values and structure, since a known tick (one
 simulation step), and is produced without keeping a second copy of your data to
 compare against. Deltas are version-stamped, and entity ids and relation targets are

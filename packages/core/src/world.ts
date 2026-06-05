@@ -586,7 +586,7 @@ export function createWorld(options: WorldOptions = {}): World {
     if (id === undefined) continue
     let fieldIndex = 0
     for (const f of def.fields as readonly FieldDescriptor[]) {
-      if (f.rich !== undefined) richFieldList.push({ componentId: id, fieldIndex, name: f.name, kind: f.rich })
+      if (f.rich !== undefined) richFieldList.push({ componentId: id, fieldIndex, name: f.name, kind: f.rich, persist: f.persist })
       fieldIndex += 1
     }
   }
@@ -606,6 +606,11 @@ export function createWorld(options: WorldOptions = {}): World {
       for (const f of def.fields as readonly FieldDescriptor[]) {
         fnv(f.name)
         fnv(typeof f.token === 'string' ? f.token : JSON.stringify(f.token))
+        // The persisted-field subset is part of the wire contract: the SoA sections are positional
+        // over PERSISTED columns only, so producers/consumers whose persist flags differ must be
+        // rejected. Hashed only when false so all-persisted schemas keep their existing hash.
+        // (Relation payloads are exempt: the pair-payload wire is name-keyed/self-describing.)
+        if (!f.persist) fnv('!persist')
       }
     }
     const prov = serializationProvider

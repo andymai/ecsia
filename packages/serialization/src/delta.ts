@@ -17,13 +17,14 @@ import { encodeEid, elementBytes } from '@ecsia/core'
 import type { ElementKind, World } from '@ecsia/core'
 import { WriteCursor, ReadCursor } from './cursor.js'
 import {
+  DELTA_MIN_SUPPORTED_VERSION,
   FLAG_IS_DELTA,
   FLAG_HAS_RICH,
   FLAG_HAS_STRUCTURAL,
-  RICH_FORMAT_VERSION,
   SERIALIZATION_FORMAT_VERSION,
   SNAPSHOT_MAGIC,
   assertPlatformLittleEndian,
+  createPersistedColumnsCache,
   elementOrdinal,
   ordinalToElement,
   readJsonBytes,
@@ -69,9 +70,9 @@ export interface DeltaSerializer {
   readonly sinceTick: number
 }
 
-// MAGIC u32, VERSION u16, ENDIAN u8, flags u8, baselineTick u32, targetTick u32,
-// structuralSectionOffset u32, valueSectionOffset u32, richSectionOffset u32 (v2).
-const DELTA_HEADER_BYTES = 28
+// MAGIC u32, VERSION u16, ENDIAN u8, flags u8, schemaHash u32 (v3), baselineTick u32,
+// targetTick u32, structuralSectionOffset u32, valueSectionOffset u32, richSectionOffset u32 (v2).
+const DELTA_HEADER_BYTES = 32
 
 export function createDeltaSerializer(world: World, sinceTick: number, opts: DeltaOptions = {}): DeltaSerializer {
   assertPlatformLittleEndian()
@@ -90,6 +91,7 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
   if (includeStructural) s.enableStructuralJournal()
   const cur = new WriteCursor(opts.initialOutputBytes ?? 16 * 1024)
   let baseline = sinceTick
+  const persistedColumnsOf = createPersistedColumnsCache()
 
   function write(): void {
     if (world.phase !== 'serial') {
@@ -98,14 +100,16 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
     const target = world.currentTick()
     cur.reset()
 
-    // --- HEADER (28 bytes in v2; section offsets + flags back-patched) ---
-    // v2 grows the header from 24→28 bytes with a back-patched `richSectionOffset` word so
-    // applyDelta can seek SECTION R directly instead of drifting past SECTION V.
+    // --- HEADER (32 bytes in v3; section offsets + flags back-patched) ---
+    // v2 grew the header with a back-patched `richSectionOffset` word so applyDelta can seek
+    // SECTION R directly; v3 adds the schemaHash word (byte 8, mirroring the snapshot header) so
+    // applyDelta carries the same fail-loud schema gate as snapshot load.
     cur.u32(SNAPSHOT_MAGIC)
     cur.u16(SERIALIZATION_FORMAT_VERSION)
     cur.u8(1) // ENDIAN
     const flagsAt = cur.pos
     cur.u8(FLAG_IS_DELTA) // FLAG_HAS_STRUCTURAL / FLAG_HAS_RICH back-patched
+    cur.u32(s.schemaHash()) // schemaHash
     cur.u32(baseline) // baselineTick
     cur.u32(target) // targetTick
     const structOffAt = cur.pos
@@ -147,16 +151,25 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
       // it is re-considered next delta). The shadow updates to the EMITTED values after selection.
       const rows = epsilon !== undefined ? filterByEpsilon(a, allRows, shadow, epsilon) : allRows
       if (rows.length === 0) continue
+      // PERSISTED columns only. The changeVersion stamp is per-entity and shared with the public
+      // `.changed` predicate, so a write to a non-persisted field still stamps the row (reactivity
+      // must see it) — the filter happens HERE, at emission. Documented cost: such a row is emitted
+      // with its (unchanged) persisted values — a harmless, receiver-idempotent over-send. An
+      // archetype with no persisted columns at all contributes nothing to SECTION V.
+      const persisted = persistedColumnsOf(a)
+      if (persisted.length === 0) continue
       changedArchetypeCount += 1
       cur.u32(a.id)
       cur.u32(rows.length)
       // Per changed row: the FULL entity handle (the boundary-stable row identity).
       for (const r of rows) cur.u32(a.rows[r] as number)
-      cur.u16(a.components.length)
-      for (const comp of a.components) {
+      cur.u16(persisted.length)
+      for (const pc of persisted) {
+        const comp = a.components[pc.compIndex]
+        if (comp === undefined) continue
         cur.u32(comp.componentId as number)
-        cur.u16(comp.columns.length)
-        for (let ci = 0; ci < comp.columns.length; ci++) {
+        cur.u16(pc.colIndices.length)
+        for (const ci of pc.colIndices) {
           const col = comp.columns[ci]
           if (col === undefined) continue
           const stride = col.layout.stride
@@ -183,6 +196,7 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
       type RF = (typeof richFields)[number]
       const byComponent = new Map<number, RF[]>()
       for (const rf of richFields) {
+        if (!rf.persist) continue
         let bucket = byComponent.get(rf.componentId as number)
         if (bucket === undefined) {
           bucket = []
@@ -273,7 +287,14 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
 // value, a fresh shadow cell is seeded to the current value and the row is kept (the first observation is
 // always emitted, matching "the receiver must learn the value at least once").
 function filterByEpsilon(
-  a: { id: number; count: number; components: readonly { columns: readonly ({ view: ArrayLike<number>; layout: { stride: number; element: ElementKind } } | undefined)[] }[] },
+  a: {
+    id: number
+    count: number
+    components: readonly {
+      columns: readonly ({ view: ArrayLike<number>; layout: { stride: number; element: ElementKind } } | undefined)[]
+      fields: readonly { persist: boolean }[]
+    }[]
+  },
   rows: readonly number[],
   shadow: Map<number, Map<number, Float64Array>>,
   epsilon: number,
@@ -283,8 +304,11 @@ function filterByEpsilon(
     archShadow = new Map()
     shadow.set(a.id, archShadow)
   }
-  // Enumerate the archetype's numeric columns in a stable (component, column) order, parallel to how
-  // SECTION V walks them, assigning each a flat shadow column index.
+  // Enumerate the archetype's PERSISTED numeric columns in a stable (component, column) order,
+  // assigning each a flat shadow column index. Non-persisted columns are excluded from the compare
+  // (they never reach the wire, so a transient-field change must not defeat the epsilon drop) but
+  // still consume a flat index, keeping the shadow key space parallel to the column order — persist
+  // flags are define-time constants, so the index math is the only invariant that matters.
   interface Col {
     readonly key: number
     readonly view: ArrayLike<number>
@@ -295,8 +319,9 @@ function filterByEpsilon(
   const cols: Col[] = []
   let flatIndex = 0
   for (const comp of a.components) {
-    for (const col of comp.columns) {
-      if (col === undefined) {
+    for (let i = 0; i < comp.columns.length; i++) {
+      const col = comp.columns[i]
+      if (col === undefined || comp.fields[i]?.persist === false) {
         flatIndex += 1
         continue
       }
@@ -364,16 +389,30 @@ export function applyDelta(world: World, bytes: Uint8Array, remap: ReadonlyMap<E
   const cur = new ReadCursor(bytes)
   const magic = cur.u32()
   if (magic !== SNAPSHOT_MAGIC) throw new Error('serialization: bad magic (not an ecsia delta)')
-  const version = cur.u16() // version
+  // The v3 delta header layout (schemaHash word at byte 8) is a hard wire break from pre-v3 deltas —
+  // reject them loudly rather than misparse the tick/offset words.
+  const version = cur.u16()
+  if (version < DELTA_MIN_SUPPORTED_VERSION || version > SERIALIZATION_FORMAT_VERSION) {
+    throw new Error(
+      `serialization: unsupported delta format version ${version} (this build reads ` +
+        `${DELTA_MIN_SUPPORTED_VERSION}..${SERIALIZATION_FORMAT_VERSION})`,
+    )
+  }
   cur.u8() // endian
   const flags = cur.u8()
   if ((flags & FLAG_IS_DELTA) === 0) throw new Error('serialization: not a delta image')
+  const schemaHash = cur.u32()
+  if (schemaHash !== s.schemaHash()) {
+    throw new Error(
+      'serialization: schemaHash mismatch — refusing to apply. The delta was produced by a different ' +
+        'component schema; apply it to a world built with the same components.',
+    )
+  }
   cur.u32() // baselineTick
   const targetTick = cur.u32()
   const structOff = cur.u32()
   const valueOff = cur.u32()
-  // v2 grew the delta header by one word (richSectionOffset). A v1 delta stops at byte 24 — gate the read.
-  const richOff = version >= RICH_FORMAT_VERSION ? cur.u32() : 0
+  const richOff = cur.u32()
 
   // --- SECTION S: apply structural ops FIRST (creates/destroys/adds/removes), so the value section's
   // handles resolve to live receiver entities. ---
@@ -414,8 +453,8 @@ export function applyDelta(world: World, bytes: Uint8Array, remap: ReadonlyMap<E
 
   // --- SECTION R: apply changed rich values AFTER SECTION V — same post-structural
   // `work` remap, so a rich value for an entity CREATED by this delta lands on the spawned receiver.
-  // Version-gated + FLAG_HAS_RICH; seeked via richOff (no cursor drift past SECTION V). ---
-  if (version >= RICH_FORMAT_VERSION && (flags & FLAG_HAS_RICH) !== 0 && richOff !== 0) {
+  // FLAG_HAS_RICH-gated; seeked via richOff (no cursor drift past SECTION V). ---
+  if ((flags & FLAG_HAS_RICH) !== 0 && richOff !== 0) {
     cur.seek(richOff)
     const richArchetypeCount = cur.u32()
     for (let ai = 0; ai < richArchetypeCount; ai++) {
@@ -447,7 +486,7 @@ function writeRowField(
   s: World['__serialize'],
   handle: EntityHandle,
   componentId: ComponentId,
-  fieldColIndex: number,
+  wireFieldIndex: number,
   element: ElementKind,
   stride: number,
   raw: Uint8Array,
@@ -455,20 +494,28 @@ function writeRowField(
 ): void {
   const dst = s.columnsOf(handle, componentId)
   if (dst === null) return
-  const col = dst.columns[fieldColIndex]
-  if (col === undefined) return
-  const view = col.view as unknown as { [i: number]: number }
-  // Find the descriptor parallel to this column index to detect eid fields.
+  // The wire carries PERSISTED columns only: the wireFieldIndex-th persisted column-backed field
+  // maps to a local column index through the receiver's own descriptors (parallel on both sides).
   let colIndex = 0
+  let persistedSeen = -1
+  let localColIndex = -1
   let descriptor: FieldDescriptor | undefined
   for (const f of dst.fields) {
     if (f.ctor === null) continue
-    if (colIndex === fieldColIndex) {
-      descriptor = f
-      break
+    if (f.persist) {
+      persistedSeen += 1
+      if (persistedSeen === wireFieldIndex) {
+        descriptor = f
+        localColIndex = colIndex
+        break
+      }
     }
     colIndex += 1
   }
+  if (descriptor === undefined) return
+  const col = dst.columns[localColIndex]
+  if (col === undefined) return
+  const view = col.view as unknown as { [i: number]: number }
   // Reinterpret the raw native-width bytes as the column's typed array (copied to a zero-offset buffer
   // so the typed-array view is validly aligned regardless of the source subarray's byteOffset).
   const copy = raw.slice()
@@ -476,7 +523,7 @@ function writeRowField(
   const base = dst.row * stride
   for (let lane = 0; lane < stride; lane++) {
     const value = values[lane] as number
-    if (descriptor?.token === 'eid') {
+    if (descriptor.token === 'eid') {
       const stored = value | 0
       if (stored === -1) view[base + lane] = -1
       else {

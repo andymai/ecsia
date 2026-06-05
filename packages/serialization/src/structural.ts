@@ -148,13 +148,14 @@ function writeComponentFieldValues(
   fields: readonly FieldDescriptor[],
   row: number,
 ): void {
-  // Emit: u16 fieldWordCount, then per word: name + lane + f64 value.
+  // Emit: u16 fieldWordCount, then per word: name + lane + f64 value. The wire is name-keyed
+  // (self-describing), so non-persisted fields are simply omitted and re-default on apply.
   const words: { name: string; lane: number; value: number }[] = []
   let colIndex = 0
   for (const f of fields) {
     if (f.ctor === null) continue
     const col = columns[colIndex]
-    if (col !== undefined) {
+    if (col !== undefined && f.persist) {
       const stride = col.layout.stride
       for (let lane = 0; lane < stride; lane++) {
         words.push({ name: f.name, lane, value: (col.view[row * stride + lane] as number) })
@@ -268,13 +269,16 @@ function applyComponentAdd(
   s.spawnInto(handle, [componentId])
   const dst = s.columnsOf(handle, componentId)
   if (dst === null) return
-  // Map field name → (column index, descriptor).
+  // Map field name → (column index, descriptor). RECEIVER-side persist enforcement: a field the
+  // receiver declares transient is excluded even when the producer (whose descriptor lacks the flag)
+  // carried a value for it — the receiver's declaration is honored unilaterally, so the spawnInto
+  // default above stands.
   let colIndex = 0
   const colByName = new Map<string, { col: { view: { [i: number]: number }; layout: { stride: number } }; field: FieldDescriptor }>()
   for (const f of dst.fields) {
     if (f.ctor === null) continue
     const col = dst.columns[colIndex]
-    if (col !== undefined) colByName.set(f.name, { col, field: f })
+    if (col !== undefined && f.persist) colByName.set(f.name, { col, field: f })
     colIndex += 1
   }
   for (const w of values) {

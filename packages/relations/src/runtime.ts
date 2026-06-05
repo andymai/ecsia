@@ -807,13 +807,31 @@ export function createRelations(world: World): RelationsApi {
 
   function payloadFieldNames(rt: RelationRuntime): string[] {
     // The presence def's exclusive column is [eid target, ...payload]; the overflow def is [...payload].
+    // persist:false payload fields are excluded — the name-keyed pair-payload wire simply omits them
+    // and the receiver's addPair re-defaults the missing names.
     if (rt.storageKind === 'exclusive-column') {
       const names: string[] = []
-      for (const f of rt.presenceDef.fields) if (f.name !== '$t') names.push(f.name)
+      for (const f of rt.presenceDef.fields) if (f.name !== '$t' && f.persist) names.push(f.name)
       return names
     }
-    if (rt.overflow !== null) return rt.overflow.def.fields.map((f) => f.name)
+    if (rt.overflow !== null) return rt.overflow.def.fields.filter((f) => f.persist).map((f) => f.name)
     return []
+  }
+
+  // RECEIVER-side persist enforcement for the apply path: keep only the payload keys THIS world's
+  // descriptors mark persisted, so a producer whose relation schema lacks the flag cannot plant
+  // values into fields the receiver declared transient (they re-default via addPair instead).
+  function filterPersistedPayload(rt: RelationRuntime, payload: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+    if (payload === undefined) return undefined
+    const out: Record<string, unknown> = {}
+    let any = false
+    for (const n of payloadFieldNames(rt)) {
+      if (n in payload) {
+        out[n] = payload[n]
+        any = true
+      }
+    }
+    return any ? out : undefined
   }
 
   function readPairPayload(rt: RelationRuntime, subject: EntityHandle, target: EntityHandle): Record<string, unknown> | undefined {
@@ -876,7 +894,7 @@ export function createRelations(world: World): RelationsApi {
       const rt = byRelationId.get(relationId as number)
       if (rt === undefined) return
       if (target === null) return // a cleared exclusive target: nothing to re-establish
-      addPair(subject, rt.def, target, payload ?? undefined)
+      addPair(subject, rt.def, target, filterPersistedPayload(rt, payload))
     },
     relationIdOfPair(pairId) {
       return pairKeyById.get(pairId)?.relationId
