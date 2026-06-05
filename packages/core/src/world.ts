@@ -47,6 +47,7 @@ import type {
   SerializeRelationProvider,
 } from './serialize-surface.js'
 import type { Column } from './memory/index.js'
+import type { InspectSurface, InspectArchetype, InspectQuery } from './inspect-surface.js'
 import type { ComponentRuntime } from './component/index.js'
 import { IS_DEV } from './env.js'
 import { isSharedBacking } from './memory/buffers.js'
@@ -178,6 +179,13 @@ export interface World {
    * main-thread only; @ecsia/core never imports @ecsia/serialization (acyclic boundary). Not for user code.
    */
   readonly __serialize: SerializationSurface
+  /**
+   * Read-only introspection seam (P5 / @ecsia/devtools). Exposes the FULL archetype census (cold +
+   * empty included) and the live-query enumeration — the two data an inspector needs that `__serialize`
+   * (snapshot-shaped: hot, non-empty only) and the public query surface do not reach. Pure reads, serial
+   * / main-thread; @ecsia/core never imports @ecsia/devtools (acyclic boundary). Not for user code.
+   */
+  readonly __inspect: InspectSurface
   /**
    * Merge ONE worker's staged value writes into the reactivity write log (reactivity.md §9.1/§9.2,
    * R-4). `pairs` is the worker's raw `[index, componentId, …]` corral payload and `count` the number
@@ -749,6 +757,34 @@ export function createWorld(options: WorldOptions = {}): World {
     capabilities: () => capabilities,
   }
 
+  // --- introspection surface (P5 / @ecsia/devtools) -------------------------
+  // The FULL archetype census (cold + empty, which __serialize.archetypes() filters out) and the live
+  // query enumeration (the QueryEngine's `liveQueries` getter is core-private). Pure reads.
+  const inspect: InspectSurface = {
+    archetypes(): readonly InspectArchetype[] {
+      const out: InspectArchetype[] = []
+      for (const arch of storage.archetypes.byId as Archetype[]) {
+        out.push({
+          // Copy: arch.signature is the LIVE typed-array backing the archetype; the seam is read-only
+          // and must never hand out a buffer a consumer could mutate to corrupt storage.
+          id: arch.id as number,
+          signature: Array.from(arch.signature as Iterable<number>) as unknown as readonly ComponentId[],
+          count: arch.count,
+          cold: arch.cold,
+        })
+      }
+      out.sort((a, b) => a.id - b.id)
+      return out
+    },
+    queries(): readonly InspectQuery[] {
+      const out: InspectQuery[] = []
+      for (const lq of (engine as QueryEngine).liveQueries) {
+        out.push({ terms: lq.terms, matchedArchetypes: lq.matchingArchetypes.length, size: lq.count })
+      }
+      return out
+    },
+  }
+
   const world: World = {
     get options() {
       return resolved
@@ -858,6 +894,7 @@ export function createWorld(options: WorldOptions = {}): World {
       return { columns: base.columns, regions: [...base.regions, ...extra] }
     },
     __serialize: serialize,
+    __inspect: inspect,
     __mergeWorkerWrites(pairs, count) {
       ;(reactivity as Reactivity).mergeWorkerWrites(pairs, count)
     },

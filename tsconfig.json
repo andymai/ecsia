@@ -7,6 +7,7 @@
     { "path": "./packages/scheduler" },
     { "path": "./packages/serialization" },
     { "path": "./packages/ecsia" },
-    { "path": "./packages/three" }
+    { "path": "./packages/three" },
+    { "path": "./packages/devtools" }
   ]
 }

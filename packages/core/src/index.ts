@@ -122,6 +122,9 @@ export type {
   SerializeRelationProvider,
   SerializeStructuralRecord,
 } from './serialize-surface.js'
+// P5 / @ecsia/devtools introspection seam (read-only): the FULL archetype census + live-query
+// enumeration that __serialize (snapshot-shaped) does not reach. Imported by @ecsia/devtools via '.'.
+export type { InspectSurface, InspectArchetype, InspectQuery } from './inspect-surface.js'
 
 export { makeHandleLayout, ARCHETYPE_NONE, reserveEntityBlock, returnReservedIds } from './entity/index.js'
 export type { EntityReservation } from './entity/index.js'

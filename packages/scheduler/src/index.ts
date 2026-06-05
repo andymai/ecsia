@@ -21,6 +21,15 @@ export type { SystemDef, SystemContext, OrderingHint } from './planner/index.js'
 export { createScheduler } from './executor/index.js'
 export type { SchedulerHandle, CreateSchedulerOptions, RoundDispatcher } from './executor/index.js'
 
+// --- plan introspection (§5): the immutable, frozen plan shape `SchedulerHandle.plan` carries.
+// Surfaced for @ecsia/devtools (P5) — the wave visualizer reads the plan to explain WHY the schedule
+// looks the way it does (waves, rounds, per-system access, worker-eligibility pinning). `SystemBox` is
+// the lowered, declaration-derived system record `plan.systems[systemId]` indexes (read-only metadata:
+// name, dense read/write ids, workerEligible). These are read-only views; nothing here lets a consumer
+// build or mutate a plan. ---
+export type { SchedulePlan, ScheduleWave, SystemBatch } from './graph/index.js'
+export type { SystemBox } from './planner/index.js'
+
 // --- workers (M7): the worker pool the threaded frame loop drives (§7) ---
 export { WorkerPool } from './workers/index.js'
 export type { PoolConfig, PoolSystem } from './workers/index.js'
