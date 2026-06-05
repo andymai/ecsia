@@ -386,7 +386,9 @@ export class LiveQuery {
    * stride is the declared vec arity (`vec3()` → 3) — a compile-time constant in the caller's loop.
    * Rich fields (`'string'`/`object<T>`) carry no column and throw at bind time, as do row-filtered
    * queries (a pinned runner cannot skip rows; `eachChunk` silently skips, but a silently-skipping
-   * pinned runner is a footgun). Writes through pinned views are NOT recorded in the reactivity
+   * pinned runner is a footgun) and specs naming a component the query does not REQUIRE (an
+   * optional or unreferenced component may be absent from a future matching archetype, which would
+   * only surface mid-run). Writes through pinned views are NOT recorded in the reactivity
    * write log: a `.changed`/observer consumer will not see them — use `each` when reactivity must
    * observe the write. Structural changes during `run()` follow the `eachChunk` discipline: collect,
    * then mutate after the loop (despawn swap-removes rows under the runner's feet).
@@ -404,6 +406,23 @@ export class LiveQuery {
     const specs = args.slice(0, -1) as ReadonlyArray<readonly [ComponentDef<Schema>, string]>
     if (this.compiled.rowFilters.length !== 0) {
       throw new Error('bindColumns: row-filtered queries are not supported (a pinned runner cannot skip rows); use each()')
+    }
+    // Specs must name REQUIRED components: an optional/unreferenced component may be absent from a
+    // FUTURE matching archetype, which would surface as a rebuild() throw mid-run. Required ids are
+    // recovered from the packed with-words (single-bit entries) + the non-negated residual terms.
+    const requiredIds = new Set<number>()
+    for (const w of this.compiled.withWords) {
+      requiredIds.add(w.wordIndex * 32 + (31 - Math.clz32(w.mask)))
+    }
+    for (const r of this.compiled.residualWith) {
+      if (!r.negate) requiredIds.add(r.componentId as number)
+    }
+    for (const [def] of specs) {
+      if (!requiredIds.has(def.id as number)) {
+        throw new Error(
+          `bindColumns: '${def.name}' is not a required component of this query — a future matching archetype may lack it`,
+        )
+      }
     }
     // Per-spec column index within the component's ColumnSet (rich fields contribute no column, so
     // the index counts only ctor-backed fields — same skip rule as the ColumnSet build order).
@@ -464,14 +483,17 @@ export class LiveQuery {
       return { arch, cols, views, runner: factory(views, meta), meta }
     }
 
+    // Builds into locals and commits at the end so a makeBinding throw (defensive backstop; the
+    // bind-time required-component check makes it unreachable for absent-component causes) never
+    // leaves bindings/coldMatched/boundMatchCount mutually inconsistent.
     const rebuild = (): void => {
       const archs = this.matchingArchetypes
-      bindings = []
-      coldMatched = []
+      const nextBindings: PinnedBinding[] = []
+      const nextColdMatched: Archetype[] = []
       for (let ai = 0; ai < archs.length; ai++) {
         const arch = archs[ai] as Archetype
         if (arch.cold) {
-          coldMatched.push(arch)
+          nextColdMatched.push(arch)
           continue
         }
         let b = byArch.get(arch.id as number)
@@ -479,8 +501,10 @@ export class LiveQuery {
           b = makeBinding(arch)
           byArch.set(arch.id as number, b)
         }
-        bindings.push(b)
+        nextBindings.push(b)
       }
+      bindings = nextBindings
+      coldMatched = nextColdMatched
       boundMatchCount = archs.length
     }
 

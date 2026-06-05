@@ -71,11 +71,19 @@ describe('bindColumns bind-time errors', () => {
     expect(() => q.bindColumns([Position, 'nope' as never], () => () => {})).toThrow(/no column-backed field/)
   })
 
-  test('a spec component absent from a matched archetype throws', () => {
+  test('a spec component the query does not require throws at bind', () => {
     const { world, Position, Velocity } = makeKit()
     world.spawnWith(Position) // archetype {Position} matches the query but lacks Velocity
     const q = world.query(write(Position))
-    expect(() => q.bindColumns([Velocity, 'dx'], () => () => {})).toThrow(/archetype lacks component/)
+    expect(() => q.bindColumns([Velocity, 'dx'], () => () => {})).toThrow(/not a required component/)
+  })
+
+  test('a non-required spec throws even when every CURRENT matched archetype has the component', () => {
+    const { world, Position, Velocity } = makeKit()
+    world.spawnWith(Position, Velocity) // the only matched archetype happens to carry Velocity
+    const q = world.query(write(Position))
+    // A future {Position}-only archetype would lack Velocity and blow up mid-run; reject at bind.
+    expect(() => q.bindColumns([Velocity, 'dx'], () => () => {})).toThrow(/not a required component/)
   })
 
   test('mixed vec + scalar specs bind cleanly', () => {
@@ -258,6 +266,55 @@ describe('bindColumns invalidation', () => {
     run()
     expect(counts).toEqual([5, 8, 6])
     expect(invocations).toBe(1)
+  })
+
+  test('warm promotion re-invokes the factory exactly once and integrates the promoted rows', () => {
+    const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
+    const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
+    const Extra = defineComponent({ v: 'i32' }, { name: 'extra' })
+    // maxHotArchetypes: 2 = the EMPTY archetype + the first populated one ({P,V}); the second
+    // populated archetype ({P,V,E}) lands COLD — matched by the query but carrying no binding.
+    const world = createWorld({
+      components: [Position, Velocity, Extra] as readonly ComponentDef<Schema>[],
+      maxHotArchetypes: 2,
+    })
+    const hot = Array.from({ length: 2 }, () => {
+      const h = world.spawnWith(Position, Velocity)
+      world.entity(h).write(Velocity).dx = 1
+      return h
+    })
+    const cold = Array.from({ length: 3 }, () => world.spawnWith(Position, Velocity, Extra))
+
+    const q = world.query(write(Position), read(Velocity))
+    const coldArch = q.matchingArchetypes.find((a) => a.signature.length === 3)
+    expect(coldArch?.cold).toBe(true)
+
+    let invocations = 0
+    const run = q.bindColumns([Position, 'x'], [Velocity, 'dx'], ([px, dx], meta) => {
+      invocations++
+      return () => {
+        const count = meta.count
+        for (let i = 0; i < count; i++) px[i] = (px[i] as number) + (dx[i] as number)
+      }
+    })
+    expect(invocations).toBe(1) // the cold archetype gets no binding at bind time
+    run() // cold rows not visited
+
+    // Written while cold: lands in the cold blocks, must survive promotion into the hot columns.
+    for (const h of cold) world.entity(h).write(Velocity).dx = 10
+    world.warm(Position, Velocity, Extra)
+    expect(coldArch?.cold).toBe(false)
+
+    // Promotion flips arch.cold IN PLACE (matchingArchetypes length unchanged): the coldMatched
+    // re-check is the only signal that can trigger this rebuild.
+    run()
+    expect(invocations).toBe(2)
+    run()
+    expect(invocations).toBe(2)
+
+    // Hot rows integrated by all 3 runs (dx=1); promoted rows by the 2 post-promotion runs (dx=10).
+    for (const h of hot) expect(world.entity(h).read(Position).x).toBe(3)
+    for (const h of cold) expect(world.entity(h).read(Position).x).toBe(20)
   })
 
   test('an archetype bound while empty is skipped by run() and seen live once populated', () => {

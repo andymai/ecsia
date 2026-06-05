@@ -3,7 +3,8 @@
 //
 // The obligations: each [ComponentDef, field] spec's view type resolves from its field token through
 // the token→TypedArray table ('f32' → Float32Array, 'i32' → Int32Array, 'eid' → Int32Array, vec →
-// its element array type), the factory's `views` parameter is the inferred TUPLE (positional, not a
+// its element array type, staticString → the Uint8Array | Uint16Array | Uint32Array ctor union),
+// the factory's `views` parameter is the inferred TUPLE (positional, not a
 // union), field names are constrained to the component's COLUMN-BACKED fields at the type level
 // (unknown and rich fields are compile errors), meta.count is a readonly number, and the returned
 // runner is zero-argument.
@@ -19,6 +20,7 @@ declare const Body: ComponentDef<{
   mass: 'f64'
   target: 'eid'
   pos: { readonly kind: 'vec'; readonly elem: 'f32'; readonly len: 3 }
+  state: { readonly kind: 'staticString'; readonly choices: readonly ['idle', 'walk'] }
   label: 'string'
 }> & { name: 'body' }
 declare const q: Query<[ReadTerm<typeof Position>, ReadTerm<typeof Body>]>
@@ -31,15 +33,20 @@ const run = q.bindColumns(
   [Body, 'mass'],
   [Body, 'target'],
   [Body, 'pos'],
-  ([px, health, flags, mass, target, pos], meta) => () => {
+  [Body, 'state'],
+  ([px, health, flags, mass, target, pos, state], meta) => () => {
     const _f32: Float32Array = px
     const _i32: Int32Array = health
     const _u8: Uint8Array = flags
     const _f64: Float64Array = mass
     const _eid: Int32Array = target // eid columns store encoded indices in an Int32Array
     const _vec: Float32Array = pos // vec3('f32') → the raw element array
+    // staticString index width depends on the runtime choice count → the documented ctor union.
+    const _ss: Uint8Array | Uint16Array | Uint32Array = state
+    // @ts-expect-error the staticString view must stay the union, never a single ctor
+    const _ssNarrow: Uint8Array = state
     const _count: number = meta.count
-    void [_f32, _i32, _u8, _f64, _eid, _vec, _count]
+    void [_f32, _i32, _u8, _f64, _eid, _vec, _ss, _ssNarrow, _count]
   },
 )
 export const _run: () => void = run

@@ -1,8 +1,8 @@
 // bindColumns PROPERTY suite: a pinned integrator and the identical program on `.each` produce
 // byte-identical final column state under random interleavings of spawn (into BOTH matched
 // archetypes — exercising the archetype-set-change rebuild signal), despawn, value writes, steps,
-// and forced column growth (bursts past the 1024-row reservation force the fallback grow that
-// replaces col.view mid-program). Two worlds receive the same op sequence; only the integration
+// and forced column growth (a single burst crosses the 1024-row reservation, forcing the fallback
+// grow that replaces col.view mid-program). Two worlds receive the same op sequence; only the integration
 // path differs — so any divergence is a bindColumns invalidation bug, not program noise.
 
 import { describe, expect, test } from 'vitest'
@@ -20,23 +20,33 @@ type Op =
   | { kind: 'burst'; n: number }
 
 const opArb: fc.Arbitrary<Op> = fc.oneof(
-  fc.record({
-    kind: fc.constant('spawn' as const),
-    arch: fc.constantFrom(0 as const, 1 as const),
-    n: fc.integer({ min: 1, max: 20 }),
-    dx: fc.integer({ min: -8, max: 8 }),
-    dy: fc.integer({ min: -8, max: 8 }),
-  }),
-  fc.record({ kind: fc.constant('despawn' as const), pick: fc.nat() }),
-  fc.record({
-    kind: fc.constant('write' as const),
-    pick: fc.nat(),
-    dx: fc.integer({ min: -8, max: 8 }),
-    dy: fc.integer({ min: -8, max: 8 }),
-  }),
-  fc.record({ kind: fc.constant('step' as const) }),
-  // Past INITIAL_ROWS (64) × GROWTH_RESERVE (16) = 1024 rows the fallback grow replaces col.view.
-  fc.record({ kind: fc.constant('burst' as const), n: fc.integer({ min: 500, max: 600 }) }),
+  {
+    arbitrary: fc.record({
+      kind: fc.constant('spawn' as const),
+      arch: fc.constantFrom(0 as const, 1 as const),
+      n: fc.integer({ min: 1, max: 20 }),
+      dx: fc.integer({ min: -8, max: 8 }),
+      dy: fc.integer({ min: -8, max: 8 }),
+    }),
+    weight: 1,
+  },
+  { arbitrary: fc.record({ kind: fc.constant('despawn' as const), pick: fc.nat() }), weight: 1 },
+  {
+    arbitrary: fc.record({
+      kind: fc.constant('write' as const),
+      pick: fc.nat(),
+      dx: fc.integer({ min: -8, max: 8 }),
+      dy: fc.integer({ min: -8, max: 8 }),
+    }),
+    weight: 1,
+  },
+  { arbitrary: fc.record({ kind: fc.constant('step' as const) }), weight: 1 },
+  // INITIAL_ROWS (64) × GROWTH_RESERVE (16) = 1024 rows: spawn ops cap out below that (≤480 rows),
+  // so a single n ≥ 1100 burst DETERMINISTICALLY crosses the reservation and forces the fallback
+  // grow that replaces col.view — every sequence containing a burst exercises the re-back path
+  // (the rig seeds the burst archetype before binding, so its pinned binding exists from t=0).
+  // Weighted up so most generated sequences contain at least one burst.
+  { arbitrary: fc.record({ kind: fc.constant('burst' as const), n: fc.integer({ min: 1100, max: 1300 }) }), weight: 2 },
 )
 
 interface Rig {
@@ -54,9 +64,14 @@ function makeRig(pinned: boolean): Rig {
   const Extra = defineComponent({ v: 'i32' }, { name: 'extra' })
   const world = createWorld({
     components: [Position, Velocity, Extra] as readonly ComponentDef<Schema>[],
-    maxEntities: 1 << 13,
+    // Room for a worst-case all-burst sequence (25 × 1300) plus spawns.
+    maxEntities: 1 << 16,
   })
   const q = world.query(write(Position), read(Velocity))
+  // Seed the burst archetype ({Position, Velocity}) BEFORE binding so its pinned binding exists
+  // from t=0: a burst crossing the 1024-row reservation then re-backs a LIVE binding (the path
+  // under test) instead of growing columns no binding has captured yet.
+  const seed = world.spawnWith(Position, Velocity)
   const step = pinned
     ? q.bindColumns(
         [Position, 'x'],
@@ -81,7 +96,7 @@ function makeRig(pinned: boolean): Rig {
           el.position.y += el.velocity.dy * DT
         })
       }
-  return { world, handles: [], step, Position, Velocity, Extra }
+  return { world, handles: [seed], step, Position, Velocity, Extra }
 }
 
 function apply(rig: Rig, op: Op): void {
