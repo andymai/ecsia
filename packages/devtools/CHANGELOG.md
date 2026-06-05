@@ -19,6 +19,22 @@
 ## [0.1.0](https://github.com/andymai/ecsia/compare/devtools-v0.1.0...devtools-v0.1.0) (2026-06-05)
 
 
+### Miscellaneous
+
+* **devtools:** Synchronize ecsia versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.1.0
+    * @ecsia/schema bumped to 0.1.0
+    * @ecsia/scheduler bumped to 0.1.0
+
+## [0.1.0](https://github.com/andymai/ecsia/compare/devtools-v0.1.0...devtools-v0.1.0) (2026-06-05)
+
+
 ### ⚠ BREAKING CHANGES
 
 * rename umbrella package to 'ecsia'; prepare 0.1.0
