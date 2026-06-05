@@ -545,6 +545,7 @@ export interface Query<Terms extends readonly QueryTerm[]> {
    * is reference-identical to writing the combined query directly). Flavors are per cached query,
    * NOT inherited from this one. Combined arity past MAX_QUERY_ARITY degrades to LooseQuery.
    */
+  derive(): this
   derive<N0 extends QueryTerm>(...terms: [N0]): DerivedQuery<[...Terms, N0]>
   derive<N0 extends QueryTerm, N1 extends QueryTerm>(...terms: [N0, N1]): DerivedQuery<[...Terms, N0, N1]>
   derive<N0 extends QueryTerm, N1 extends QueryTerm, N2 extends QueryTerm>(

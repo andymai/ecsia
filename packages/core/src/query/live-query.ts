@@ -135,10 +135,11 @@ export class LiveQuery {
   /**
    * Derive a narrower query: sugar over `world.query([...this.terms, ...terms])`, riding the same
    * canonical-hash dedup — deriving is REFERENCE-identical to writing the combined query directly
-   * (the hash is order-independent, so chaining order is irrelevant too). No new matching machinery;
-   * flavors (.added/.removed/.changed) are per cached query state, NOT inherited from this one.
-   * Re-deriving a term already present behaves exactly like listing it twice in `world.query`
-   * (duplicates are tolerated: identical matching, the read/write split stays type-level).
+   * (the hash is order-independent AND duplicate-tolerant, so chaining order is irrelevant too).
+   * No new matching machinery; flavors (.added/.removed/.changed) are per cached query state, NOT
+   * inherited from this one. Re-deriving a term already present collapses in the hash — deriving
+   * write(P) from [read(P)] IS the cached query for [write(P)] (one shared LiveQuery; the
+   * read/write role split stays per value-signature binding).
    */
   derive(...terms: readonly QueryTerm[]): LiveQuery {
     if (this.#queryFn === null) throw new Error('LiveQuery.derive: not attached to a query engine')

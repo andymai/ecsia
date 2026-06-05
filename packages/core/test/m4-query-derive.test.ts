@@ -52,7 +52,7 @@ describe('derivation rides the canonical-hash dedup', () => {
   })
 })
 
-describe('duplicate terms (consistent with world.query)', () => {
+describe('duplicate terms collapse in the canonical hash', () => {
   test('re-deriving an already-present component matches the duplicate-listed direct query', () => {
     const { world, Position, Velocity } = makeKit()
     const q = world.query(read(Position), read(Velocity))
@@ -63,6 +63,32 @@ describe('duplicate terms (consistent with world.query)', () => {
     world.spawnWith(Position, Velocity)
     expect(d.count).toBe(1)
     expect(d.count).toBe(world.query(write(Position), read(Velocity)).count)
+  })
+
+  test('[read(P)] derived with write(P) IS the cached query for [write(P)]', () => {
+    const { world, Position } = makeKit()
+    const d = world.query(read(Position)).derive(write(Position))
+    expect(d).toBe(world.query(write(Position)))
+    // read/write already collapse to one role tag, so the parent is the same instance too.
+    expect(d).toBe(world.query(read(Position)))
+  })
+
+  test('only ONE query instance is registered and maintained for the duplicate form', () => {
+    const { world, Position } = makeKit()
+    const base = world.query(read(Position))
+    const dup = base.derive(write(Position))
+    const direct = world.query(write(Position))
+    expect(world.__inspect.queries()).toHaveLength(1)
+
+    // Migration maintenance flows through that single instance: add/remove moves the entity in
+    // and out of every alias at once.
+    const e = world.spawnWith(Position)
+    expect(dup.count).toBe(1)
+    expect(direct.count).toBe(1)
+    world.remove(e, Position)
+    expect(dup.count).toBe(0)
+    expect(base.count).toBe(0)
+    expect(world.__inspect.queries()).toHaveLength(1)
   })
 })
 

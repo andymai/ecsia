@@ -176,7 +176,17 @@ function canonicalHash(terms: readonly QueryTerm[], ctx: CompileContext): string
     parts.push(roleTag + ':' + cid)
   }
   parts.sort()
-  return parts.join('|')
+  // Adjacent dedupe (post-sort): duplicate-tolerant hashing — [read(A), write(A)] hashes identical
+  // to [write(A)] (same matching constraint, same `current`; the read/write role split stays
+  // per value-signature binding), so both alias one shared LiveQuery.
+  let hash = ''
+  let prev = ''
+  for (const p of parts) {
+    if (p === prev) continue
+    hash = hash === '' ? p : hash + '|' + p
+    prev = p
+  }
+  return hash
 }
 
 export function compileQuery(terms: readonly QueryTerm[], ctx: CompileContext): CompiledQuery {

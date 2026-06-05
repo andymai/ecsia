@@ -59,6 +59,13 @@ w.query(read(Position))
     el.position.x = 1
   })
 
+// Zero-arg derive keeps full inference (returns this query's own type, not LooseQuery).
+moving.derive().each((el) => {
+  el.position.x = el.velocity.dx
+  // @ts-expect-error the read term stays Readonly through a zero-arg derive
+  el.velocity.dx = 1
+})
+
 // Combined arity 9+ → typed LooseQuery / LooseQueryElement degradation (NOT any).
 const loose = w
   .query(
@@ -81,3 +88,8 @@ loose.each((el) => {
 // A LooseQuery derivation stays loose (runtime terms still drive matching).
 const stillLoose: LooseQuery = loose.derive(read(Health))
 void [_loose, stillLoose]
+
+// Anti-any guard: if LooseQuery ever regressed to `any`, this bogus call would type-check and the
+// expect-error directive itself would fail compilation.
+// @ts-expect-error LooseQuery is a typed surface, not any — a bogus method must not resolve
+loose.definitelyNotAQueryMethod()
