@@ -98,6 +98,27 @@ const log = createObserverLog(world)
 // `log` records structural deltas you can encode and replay on another world.
 ```
 
+## Re-backing notices: keeping worker views live across column growth
+
+The zero-copy bootstrap hands each worker its column SABs **once**, by reference. A length-tracking view
+auto-widens when a column grows *in place* (`SharedArrayBuffer.prototype.grow` within the column's
+reserved address space), so most growth re-points nothing. But when a column grows **past its
+reservation**, the buffer layer must allocate a **new** `SharedArrayBuffer`, copy, and re-back — and a
+worker's captured view would otherwise keep reading the abandoned buffer.
+
+The buffer layer journals every such re-backing: a **monotonic growth generation** plus a list of
+**re-backing notices** carrying the new SAB handle + layout per affected column. At each **wave fence**,
+before the next dispatch, the worker pool reads the generation (a single integer check — zero cost when
+nothing grew), and only if it advanced does it **drain** the notices and broadcast them to every worker.
+Each worker re-wraps the named columns onto their new backing and **acknowledges on the wave counter**;
+the dispatch does not proceed until all workers have applied. The new SAB references travel by
+`postMessage` (a `SharedArrayBuffer` cannot ride inside another SAB), while the *signal* to apply rides
+the same Atomics fence the wave loop already uses — so the result stays **serial-equivalent at any column
+size**, with no per-wave overhead in steady state.
+
+This is the producer side of `applyColumnsAdded` on the worker view: in-place growth emits nothing
+(views auto-widen); only re-backing onto a new SAB produces a notice.
+
 ## Version gating
 
 The wire is versioned (`SERIALIZATION_FORMAT_VERSION`). On load, the deserializer range-checks the

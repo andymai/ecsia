@@ -31,6 +31,20 @@ describe('REAL worker-pool heavy bench reproduces the single-thread result on OS
     60_000,
   )
 
+  // ABOVE the 1024-row per-column reservation: each group now holds 1100 rows, so every column re-backs
+  // onto a new SAB and the wave-fence re-backing protocol (memory-buffers §7.6) must keep the threaded
+  // run byte-identical to single-thread. Bounded per the resource budget (perGroup ≤ 2048, frames ≤ 6,
+  // workers ≤ 4). The boundary itself is unit-covered by scheduler/test/worker-growth-boundary.test.ts.
+  test(
+    'threaded run with groups GROWN PAST the 1024-row reservation stays byte-identical to single-thread',
+    async () => {
+      const report = await main({ perGroup: 1100, frames: 4, workerCounts: [2, 4], seed: 9, silent: true })
+      expect(report.perGroup).toBe(1100)
+      for (const r of report.perWorker) expect(r.checksum).toBe(report.serialChecksum)
+    },
+    120_000,
+  )
+
   // The REAL measured speedup sweep — prints the table. Gated to BENCH_MACRO=1 (`pnpm bench:macro:pool`)
   // so it never costs CI time; it still asserts correctness (checksum equality), but the speedup
   // magnitude is informational only.

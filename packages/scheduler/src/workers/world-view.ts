@@ -6,7 +6,7 @@
 // (Must-Fix #1).
 
 import { elementCtor } from '@ecsia/core'
-import type { ColumnKey, ElementKind, RegionKey, SharedHandleManifest, TypedArray } from '@ecsia/core'
+import type { ColumnGrowthNotice, ColumnKey, ElementKind, RegionKey, SharedHandleManifest, TypedArray } from '@ecsia/core'
 import type { CommandEncoder } from '../commands/index.js'
 
 const REC_ARCH_ID = 'entity.archetypeId' as RegionKey
@@ -32,6 +32,13 @@ export interface WorkerWorldView {
   writeField(index: number, componentId: number, fieldIndex: number, value: number): void
   /** The structural-op encoder for this worker (defers create/destroy/add/remove to the command buffer). */
   readonly commands: CommandEncoder
+  /**
+   * Re-wrap re-backed columns onto their new SAB (serialization.md §3.4 / memory-buffers.md §7.6). The
+   * pool drains the main thread's re-backing journal at the wave fence and delivers the new backings
+   * here BEFORE the next dispatch, so the worker stops reading the abandoned buffer. In-place `.grow()`
+   * never produces a notice — those views length-track automatically.
+   */
+  applyColumnGrowth(notices: readonly ColumnGrowthNotice[]): void
 }
 
 /**
@@ -113,6 +120,11 @@ export function buildWorkerWorldView(
       writeCorral?.push(index, componentId)
     },
     commands,
+    applyColumnGrowth(notices) {
+      for (const n of notices) {
+        columns.set(n.key as unknown as string, { view: wrap(n.backing, n.layout.element), stride: n.layout.stride })
+      }
+    },
   }
   // indexBitsMask reserved for handle→index narrowing in callers; kept for API symmetry.
   void indexBitsMask

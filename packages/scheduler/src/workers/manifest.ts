@@ -34,6 +34,15 @@ export interface WorkerBootstrap {
   /** Wake SAB: the worker Atomics.waits on [0]; the main thread bumps it + notifies to dispatch. */
   readonly wakeSab: SharedArrayBuffer
   /**
+   * Re-backing signal SAB (serialization.md §3.4 / memory-buffers.md §7.6). Word [0] = the column
+   * re-backing generation the main thread last published. When the worker is woken and finds [0] !=
+   * its last-applied generation, the wake is a NOTICE round: it `await`s the queued `columns-added`
+   * postMessage (the only transport that can carry a new SharedArrayBuffer reference), re-wraps the
+   * named columns, then completes the wave fence as its ACK — all BEFORE the next dispatch. Steady
+   * state ([0] unchanged) costs one extra Atomics.load per wave.
+   */
+  readonly noticeSab: SharedArrayBuffer
+  /**
    * Per-worker write-corral SAB (reactivity.md §9.1, R-4): the worker stages value writes here as
    * `[count, index0, componentId0, index1, componentId1, …]`. Word [0] is the entry count; the main
    * thread reads it after the fence and merges into the shared write log in worker-index order. No
@@ -48,4 +57,15 @@ export interface DispatchMessage {
   readonly systemId: number
   readonly dt: number
   readonly indices: Int32Array
+}
+
+/**
+ * The re-backing broadcast (serialization.md §3.4). Posted to each worker at the wave fence carrying
+ * the NEW SharedArrayBuffer backings (by reference — SABs cannot ride a SAB) so the worker re-wraps
+ * its stale column views. `generation` matches `noticeSab[0]`; the worker ACKs via the wave fence.
+ */
+export interface ColumnsAddedMessage {
+  readonly kind: 'columns-added'
+  readonly generation: number
+  readonly columns: ReadonlyArray<{ key: string; backing: SharedArrayBuffer; layout: import('@ecsia/core').ColumnLayout }>
 }

@@ -20,7 +20,7 @@ import { buildWorkerWorldView, makeWriteCorralWriter } from './world-view.js'
 import { completeWave, setWaveError } from './wave-sync.js'
 import { takeReserved } from './reservation.js'
 import type { WorkerReservationSab } from './reservation.js'
-import type { WorkerBootstrap } from './manifest.js'
+import type { WorkerBootstrap, ColumnsAddedMessage } from './manifest.js'
 import type { WorkerSystemKernel } from './worker-system.js'
 import type { ComponentDef, ComponentId, Schema } from '@ecsia/schema'
 import { NO_ENTITY } from '@ecsia/core'
@@ -122,7 +122,29 @@ async function main(): Promise<void> {
   const workF32 = new Float32Array(boot.workSab)
   const heads = new Int32Array(boot.waveSab) // word 4+ : per-worker head (after the 4 counter words)
   const waveCounter: WaveCounter = { sab: boot.waveSab, view: new Int32Array(boot.waveSab) }
+  const notice = new Int32Array(boot.noticeSab) // [0] = main thread's published re-backing generation
   const HEAD_WORD = 4 + boot.workerIndex
+
+  // Pending `columns-added` broadcasts (serialization.md §3.4). The dispatch loop blocks on Atomics, so
+  // a posted message only drains when the loop yields to the event loop; on a NOTICE round the loop
+  // `await`s here so the queued broadcast is delivered before we re-wrap.
+  const noticeQueue: ColumnsAddedMessage[] = []
+  let noticeWaiter: (() => void) | undefined
+  let appliedNoticeGen = 0
+  parentPort?.on('message', (msg: { kind?: string }) => {
+    if (msg?.kind === 'columns-added') {
+      noticeQueue.push(msg as ColumnsAddedMessage)
+      noticeWaiter?.()
+    }
+  })
+  const nextNotice = async (): Promise<ColumnsAddedMessage> => {
+    if (noticeQueue.length > 0) return noticeQueue.shift()!
+    await new Promise<void>((resolve) => {
+      noticeWaiter = resolve
+    })
+    noticeWaiter = undefined
+    return noticeQueue.shift()!
+  }
 
   let lastWake = 0
   parentPort?.postMessage({ kind: 'ready', workerIndex: boot.workerIndex })
@@ -133,6 +155,27 @@ async function main(): Promise<void> {
     if (signal === lastWake) continue
     lastWake = signal
     if (signal < 0) return // shutdown sentinel
+
+    // NOTICE round (serialization.md §3.4): a column re-backed on the main thread. Drain the queued
+    // `columns-added` broadcast(s) up to the published generation, re-wrap the new SABs, then ACK by
+    // completing the wave fence. No system runs this wave; the next dispatch proceeds only after this.
+    const publishedGen = Atomics.load(notice, 0)
+    if (publishedGen !== appliedNoticeGen) {
+      try {
+        while (appliedNoticeGen !== publishedGen) {
+          const msg = await nextNotice()
+          view.applyColumnGrowth(
+            msg.columns.map((c) => ({ key: c.key as never, backing: c.backing, layout: c.layout })),
+          )
+          appliedNoticeGen = msg.generation
+        }
+      } catch (err) {
+        setWaveError(waveCounter)
+        parentPort?.postMessage({ kind: 'error', message: String(err) })
+      }
+      completeWave(waveCounter)
+      continue
+    }
 
     const systemId = Atomics.load(work, 0)
     const count = Atomics.load(work, 1)

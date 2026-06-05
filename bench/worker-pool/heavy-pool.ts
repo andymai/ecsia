@@ -36,14 +36,14 @@ const OMEGA = 6.0
 const DAMP = 0.015
 
 // Each group is ONE archetype column. A SAB-backed (threaded) column reserves
-// INITIAL_ROWS(64) × GROWTH_RESERVE_FACTOR(16) = 1024 rows of resizable-SAB address space; crossing
-// 1024 rows forces a reallocation+rebind that the worker's manifest-captured column view does NOT
-// follow (it keeps reading the stale 1024-row backing → globally wrong worker results, masked only
-// when per-entity data is uniform). That is a pre-existing limitation of the real WorkerPool column
-// path, not of this bench. We therefore cap each group at 1024 entities and scale the parallel
-// workload through HEAVY_ITERS / GROUP_COUNT / frames instead — keeping the threaded run byte-for-byte
-// equal to single-thread (asserted by the smoke).
-const MAX_ROWS_PER_COLUMN = 1024
+// INITIAL_ROWS(64) × GROWTH_RESERVE_FACTOR(16) = 1024 rows of resizable-SAB address space. Crossing
+// 1024 rows forces a reallocation+rebind onto a NEW SAB; the worker pool now drains that re-backing
+// notice at the wave fence and re-wraps every worker's column view before the next dispatch (the
+// memory-buffers §7.6 / serialization §3.4 protocol), so growing past the reservation stays
+// byte-for-byte serial-equivalent. The boundary is covered directly by
+// packages/scheduler/test/worker-growth-boundary.test.ts (1024 in-place grow + 1025/1040 re-backing).
+// No per-column cap: perGroup is free to cross 1024; the smoke still asserts threaded === serial.
+const DEFAULT_PER_GROUP = 1024
 
 // Default relative to THIS file's source location (bench/worker-pool/ → repo root is ../../). The
 // tsx-free report runner (scripts/bench-report.mjs) emits this module to a different depth, so it sets
@@ -219,7 +219,10 @@ export interface HeavyPoolReport {
 }
 
 export interface HeavyPoolOptions {
-  /** Entities per group (GROUP_COUNT groups total). Clamped to 1024 (see MAX_ROWS_PER_COLUMN). */
+  /**
+   * Entities per group (GROUP_COUNT groups total). May exceed 1024: crossing the per-column reservation
+   * is now handled by the re-backing fence (see worker-growth-boundary.test.ts); no cap is applied.
+   */
   readonly perGroup?: number
   /** Frames to run per configuration. Default 200. */
   readonly frames?: number
@@ -267,7 +270,7 @@ function timeSerial(perGroup: number, frames: number, seedVal: number): { ms: nu
 }
 
 export async function main(opts: HeavyPoolOptions = {}): Promise<HeavyPoolReport> {
-  const perGroup = Math.min(opts.perGroup ?? MAX_ROWS_PER_COLUMN, MAX_ROWS_PER_COLUMN)
+  const perGroup = opts.perGroup ?? DEFAULT_PER_GROUP
   const frames = opts.frames ?? 200
   const seedVal = opts.seed ?? 1234
   const silent = opts.silent ?? false

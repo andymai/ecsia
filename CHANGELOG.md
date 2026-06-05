@@ -37,7 +37,10 @@ power-user scoped packages `@ecsia/core`, `@ecsia/schema`, `@ecsia/relations`,
   parallel result is **bit-identical** to the single-threaded result (entity set, component
   values, reactivity deltas), guaranteed by a fixed worker-index command-buffer merge and
   verified by a serial-equivalence property test. A non-silent `postMessage` fallback covers
-  non-cross-origin-isolated hosts.
+  non-cross-origin-isolated hosts. **Columns that grow past their initial address-space
+  reservation re-back onto a new `SharedArrayBuffer`; the pool drains a re-backing notice at the
+  wave fence and re-wraps every worker's view before the next dispatch (one generation check per
+  wave when nothing grew), so threaded worlds stay serial-equivalent at any column size.**
 - **Serialization** (`@ecsia/serialization`) — bit-exact world snapshots, version-stamped
   deltas carrying value + structural changes since a tick (no shadow map), entity-id and
   relation-target remap on load, and a zero-copy worker bootstrap.
@@ -62,15 +65,25 @@ power-user scoped packages `@ecsia/core`, `@ecsia/schema`, `@ecsia/relations`,
   declares `sideEffects: false` (the import graph of each package entry has no module-scope
   side effects), and requires Node `>=22.13`.
 
+### Fixed
+
+- **WorkerPool wide-column growth (>1024 rows-per-column).** A threaded column that grew past
+  its initial reservation (`INITIAL_ROWS 64 × GROWTH_RESERVE_FACTOR 16 = 1024` rows) re-backed
+  onto a new `SharedArrayBuffer`, but the workers' manifest-captured views kept reading the
+  abandoned backing — diverging every row from single-thread at exactly 1025. The buffer layer
+  now journals each re-backing (a monotonic generation + the new SAB handles), and the worker
+  pool drains and applies those notices to every worker **at the wave fence before the next
+  dispatch**, each worker re-wrapping the new backing and ACKing on the wave counter. In-place
+  `.grow()` within the reservation is unchanged (length-tracking views auto-widen) and steady
+  state costs a single generation check per wave. Threaded worlds are now serial-equivalent at
+  any column size. Boundary-tested by
+  `packages/scheduler/test/worker-growth-boundary.test.ts` (1024 in-place grow + 1025/1040
+  re-backing) and the above-reservation case in the heavy-pool smoke.
+
 ### Known issues
 
 These are documented limitations in 0.1.0, not regressions:
 
-- **WorkerPool wide-column growth (>1024 rows-per-column).** The threaded path has a
-  per-column growth bug above 1024 rows-per-column; the worker pool currently operates under
-  a **documented cap** to stay within the proven-correct envelope. Stay at or below the
-  documented cap for threaded columns; single-threaded worlds are unaffected. (Fix-or-disclose
-  is tracked for a follow-up; until then this is disclosed, not silently hit.)
 - **RF-NOREMAP.** Rich-field (`object<T>` / `'string'`) values are carried by entity-index-keyed
   sidecar storage and are **not** entity-id-remapped through every cross-world path the way
   numeric columns are. Round-trip rich fields through the documented snapshot/delta paths,

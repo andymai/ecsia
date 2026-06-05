@@ -69,6 +69,13 @@ and logical core count, the date, and the commit SHA. A number without its machi
   single-thread executor — dispatch overhead is real and we show it), and the parallel win only materializes
   once a second worker shares the load. The `byte-identical` column confirms every threaded run reproduces
   the single-thread result exactly; the speedup is genuine parallelism, not a relaxed-correctness shortcut.
+  This holds **at any column size**: when a threaded column grows past its initial address-space
+  reservation (`INITIAL_ROWS 64 × GROWTH_RESERVE_FACTOR 16 = 1024` rows) it re-backs onto a new
+  `SharedArrayBuffer`, and the pool re-wraps every worker's view at the wave fence before the next dispatch
+  (one generation check per wave when nothing grew). The earlier 0.1.0 pre-release per-column growth cap is
+  retired — growing past 1024 rows is covered directly by
+  `packages/scheduler/test/worker-growth-boundary.test.ts` (1024 in-place grow + 1025/1040 re-backing) and
+  the above-reservation case in the heavy-pool smoke.
 
 ## Reproduce
 

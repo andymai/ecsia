@@ -34,7 +34,7 @@ import { QueryEngine } from './query/index.js'
 import type { LiveQuery, ResolvedPair } from './query/index.js'
 import { ShapeKind } from './reactivity/index.js'
 import type { ColumnSet } from './component/index.js'
-import type { Buffers as BuffersType } from './memory/index.js'
+import type { Buffers as BuffersType, ColumnGrowthLog } from './memory/index.js'
 import { Reactivity, ObserverCommandBuffer, onAdd, onRemove, onChange } from './reactivity/index.js'
 import type { ObserverCommandApply, ObserverHandle, ObserverHandler, ObserverTerm } from './reactivity/index.js'
 import type { ComponentDef as SchemaComponentDef, FieldDescriptor, QueryTerm, WorldQuery } from '@ecsia/schema'
@@ -173,6 +173,14 @@ export interface World {
   __installRelations(): RelationsHost
   /** Export the SAB buffer-set manifest for one-time worker transfer (memory-buffers.md §6.3). */
   __exportShared(): SharedHandleManifest
+  /**
+   * Column re-backing journal (memory-buffers.md §7.6 / serialization.md §3.4). The scheduler reads
+   * `.generation` once per wave (a cheap monotonic int) and only `.drain()`s when it advanced — the
+   * notices it gets are the new SAB backings the worker pool must re-wrap at the wave fence before the
+   * next dispatch. In-place `.grow()` never bumps the generation (length-tracking views auto-widen).
+   * Serial / main-thread; called ONLY by the scheduler. Not for user code.
+   */
+  __columnGrowth(): ColumnGrowthLog
   /**
    * Serialization seam (serialization.md M10). @ecsia/serialization reads archetype columns + the
    * registry + the relation provider through this, and drives deserialize-side spawn/migrate. Serial /
@@ -892,6 +900,9 @@ export function createWorld(options: WorldOptions = {}): World {
         extra.push({ key: 'entity.archetypeRow' as RegionKey, backing: rec.archetypeRow, element: 'u32' })
       }
       return { columns: base.columns, regions: [...base.regions, ...extra] }
+    },
+    __columnGrowth() {
+      return buffers.columnGrowth()
     },
     __serialize: serialize,
     __inspect: inspect,

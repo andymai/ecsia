@@ -55,7 +55,7 @@ export type {
   ObserverContext,
 } from './reactivity/index.js'
 
-export type { SharedHandleManifest } from './memory/index.js'
+export type { SharedHandleManifest, ColumnGrowthNotice, ColumnGrowthLog } from './memory/index.js'
 
 // Schema surface re-exported so users import tokens/inference from @ecsia/core (the umbrella).
 export {

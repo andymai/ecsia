@@ -24,7 +24,7 @@ import type { WaveCounter } from '../executor/seams.js'
 import { selectWaitTier } from '../executor/seams.js'
 import { makeReservationSab, fillReservation, consumedCount } from './reservation.js'
 import type { WorkerReservationSab } from './reservation.js'
-import type { WorkerBootstrap, ComponentManifestEntry } from './manifest.js'
+import type { WorkerBootstrap, ComponentManifestEntry, ColumnsAddedMessage } from './manifest.js'
 import type { WorkerSystemKernel } from './worker-system.js'
 
 /** A worker-eligible system registered with the pool, indexed by SystemId (registration order). */
@@ -44,6 +44,8 @@ interface WorkerSlot {
   readonly reservation: WorkerReservationSab
   readonly work: { sab: SharedArrayBuffer; i32: Int32Array; f32: Float32Array }
   readonly wake: Int32Array
+  /** Re-backing signal SAB ([0] = published column-growth generation, §7.6). */
+  readonly notice: Int32Array
   /** Write-corral mirror: [0]=count, then [index, componentId] pairs (reactivity.md §9.1). */
   readonly writeCorral: Uint32Array
   ready: boolean
@@ -93,6 +95,9 @@ export class WorkerPool {
   readonly #defById = new Map<number, ComponentDef<Schema>>()
   readonly #codecById = new Map<number, ComponentFieldCodec>()
   #wakeGen = 0
+  // §7.6: the last column-growth generation we broadcast to the workers. A cheap `!==` against the
+  // world's live generation gates the whole re-backing fence — zero work when nothing re-backed.
+  #appliedGrowthGen = 0
   #disposed = false
 
   constructor(cfg: PoolConfig) {
@@ -142,6 +147,7 @@ export class WorkerPool {
       const reservation = makeReservationSab(reservationCap)
       const workSab = new SharedArrayBuffer((WORK_HEADER_WORDS + maxBatch) * 4)
       const wakeSab = new SharedArrayBuffer(4)
+      const noticeSab = new SharedArrayBuffer(4) // [0] = published column-growth generation (§7.6)
       // Write-corral SAB: 1 header word (count) + 2 words per staged entry.
       const writeCorralSab = new SharedArrayBuffer((1 + corralEntries * 2) * 4)
       const boot: WorkerBootstrap = {
@@ -157,6 +163,7 @@ export class WorkerPool {
         waveSab: this.#waveCounter.sab,
         workSab,
         wakeSab,
+        noticeSab,
         writeCorralSab,
       }
       const worker = new Worker(entryUrl, { workerData: boot })
@@ -167,6 +174,7 @@ export class WorkerPool {
         reservation,
         work: { sab: workSab, i32: new Int32Array(workSab), f32: new Float32Array(workSab) },
         wake: new Int32Array(wakeSab),
+        notice: new Int32Array(noticeSab),
         writeCorral: new Uint32Array(writeCorralSab),
         ready: false,
       }
@@ -197,6 +205,10 @@ export class WorkerPool {
     if (this.#disposed) throw new Error('worker pool disposed')
     const active = batches.filter((b) => b.workerIndex >= 0 && b.workerIndex < this.#slots.length)
     if (active.length === 0) return
+
+    // ---- re-backing fence (§7.6): re-wrap any column that moved to a NEW SAB since the last dispatch
+    // BEFORE this one proceeds. One generation `!==` per wave when nothing grew (zero steady-state cost).
+    await this.#drainColumnGrowth()
 
     // ---- reservation top-up (serial) ----
     for (const b of active) {
@@ -280,6 +292,41 @@ export class WorkerPool {
     }
     bufs.sort((a, z) => a.workerIndex - z.workerIndex)
     flushAll(this.#worldApply(), bufs)
+  }
+
+  /**
+   * §7.6 re-backing fence. If a column re-backed onto a new SAB since the last dispatch (the world's
+   * growth generation advanced), broadcast the new backings to EVERY worker and block on the wave fence
+   * until all have re-wrapped + ACKed — so no dispatch ever reads a worker's stale (abandoned-SAB) view.
+   * Steady state is a single generation `!==`; the drain + broadcast happen only on an actual re-backing.
+   */
+  async #drainColumnGrowth(): Promise<void> {
+    const log = this.#world.__columnGrowth()
+    if (log.generation === this.#appliedGrowthGen) return // nothing re-backed — the steady-state path
+
+    const gen = log.generation
+    const notices = log.drain()
+    if (notices.length > 0) {
+      const msg: ColumnsAddedMessage = {
+        kind: 'columns-added',
+        generation: gen,
+        columns: notices.map((n) => ({ key: n.key as unknown as string, backing: n.backing, layout: n.layout })),
+      }
+      // Arm the fence for every worker (each ACKs by completing the wave once it has re-wrapped).
+      this.#world.__setPhase('wave')
+      this.#waveSync.begin(this.#waveCounter, this.#slots.length)
+      this.#wakeGen += 1
+      for (const slot of this.#slots) {
+        slot.worker.postMessage(msg) // SAB references can ONLY ride postMessage, not a SAB
+        Atomics.store(slot.notice, 0, gen)
+        Atomics.store(slot.wake, WAKE, this.#wakeGen)
+        Atomics.notify(slot.wake, WAKE)
+      }
+      const r = this.#waveSync.await(this.#waveCounter)
+      if (r !== undefined) await r
+      this.#world.__setPhase('serial')
+    }
+    this.#appliedGrowthGen = gen
   }
 
   #matchedIndices(sys: PoolSystem): Int32Array {

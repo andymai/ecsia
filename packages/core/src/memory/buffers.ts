@@ -196,6 +196,23 @@ export interface SharedHandleManifest {
   readonly regions: ReadonlyArray<ExportedRegionHandle>
 }
 
+// memory-buffers §7.6 / serialization §3.4: a re-backing event the worker pool must replay at the wave
+// fence. The in-place `.grow()` path emits NOTHING (length-tracking views auto-widen, V-1); ONLY the
+// fallback re-allocation (a NEW SAB backing) produces a notice, because the worker's manifest-captured
+// view still points at the abandoned buffer until it re-wraps this `backing`.
+export interface ColumnGrowthNotice {
+  readonly key: ColumnKey
+  readonly backing: SharedArrayBuffer
+  readonly layout: ColumnLayout
+}
+
+export interface ColumnGrowthLog {
+  /** Monotonic re-backing generation. Equal across two reads ⇒ nothing re-backed (the steady-state check). */
+  readonly generation: number
+  /** Re-backing notices accumulated since the last drain (latest backing per column). Empty unless `generation` advanced. */
+  drain(): ColumnGrowthNotice[]
+}
+
 export class Buffers {
   readonly capabilities: RuntimeCapabilities
   readonly #maxEntities: number
@@ -206,6 +223,10 @@ export class Buffers {
   readonly #regionElement = new Map<string, ElementKind>()
   // The live-accessor registry: walked ONLY on the fallback grow path (R-1, §7.5).
   readonly #accessors = new Map<string, Set<ViewHolder>>()
+  // §7.6 re-backing journal: bumped + appended ONLY on the SAB #growFallback path (workers re-wrap the
+  // new backing at the wave fence). In-place `.grow()` never touches this — V-1 keeps it zero-cost.
+  #growGeneration = 0
+  readonly #pendingGrowth = new Map<ColumnKey, ColumnGrowthNotice>()
 
   constructor(config: BuffersConfig) {
     this.capabilities = config.capabilities
@@ -337,7 +358,27 @@ export class Buffers {
     if (holders !== undefined) {
       for (const holder of holders) holder.__rebind(newBacking)
     }
+    // §7.6: main-thread holders are re-bound above, but worker views captured the OLD SAB at bootstrap.
+    // Record the new backing so the pool re-wraps it at the next wave fence (only SAB is worker-visible).
+    if (isSharedBacking(newBacking)) {
+      this.#growGeneration += 1
+      this.#pendingGrowth.set(col.key, { key: col.key, backing: newBacking, layout: col.layout })
+    }
     return col
+  }
+
+  // §7.6: the re-backing journal the worker pool drains at the wave fence. `generation` is a cheap
+  // monotonic int: when it is unchanged across two reads the pool skips the drain entirely (zero
+  // steady-state cost). `drain()` returns the latest backing per re-backed column and clears the queue.
+  columnGrowth(): ColumnGrowthLog {
+    return {
+      generation: this.#growGeneration,
+      drain: (): ColumnGrowthNotice[] => {
+        const out = [...this.#pendingGrowth.values()]
+        this.#pendingGrowth.clear()
+        return out
+      },
+    }
   }
 
   // §7.3: only eid columns need an explicit fill (their zero is a valid entity); everything else

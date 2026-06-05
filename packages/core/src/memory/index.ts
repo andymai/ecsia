@@ -38,4 +38,6 @@ export type {
   SharedHandleManifest,
   ExportedColumnHandle,
   ExportedRegionHandle,
+  ColumnGrowthNotice,
+  ColumnGrowthLog,
 } from './buffers.js'
