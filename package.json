@@ -15,12 +15,17 @@
     "typecheck:extras": "tsc -p examples/tsconfig.json && tsc -p bench/tsconfig.json",
     "bench": "vitest bench --run",
     "bench:macro": "BENCH_MACRO=1 vitest run --project bench",
-    "bench:macro:pool": "BENCH_MACRO=1 vitest run --project bench bench/test/heavy-pool.smoke.test.ts"
+    "bench:macro:pool": "BENCH_MACRO=1 vitest run --project bench bench/test/heavy-pool.smoke.test.ts",
+    "smoke:runtime": "node scripts/runtime-smoke.mjs",
+    "smoke:browser:bundle": "node scripts/browser-smoke/build.mjs",
+    "smoke:browser": "playwright test --config scripts/browser-smoke/playwright.config.ts"
   },
   "devDependencies": {
+    "@playwright/test": "1.49.1",
     "@types/node": "^22.10.0",
     "@vitest/coverage-v8": "2.1.9",
     "bitecs": "^0.3.40",
+    "esbuild": "0.21.5",
     "fast-check": "^3.23.0",
     "miniplex": "^2.0.0",
     "tinybench": "^3.0.0",

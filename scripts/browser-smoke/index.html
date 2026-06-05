@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ecsia browser smoke</title>
+  </head>
+  <body>
+    <h1>ecsia browser smoke</h1>
+    <script>
+      // The expectation is passed by the harness via ?isolated=1|0 so the SAME bundle covers BOTH the
+      // COOP/COEP (isolated) and --no-isolation server variants. Must be set BEFORE the module loads.
+      const params = new URLSearchParams(location.search)
+      window.__ECSIA_EXPECT_ISOLATED = params.get('isolated') === '1'
+    </script>
+    <script type="module" src="/dist/entry.js"></script>
+  </body>
+</html>
