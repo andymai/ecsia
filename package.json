@@ -19,7 +19,11 @@
     "bench:macro:pool": "BENCH_MACRO=1 vitest run --project bench bench/test/heavy-pool.smoke.test.ts",
     "smoke:runtime": "node scripts/runtime-smoke.mjs",
     "smoke:browser:bundle": "node scripts/browser-smoke/build.mjs",
-    "smoke:browser": "playwright test --config scripts/browser-smoke/playwright.config.ts"
+    "smoke:browser": "playwright test --config scripts/browser-smoke/playwright.config.ts",
+    "docs:api": "typedoc",
+    "docs:check": "node scripts/check-doc-snippets.mjs",
+    "docs:dev": "vitepress dev website",
+    "docs:build": "pnpm docs:api && vitepress build website && pnpm docs:check"
   },
   "devDependencies": {
     "@playwright/test": "1.49.1",
@@ -32,7 +36,10 @@
     "miniplex": "^2.0.0",
     "three": "^0.169.0",
     "tinybench": "^3.0.0",
+    "typedoc": "^0.28.19",
+    "typedoc-plugin-markdown": "^4.12.0",
     "typescript": "^5.7.0",
+    "vitepress": "^1.6.4",
     "vitest": "^2.1.0"
   }
 }
