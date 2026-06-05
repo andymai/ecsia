@@ -43,6 +43,13 @@ export interface AccessorInstanceBase {
   __eid: EntityHandle
   __binding: AccessorBinding | null
   __rebind(newBacking: Backing): void
+  /**
+   * Fallback-grow rebind for ONE column. Each column-bearing field owns a SEPARATE backing buffer
+   * (one `buffers.column` per field), so a fallback grow re-points exactly that field's view. A
+   * whole-instance `__rebind` would alias every field onto the single grown backing (corrupting the
+   * other fields' columns); the buffers layer always targets the field that actually grew.
+   */
+  __rebindField(fieldIndex: number, newBacking: Backing): void
 }
 
 interface FieldPlan {
@@ -133,11 +140,13 @@ export function makeAccessorFactory<S extends Schema>(def: ComponentDef<S>): Acc
       __binding: AccessorBinding | null = null
 
       __rebind(newBacking: Backing): void {
-        for (let i = 0; i < views.length; i++) {
-          const Ctor = elementCtor(elements[i] as ElementKind)
-          // No length argument (V-1): rebuild the length-tracking view at the captured byteOffset.
-          views[i] = new Ctor(newBacking as ArrayBufferLike, offsets[i]) as TypedArray
-        }
+        for (let i = 0; i < views.length; i++) this.__rebindField(i, newBacking)
+      }
+
+      __rebindField(fieldIndex: number, newBacking: Backing): void {
+        const Ctor = elementCtor(elements[fieldIndex] as ElementKind)
+        // No length argument (V-1): rebuild the length-tracking view at the captured byteOffset.
+        views[fieldIndex] = new Ctor(newBacking as ArrayBufferLike, offsets[fieldIndex]) as TypedArray
       }
     }
 

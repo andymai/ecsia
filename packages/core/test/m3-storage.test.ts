@@ -102,6 +102,29 @@ describe('migration correctness (MIG-1, ROW-1) + spawnWith', () => {
     expect((w.entity(e).read(Velocity) as { dx: number }).dx).toBe(-1)
   })
 
+  test('column growth past the 1024 reserve keeps per-field views correctly mapped (GROW-1)', () => {
+    // INITIAL_ROWS (64) × GROWTH_RESERVE_FACTOR (16) = 1024 reserved rows; spawning the 1025th entity
+    // exhausts the resizable reservation and forces the fallback grow (column re-alloc + view rebind).
+    // The rebind must re-point ONLY the grown field's view — a whole-instance rebind aliases the
+    // second f32 field onto the first field's backing, so every entity reads dy's data for dx.
+    const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
+    const w = createWorld({ components: [Velocity] })
+    const n = 1025
+    const handles: number[] = []
+    for (let i = 0; i < n; i++) {
+      const h = w.spawnWith(Velocity)
+      const v = w.entity(h).write(Velocity) as { dx: number; dy: number }
+      v.dx = 1
+      v.dy = 0.5
+      handles.push(h as unknown as number)
+    }
+    for (let i = 0; i < n; i++) {
+      const v = w.entity(handles[i] as never).read(Velocity) as { dx: number; dy: number }
+      expect(v.dx).toBe(1) // NOT 0.5 (the dy column aliased over dx pre-fix)
+      expect(v.dy).toBe(0.5)
+    }
+  })
+
   test('adding a component PRESERVES existing column values (K-shared copy)', () => {
     const Position = defineComponent({ x: 'f32' })
     const Tag = defineComponent({ n: 'i32' })

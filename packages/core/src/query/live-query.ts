@@ -8,9 +8,10 @@
 // matchingArchetypes contiguous rows (the hot path, O(A) matched at archetype creation, NOT per
 // entity) and pokes the per-(archetype, component) accessor singleton — zero allocation per row.
 
-import type { ArchetypeId, ComponentId, EntityHandle, Schema } from '@ecsia/schema'
+import type { ArchetypeId, ComponentDef, ComponentId, EntityHandle, FieldDescriptor, Schema } from '@ecsia/schema'
 import type { ColumnSet } from '../component/index.js'
 import type { Archetype } from '../storage/index.js'
+import type { TypedArray } from '../memory/index.js'
 import { decodeEid } from '../memory/index.js'
 import type { CompiledQuery, CompiledValueTerm, RowFilterTerm } from './compile.js'
 import type { SparseSetU32 } from './sparse-set.js'
@@ -96,6 +97,7 @@ export class LiveQuery {
   #delta: DeltaLists | null = null
   #reactivity: ReactivityQueryHooks | null = null
   #changedDeclared = false
+  #chunk: QueryChunk | null = null
   lastMatchTick = 0
 
   constructor(
@@ -198,6 +200,18 @@ export class LiveQuery {
     })
   }
 
+  /** This query's own value-signature binding (the hot path uses one fixed signature for its lifetime).
+   * Resolved once and cached so `each`/iterator never re-sort+join the value signature per call. */
+  #hotBindingCache: ValueBinding | null = null
+  #hotBinding(): ValueBinding {
+    let b = this.#hotBindingCache
+    if (b === null) {
+      b = this.#binding(LiveQuery.valueSignature(this.compiled))
+      this.#hotBindingCache = b
+    }
+    return b
+  }
+
   #binding(sig: string): ValueBinding {
     let b = this.#bindings.get(sig)
     if (b === undefined) {
@@ -265,9 +279,11 @@ export class LiveQuery {
 
   /** The hot loop: walk matchingArchetypes contiguous rows, poke the accessor singletons, call fn. */
   each(fn: (e: PooledElement) => void): void {
-    const sig = LiveQuery.valueSignature(this.compiled)
-    const binding = this.#binding(sig)
-    for (const arch of this.matchingArchetypes) {
+    const binding = this.#hotBinding()
+    const hasRowFilters = this.compiled.rowFilters.length !== 0
+    const archs = this.matchingArchetypes
+    for (let ai = 0; ai < archs.length; ai++) {
+      const arch = archs[ai] as Archetype
       if (arch.cold) {
         this.#eachCold(arch, binding, fn)
         continue
@@ -276,18 +292,56 @@ export class LiveQuery {
       if (count === 0) continue
       const el = this.#elementFor(arch, binding)
       const accessors = this.#accessorsFor(arch, binding)
+      const na = accessors.length
+      const rows = arch.rows
       for (let row = 0; row < count; row++) {
-        if (!this.#passesRowFilters(arch, row)) continue
-        for (const a of accessors) {
+        if (hasRowFilters && !this.#passesRowFilters(arch, row)) continue
+        const handle = (rows[row] as number) as unknown as EntityHandle
+        for (let k = 0; k < na; k++) {
+          const a = accessors[k] as { __idx: number; __eid: EntityHandle }
           a.__idx = row
-        }
-        const handle = (arch.rows[row] as number) as unknown as EntityHandle
-        el.handle = handle
-        for (const a of accessors) {
           a.__eid = handle
         }
+        el.handle = handle
         fn(el)
       }
+    }
+  }
+
+  /**
+   * Opt-in column-cursor iteration (the SoA fast path). Instead of the per-row pooled element +
+   * accessor getters/setters, `eachChunk` hands the callback ONE reused {@link QueryChunk} per matched
+   * (non-cold) archetype, exposing the raw typed column views + a contiguous row span. The caller indexes
+   * `view[row]` directly (stride-1 scalars) — bypassing the accessor decode/encode AND the per-write
+   * change-tracking push, so it lands close to a raw SoA loop. Cold archetypes (no contiguous columns)
+   * are NOT visited by `eachChunk`; mix `each`/`eachCold` if a query can fragment. Writes through the
+   * cursor are NOT recorded in the reactivity write log: a `.changed`/observer consumer will not see them
+   * — use `each` when reactivity must observe the write (queries.md §9, reactivity.md §3.3).
+   *
+   * The chunk and its column lookups are reused across calls/archetypes — do NOT store the chunk or a
+   * returned view across iterations.
+   */
+  eachChunk(fn: (chunk: QueryChunk) => void): void {
+    const chunk = this.#chunk ?? (this.#chunk = new QueryChunk())
+    const hasRowFilters = this.compiled.rowFilters.length !== 0
+    const archs = this.matchingArchetypes
+    for (let ai = 0; ai < archs.length; ai++) {
+      const arch = archs[ai] as Archetype
+      if (arch.cold || arch.count === 0) continue
+      // Row filters select a SUBSET of rows; the chunk exposes a contiguous span, so skip those
+      // archetypes here (correctness over the fast path) — the caller falls back to `each` for them.
+      if (hasRowFilters) {
+        let allPass = true
+        for (let row = 0; row < arch.count; row++) {
+          if (!this.#passesRowFilters(arch, row)) {
+            allPass = false
+            break
+          }
+        }
+        if (!allPass) continue
+      }
+      chunk.__bind(arch)
+      fn(chunk)
     }
   }
 
@@ -295,8 +349,7 @@ export class LiveQuery {
     // A simple eager collection of (archetype,row) snapshots would allocate; instead drive `each`
     // through a buffered generator that yields the SAME pooled element per archetype. Single active
     // iteration is the contract (§9.1) — do not store the element across yields.
-    const sig = LiveQuery.valueSignature(this.compiled)
-    const binding = this.#binding(sig)
+    const binding = this.#hotBinding()
     for (const arch of this.matchingArchetypes) {
       if (arch.cold) {
         yield* this.#eachColdGen(arch, binding)
@@ -305,12 +358,16 @@ export class LiveQuery {
       if (arch.count === 0) continue
       const el = this.#elementFor(arch, binding)
       const accessors = this.#accessorsFor(arch, binding)
+      const na = accessors.length
       for (let row = 0; row < arch.count; row++) {
         if (!this.#passesRowFilters(arch, row)) continue
-        for (const a of accessors) a.__idx = row
         const handle = (arch.rows[row] as number) as unknown as EntityHandle
+        for (let k = 0; k < na; k++) {
+          const a = accessors[k] as { __idx: number; __eid: EntityHandle }
+          a.__idx = row
+          a.__eid = handle
+        }
         el.handle = handle
-        for (const a of accessors) a.__eid = handle
         yield el
       }
     }
@@ -345,8 +402,7 @@ export class LiveQuery {
 
   /** §9.5: bind the cursor per scattered index (added set spans multiple archetypes). */
   #eachScattered(indices: Iterable<number>, fn: (e: PooledElement) => void): void {
-    const sig = LiveQuery.valueSignature(this.compiled)
-    const binding = this.#binding(sig)
+    const binding = this.#hotBinding()
     for (const index of indices) {
       const loc = this.#deps.resolveLocation(index)
       const arch = this.#byId[loc.archetypeId]
@@ -487,6 +543,88 @@ export class LiveQuery {
     return cached
   }
 }
+
+/**
+ * The reused per-archetype cursor handed to {@link LiveQuery.eachChunk}. Exposes one matched archetype's
+ * raw SoA columns + its contiguous row span. Resolve each column ONCE before the inner row loop:
+ *
+ * ```ts
+ * q.eachChunk((c) => {
+ *   const px = c.column(Position, 'x'), py = c.column(Position, 'y')
+ *   const dx = c.column(Velocity, 'dx'), dy = c.column(Velocity, 'dy')
+ *   for (let i = 0; i < c.count; i++) { px[i] += dx[i] * dt; py[i] += dy[i] * dt }
+ * })
+ * ```
+ *
+ * `column` returns the live typed view; `stride` is the slots-per-row (>1 for vec fields, where row `r`
+ * starts at `r * stride`). The cursor (and every returned view) is reused across archetypes/calls — do NOT
+ * store either across iterations. Writes here bypass the reactivity write log (see `eachChunk`).
+ */
+export class QueryChunk {
+  #arch: Archetype | null = null
+  /** componentId → (fieldName → columnIndex within that component's ColumnSet). Built lazily, reused. */
+  readonly #colIndex = new Map<number, Map<string, number>>()
+
+  /** @internal — point the chunk at one matched archetype (the cursor loop owns this). */
+  __bind(arch: Archetype): void {
+    this.#arch = arch
+  }
+
+  /** Rows in this chunk (the archetype's dense row count). Iterate `0..count`. */
+  get count(): number {
+    return this.#arch === null ? 0 : this.#arch.count
+  }
+
+  /** The dense row→EntityHandle list for this chunk (row `r`'s entity is `entities[r]`). */
+  get entities(): Uint32Array {
+    return this.#arch === null ? EMPTY_ROWS : this.#arch.rows
+  }
+
+  #resolveColumnIndex(def: ComponentDef<Schema>, field: string): number {
+    const cid = def.id as number
+    let byName = this.#colIndex.get(cid)
+    if (byName === undefined) {
+      byName = new Map()
+      let colIdx = 0
+      for (const f of def.fields as readonly FieldDescriptor[]) {
+        // object<T> contributes no column (§3.8); skip it so column indices match the ColumnSet build order.
+        if (f.ctor !== null) {
+          byName.set(f.name, colIdx)
+          colIdx += 1
+        }
+      }
+      this.#colIndex.set(cid, byName)
+    }
+    const idx = byName.get(field)
+    if (idx === undefined) {
+      throw new Error(`QueryChunk.column: component '${def.name}' has no column-backed field '${field}'`)
+    }
+    return idx
+  }
+
+  #columnOf(def: ComponentDef<Schema>, field: string): { view: TypedArray; stride: number } {
+    if (this.#arch === null) throw new Error('QueryChunk: not bound')
+    const cs = this.#arch.columnSets.get(def.id as ComponentId)
+    if (cs === undefined) {
+      throw new Error(`QueryChunk.column: archetype lacks component '${def.name}' (not in this query?)`)
+    }
+    const col = cs.columns[this.#resolveColumnIndex(def, field)]
+    if (col === undefined) throw new Error(`QueryChunk.column: missing column for '${def.name}.${field}'`)
+    return { view: col.view, stride: col.layout.stride }
+  }
+
+  /** The live typed column view for `def.field` in this chunk. Stride-1 scalars index by row directly. */
+  column<S extends Schema>(def: ComponentDef<S>, field: string): TypedArray {
+    return this.#columnOf(def as unknown as ComponentDef<Schema>, field).view
+  }
+
+  /** Slots per row for `def.field` (1 scalar, N vec): row `r` starts at `r * stride`. */
+  stride<S extends Schema>(def: ComponentDef<S>, field: string): number {
+    return this.#columnOf(def as unknown as ComponentDef<Schema>, field).stride
+  }
+}
+
+const EMPTY_ROWS = new Uint32Array(0)
 
 export type { PooledElement }
 export { NO_HANDLE }

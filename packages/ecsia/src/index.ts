@@ -185,6 +185,7 @@ export type {
   WriteOf,
   SchemaOf,
   Query,
+  QueryChunk,
   LooseQuery,
   QueryTerm,
   QueryElement,

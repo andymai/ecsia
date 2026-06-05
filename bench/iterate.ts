@@ -4,6 +4,7 @@
 // loop so the measurement is the storage/iteration cost, not GC.
 
 import { createWorld, defineComponent, write } from '@ecsia/ecsia'
+import type { QueryChunk } from '@ecsia/ecsia'
 import { World as MiniplexWorld } from 'miniplex'
 import {
   createWorld as bitCreateWorld,
@@ -43,6 +44,43 @@ export function makeEcsiaIter(n: number): IterCase {
         const el = e as unknown as { position: { x: number; y: number }; velocity: { dx: number; dy: number } }
         el.position.x += el.velocity.dx * DT
         el.position.y += el.velocity.dy * DT
+      })
+    },
+    sampleX() {
+      return (world.entity(first).read(Position) as { x: number }).x
+    },
+  }
+}
+
+// The opt-in column-cursor (SoA) variant of the ecsia loop: eachChunk hands per-archetype raw typed
+// column views + a row span, so the inner loop indexes Float32Array directly — bypassing the per-row
+// accessor objects AND the reactivity write-log push (close to the bitECS raw-SoA loop, still typed).
+export function makeEcsiaCursorIter(n: number): IterCase {
+  const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
+  const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
+  const world = createWorld({ components: [Position, Velocity], maxEntities: nextPow2(n) })
+  let first = 0 as unknown as ReturnType<typeof world.spawnWith>
+  for (let i = 0; i < n; i++) {
+    const h = world.spawnWith(Position, Velocity)
+    if (i === 0) first = h
+    const v = world.entity(h).write(Velocity) as { dx: number; dy: number }
+    v.dx = 1
+    v.dy = 0.5
+  }
+  const q = world.query(write(Position), write(Velocity))
+  return {
+    name: 'ecsia-cursor',
+    step() {
+      q.eachChunk((c: QueryChunk) => {
+        const px = c.column(Position, 'x')
+        const py = c.column(Position, 'y')
+        const dx = c.column(Velocity, 'dx')
+        const dy = c.column(Velocity, 'dy')
+        const count = c.count
+        for (let i = 0; i < count; i++) {
+          ;(px as { [k: number]: number })[i] = px[i]! + dx[i]! * DT
+          ;(py as { [k: number]: number })[i] = py[i]! + dy[i]! * DT
+        }
       })
     },
     sampleX() {
