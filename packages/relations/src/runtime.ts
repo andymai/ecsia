@@ -14,6 +14,8 @@ import type {
   RelationId,
   RelationOptions,
   Schema,
+  SpawnArg,
+  SpawnArgFor,
   WildcardToken,
   WriteView,
 } from '@ecsia/schema'
@@ -23,6 +25,8 @@ import {
   bindAccessorRow,
   decodeEid,
   encodeEid,
+  IS_DEV,
+  NO_ENTITY,
 } from '@ecsia/core'
 import type {
   Column,
@@ -67,6 +71,16 @@ export interface PairAccessor<R extends RelationDef<Schema | void> = RelationDef
 type AddPairPayloadArg<R extends RelationDef<Schema | void>> = PayloadOf<R> extends Schema
   ? [payload?: Partial<WriteView<PayloadOf<R>>>]
   : []
+
+/** The first argument of `definePrefab`: name one base prefab to extend (single inheritance). */
+export interface DefinePrefabOptions {
+  /**
+   * An already-defined prefab handle whose flattened components (and values) the new prefab
+   * starts from; this prefab's own inits win on overlap. Because the base must already exist,
+   * inheritance chains form a DAG by construction.
+   */
+  readonly extends: EntityHandle
+}
 
 interface OverflowTable {
   readonly overflowComponentId: ComponentId
@@ -130,6 +144,46 @@ interface RelationsApi {
    * its concrete (presence/pair) ComponentId via the relations resolver at compile time.
    */
   readonly Pair: <R extends RelationDef<Schema | void>>(relation: R, target: EntityHandle | WildcardToken) => PairDef<R>
+
+  // --- prefabs (createWorld({ prefabs: true })) ------------------------------
+
+  /**
+   * The built-in `IsA` relation (a payload-free, non-exclusive tag relation). Every instance
+   * spawned by `spawnFrom` records one `Pair(IsA, ancestor)` per prefab in its inheritance chain,
+   * so `query(rel.Pair(IsA, Goblin))` matches every goblin-family instance — subtypes included —
+   * as a plain signature match. Throws unless the world was created with `prefabs: true`.
+   */
+  readonly IsA: RelationDef<void>
+  /**
+   * The built-in `Prefab` tag carried by every template `definePrefab` creates. Queries skip
+   * Prefab-tagged entities by default; use `query(has(Prefab))` for the templates themselves or
+   * `{ matchPrefabs: true }` for both. Throws unless the world was created with `prefabs: true`.
+   */
+  readonly Prefab: ComponentDef<Record<never, never>>
+  /**
+   * Create a prefab: an ordinary entity tagged `Prefab` that acts as a spawn template. Inits use
+   * the `spawnWith` tuple form. With `{ extends: Base }` the new prefab starts from Base's full
+   * flattened component set and values, applies its own inits on top (the child wins), and records
+   * `Pair(IsA, Base)` plus Base's own IsA pairs — the full ancestor set, flattened at define time.
+   * Editing a prefab later affects FUTURE spawns only. Serial-phase, main-thread.
+   */
+  definePrefab<const T extends readonly SpawnArg[]>(
+    opts: DefinePrefabOptions,
+    ...inits: { [I in keyof T]: SpawnArgFor<T[I]> }
+  ): EntityHandle
+  definePrefab<const T extends readonly SpawnArg[]>(...inits: { [I in keyof T]: SpawnArgFor<T[I]> }): EntityHandle
+  /**
+   * Spawn an instance of a prefab: one migration to the target archetype, then a per-field copy
+   * of the prefab's values (a stamp — later prefab edits do NOT retro-update instances), then the
+   * overrides on top. Overrides use the `spawnWith` tuple form and may both override copied values
+   * and add components the prefab lacks. The instance records `Pair(IsA, ancestor)` for the full
+   * chain. The prefab's own non-IsA relation pairs are NOT copied. A despawned/stale prefab handle
+   * throws in dev and returns NO_ENTITY in production. Serial-phase, main-thread.
+   */
+  spawnFrom<const T extends readonly SpawnArg[]>(
+    prefab: EntityHandle,
+    ...overrides: { [I in keyof T]: SpawnArgFor<T[I]> }
+  ): EntityHandle
 }
 
 const EMPTY_SET: ReadonlySet<EntityHandle> = new Set()
@@ -151,6 +205,9 @@ export function createRelations(world: World): RelationsApi {
   const pairDefById = new Map<ComponentId, ComponentDef<Schema>>()
   const pairsByRelation = new Map<number, Set<ComponentId>>()
   const pairRefCount = new Map<ComponentId, number>()
+  // Every relation's presence ComponentId — with pairKeyById, the filter that splits a prefab's
+  // copyable components from its relation artifacts (spawnFrom copies components only).
+  const presenceIds = new Set<number>()
 
   // SubjectIndex → (relationId → count).
   const relationPairCount = new Map<number, Map<number, number>>()
@@ -669,6 +726,15 @@ export function createRelations(world: World): RelationsApi {
 
   function processDespawn(dying: EntityHandle, cascadeQueue: EntityHandle[], visited: Set<number>): void {
     const dIdx = host.handleIndex(dying)
+    if (IS_DEV && isaRt !== null && prefabDef !== null && host.bitmaskHas(dIdx, prefabDef.id)) {
+      const instances = isaRt.backref.get(dIdx)
+      if (instances !== undefined && instances.size > 0) {
+        console.warn(
+          `[ecsia] despawning a Prefab-tagged entity with ${instances.size} live instance(s): ` +
+            'instances keep their copied values but lose Pair(IsA, prefab) queryability for this ancestor',
+        )
+      }
+    }
     for (const rt of relations) {
       // (A) dying is a TARGET: every subject pointing at it loses that pair (cascade if deleteSubject).
       const subjects = rt.backref.get(dIdx)
@@ -748,16 +814,27 @@ export function createRelations(world: World): RelationsApi {
   // --- defineRelation --------------------------------------------------------
 
   function defineRelation(payload: Schema | null, options?: RelationOptions): RelationDef<Schema | void> {
+    return registerRelation(payload, options, undefined)
+  }
+
+  // The shared registration body. `fixedName` is the built-ins' stable serialization name
+  // ("ecsia:IsA"); user relations keep the relation-id-derived name.
+  function registerRelation(
+    payload: Schema | null,
+    options: RelationOptions | undefined,
+    fixedName: string | undefined,
+  ): RelationDef<Schema | void> {
     if (nextRelationId > 65535) throw new Error('defineRelation: numRelations exceeds the u16 ceiling (65535)')
     const relationId = nextRelationId++ as RelationId
     const exclusive = options?.exclusive ?? false
     const cascade = options?.cascade ?? 'none'
     const storageKind = resolveStorageKind(payload !== null, exclusive)
-    const name = `Relation${relationId as number}`
+    const name = fixedName ?? `Relation${relationId as number}`
 
     const presenceDef = makePresenceDef(name, exclusive, payload)
     const presenceId = host.allocSyntheticId()
     host.registerSynthetic(presenceDef, presenceId)
+    presenceIds.add(presenceId as number)
 
     const overflow = storageKind === 'overflow-table' ? buildOverflow(name, payload as Schema) : null
 
@@ -798,6 +875,246 @@ export function createRelations(world: World): RelationsApi {
     // The query-term PairDef shape (type-system ): { relation, target, id }. id is UNREGISTERED;
     // the compiler resolves the concrete pair/presence id via the injected resolver.
     return { relation, target, id: -1 as PairDef<R>['id'] }
+  }
+
+  // --- prefabs: the IsA built-in + definePrefab / spawnFrom -------------------
+  // Instantiation is a COPY (the bitECS model): spawnFrom stamps the prefab's values onto the
+  // instance once; editing a prefab afterwards affects future spawns only. The IsA pair is still
+  // recorded per ancestor (transitively), so subtype queries stay plain signature matches.
+
+  const prefabDef = host.prefabDef
+  // Registered FIRST (relationId 0) when the world opted in, so its id/name are deterministic for
+  // serialization. Absent otherwise — the prefab API then throws with a pointer to the flag.
+  const isaDef = prefabDef !== null ? (registerRelation(null, { cascade: 'none' }, 'ecsia:IsA') as RelationDef<void>) : null
+  const isaRt = isaDef !== null ? requireRuntime(isaDef) : null
+
+  const warnedObjectCopy = new Set<ComponentDef<Schema>>()
+
+  function requirePrefabRuntime(): RelationRuntime {
+    if (isaRt === null) {
+      throw new Error('prefabs are not enabled on this world — create it with createWorld({ prefabs: true, ... })')
+    }
+    return isaRt
+  }
+
+  /** The IsA pair target indices recorded on the entity at `idx` (a direct signature read). */
+  function isaTargetIndicesOf(idx: number): number[] {
+    const rt = isaRt as RelationRuntime
+    const out: number[] = []
+    for (const cid of host.componentIdsOf(host.handleOfIndex(idx))) {
+      const meta = pairKeyById.get(cid as ComponentId)
+      if (meta !== undefined && (meta.relationId as number) === (rt.relationId as number)) out.push(meta.targetIndex)
+    }
+    return out
+  }
+
+  /**
+   * The full ancestor index set, the spawned-from prefab first. definePrefab records ancestors
+   * transitively, so for API-built chains this reads the direct signature; the walk + visited set
+   * exist so a manually-created `addPair(e, IsA, t)` cycle terminates. Diamonds are normal under
+   * transitive recording — only a true back-edge (a node still on the walk path) warns.
+   */
+  function collectAncestors(prefab: EntityHandle): number[] {
+    const startIdx = host.handleIndex(prefab)
+    const out: number[] = [startIdx]
+    const visited = new Set<number>([startIdx])
+    const onPath = new Set<number>([startIdx])
+    const visit = (idx: number): void => {
+      for (const tIdx of isaTargetIndicesOf(idx)) {
+        if (onPath.has(tIdx)) {
+          if (IS_DEV) {
+            console.warn('[ecsia] spawnFrom: IsA cycle detected while collecting the ancestor set — the revisited edge is skipped')
+          }
+          continue
+        }
+        if (visited.has(tIdx)) continue
+        visited.add(tIdx)
+        out.push(tIdx)
+        onPath.add(tIdx)
+        visit(tIdx)
+        onPath.delete(tIdx)
+      }
+    }
+    visit(startIdx)
+    return out
+  }
+
+  /**
+   * The template's copyable component set S: its signature minus the Prefab tag and every
+   * relation artifact (pair bits + presence bits). v1 instantiates components only — the
+   * prefab's own non-IsA relation pairs are never copied onto instances.
+   */
+  function copyableDefsOf(handle: EntityHandle): ComponentDef<Schema>[] {
+    const out: ComponentDef<Schema>[] = []
+    for (const cid of host.componentIdsOf(handle)) {
+      if (prefabDef !== null && cid === (prefabDef.id as number)) continue
+      if (pairKeyById.has(cid as ComponentId)) continue
+      if (presenceIds.has(cid)) continue
+      const def = host.defOf(cid as ComponentId)
+      if (def !== undefined) out.push(def)
+    }
+    return out
+  }
+
+  /** Split spawnWith-form args into membership defs + `[def, values]` initializers. */
+  function splitInits(specs: readonly SpawnArg[]): {
+    defs: ComponentDef<Schema>[]
+    values: (readonly [ComponentDef<Schema>, Record<string, unknown>])[]
+  } {
+    const defs: ComponentDef<Schema>[] = []
+    const values: (readonly [ComponentDef<Schema>, Record<string, unknown>])[] = []
+    for (const spec of specs) {
+      if (Array.isArray(spec)) {
+        const [def, vals] = spec as readonly [ComponentDef<Schema>, Record<string, unknown>]
+        defs.push(def)
+        values.push([def, vals])
+      } else {
+        defs.push(spec as ComponentDef<Schema>)
+      }
+    }
+    return { defs, values }
+  }
+
+  /**
+   * Per-field copy of one component's values, src row → dst row. Numeric/vec/staticString fields
+   * copy by column word; `eid` fields copy the stored handle VERBATIM (every instance aliases the
+   * same target the prefab pointed at); rich fields ride the sidecar — 'string' by value,
+   * object<T> by REFERENCE (dev warn: prefab and instances then share one object).
+   */
+  function copyComponentValues(src: EntityHandle, dst: EntityHandle, def: ComponentDef<Schema>): void {
+    let copied = false
+    const from = host.columnSetFor(src, def)
+    const to = host.columnSetFor(dst, def)
+    if (from !== null && to !== null && from.set.columns.length > 0) {
+      copied = true
+      for (let k = 0; k < from.set.columns.length; k++) {
+        const sc = from.set.columns[k] as Column
+        const dc = to.set.columns[k] as Column
+        const stride = sc.layout.stride
+        for (let j = 0; j < stride; j++) dc.view[to.row * stride + j] = sc.view[from.row * stride + j] as number
+      }
+    }
+    let hasRich = false
+    for (const f of def.fields) {
+      if (f.rich !== undefined) {
+        hasRich = true
+        if (f.rich === 'object' && IS_DEV && !warnedObjectCopy.has(def)) {
+          warnedObjectCopy.add(def)
+          console.warn(
+            `[ecsia] prefab copy: object<T> field '${def.name}.${f.name}' copies by REFERENCE — ` +
+              'the template and its instances share one object; override it at spawn to detach',
+          )
+        }
+      }
+    }
+    if (hasRich) {
+      copied = true
+      host.copyRichFields(src, dst, def.id)
+    }
+    if (copied) host.trackWrite(host.handleIndex(dst), def.id)
+  }
+
+  /**
+   * The shared template-spawn body: ONE migration EMPTY → target signature (components ∪ override
+   * additions ∪ the IsA pair set ∪ presence), then the per-field copy, then overrides on top, then
+   * the addPair bookkeeping (back-ref, refcount, counter, shape log) the single migration folded in.
+   */
+  function buildFromTemplate(
+    copySource: EntityHandle | null,
+    copyDefs: readonly ComponentDef<Schema>[],
+    extraDefs: readonly ComponentDef<Schema>[],
+    values: readonly (readonly [ComponentDef<Schema>, Record<string, unknown>])[],
+    ancestorIndices: readonly number[],
+    prefabTag: ComponentDef<Schema> | null,
+  ): EntityHandle {
+    const rt = isaRt as RelationRuntime
+    const ancestors: number[] = []
+    const seenAncestor = new Set<number>()
+    for (const t of ancestorIndices) {
+      if (!seenAncestor.has(t)) {
+        seenAncestor.add(t)
+        ancestors.push(t)
+      }
+    }
+
+    const defs: ComponentDef<Schema>[] = []
+    const seen = new Set<ComponentDef<Schema>>()
+    const push = (def: ComponentDef<Schema>): void => {
+      if (!seen.has(def)) {
+        seen.add(def)
+        defs.push(def)
+      }
+    }
+    for (const d of copyDefs) push(d)
+    for (const d of extraDefs) push(d)
+    if (prefabTag !== null) push(prefabTag)
+    const pairCids: ComponentId[] = []
+    for (const tIdx of ancestors) {
+      const cid = mintPair(rt, tIdx)
+      pairCids.push(cid)
+      push(pairDefById.get(cid) as ComponentDef<Schema>)
+    }
+    if (ancestors.length > 0) push(rt.presenceDef)
+
+    const handle = host.spawnEmpty()
+    host.migrateAddingMany(handle, defs)
+    const sIdx = host.handleIndex(handle)
+    if (copySource !== null) for (const d of copyDefs) copyComponentValues(copySource, handle, d)
+    // Overrides write through the tracked accessor path, so onChange/write-log fire exactly as a
+    // post-spawn write would — and they land AFTER the copy, which is what makes them win.
+    for (const [def, vals] of values) {
+      const view = world.entity(handle).write(def) as Record<string, unknown>
+      for (const k of Object.keys(vals)) view[k] = vals[k]
+    }
+    // MUST mirror addPair's per-pair bookkeeping for a tag relation (counter, refcount, back-ref,
+    // forward index, shape log) — the migration itself was folded into the single move above. If
+    // addPair gains a side-effect, fold it in here too, or instances will silently lack it.
+    for (let i = 0; i < ancestors.length; i++) {
+      const tIdx = ancestors[i] as number
+      const cid = pairCids[i] as ComponentId
+      incrPairCount(sIdx, rt.relationId)
+      pairRefCount.set(cid, (pairRefCount.get(cid) ?? 0) + 1)
+      backrefAdd(rt, tIdx, handle)
+      forwardAdd(rt, sIdx, tIdx)
+      host.trackShapePair(sIdx, cid, tIdx, true)
+    }
+    return handle
+  }
+
+  function definePrefab(...args: readonly (DefinePrefabOptions | SpawnArg)[]): EntityHandle {
+    requirePrefabRuntime()
+    const pDef = prefabDef as ComponentDef<Schema>
+    let base: EntityHandle | null = null
+    let initArgs = args as readonly SpawnArg[]
+    const first = args[0]
+    if (first !== undefined && typeof first === 'object' && !Array.isArray(first) && 'extends' in first) {
+      base = (first as DefinePrefabOptions).extends
+      initArgs = args.slice(1) as readonly SpawnArg[]
+    }
+    if (base !== null && !host.isAlive(base)) {
+      if (IS_DEV) throw new Error('definePrefab: { extends } references a despawned prefab handle')
+      return NO_ENTITY
+    }
+    if (IS_DEV && base !== null && prefabDef !== null && !host.bitmaskHas(host.handleIndex(base), prefabDef.id)) {
+      throw new Error('definePrefab: { extends } target is not a Prefab-tagged entity — pass a handle returned by definePrefab()')
+    }
+    const { defs: initDefs, values: initValues } = splitInits(initArgs)
+    // Flatten at define time: copy the base's full (already-flattened) set and values, apply this
+    // prefab's inits on top (the child wins by copy order), and record Pair(IsA, base) plus the
+    // base's own IsA pairs so the new prefab carries its full ancestor set.
+    const copyDefs = base !== null ? copyableDefsOf(base) : []
+    const ancestors = base !== null ? [host.handleIndex(base), ...isaTargetIndicesOf(host.handleIndex(base))] : []
+    return buildFromTemplate(base, copyDefs, initDefs, initValues, ancestors, pDef)
+  }
+
+  function spawnFrom(prefab: EntityHandle, ...overrides: readonly SpawnArg[]): EntityHandle {
+    requirePrefabRuntime()
+    if (!host.isAlive(prefab)) {
+      if (IS_DEV) throw new Error('spawnFrom: the prefab handle is dead (despawned or stale)')
+      return NO_ENTITY
+    }
+    const { defs: overrideDefs, values: overrideValues } = splitInits(overrides)
+    return buildFromTemplate(prefab, copyableDefsOf(prefab), overrideDefs, overrideValues, collectAncestors(prefab), null)
   }
 
   // --- serialization provider -----------------
@@ -942,5 +1259,19 @@ export function createRelations(world: World): RelationsApi {
     targetOf,
     depthOf,
     Pair,
+    get IsA(): RelationDef<void> {
+      if (isaDef === null) {
+        throw new Error('IsA is a prefab built-in — create the world with createWorld({ prefabs: true, ... })')
+      }
+      return isaDef
+    },
+    get Prefab(): ComponentDef<Record<never, never>> {
+      if (prefabDef === null) {
+        throw new Error('Prefab is a prefab built-in — create the world with createWorld({ prefabs: true, ... })')
+      }
+      return prefabDef as ComponentDef<Record<never, never>>
+    },
+    definePrefab: definePrefab as RelationsApi['definePrefab'],
+    spawnFrom: spawnFrom as RelationsApi['spawnFrom'],
   }
 }

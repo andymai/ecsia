@@ -31,6 +31,14 @@ export interface WorldOptions {
   // Threading / backing. Single-thread executor ships first.
   threaded?: boolean
 
+  /**
+   * Register the prefab built-ins: the `Prefab` tag component (auto-appended after user
+   * components, stable name "ecsia:Prefab") and — once `createRelations(world)` attaches — the
+   * `IsA` tag relation ("ecsia:IsA"). Opt-in because the IsA relation flips the world to
+   * two-word reactivity log entries, which a prefab-free, relation-free world should not pay.
+   */
+  prefabs?: boolean
+
   // Archetype fragmentation cap.
   maxHotArchetypes?: number
 
@@ -57,6 +65,7 @@ export interface ResolvedWorldOptions {
   /** Derived: 32 - generationBits. */
   readonly indexBits: number
   readonly threaded: boolean
+  readonly prefabs: boolean
   readonly maxHotArchetypes: number
   readonly reactivity: ResolvedReactivityOptions
   readonly scheduler: { readonly workers: WorkerOption }
@@ -104,6 +113,7 @@ export function resolveOptions(options: WorldOptions = {}): ResolvedWorldOptions
   }
 
   const relations = options.relations ?? []
+  const prefabs = options.prefabs ?? false
   const r = options.reactivity ?? {}
   const maxWritesPerFrame = r.maxWritesPerFrame ?? maxEntities * 4
   const maxShapeChangesPerFrame = r.maxShapeChangesPerFrame ?? maxEntities * 2
@@ -113,8 +123,9 @@ export function resolveOptions(options: WorldOptions = {}): ResolvedWorldOptions
   if (!isPositiveInt(maxShapeChangesPerFrame)) {
     throw new ConfigError(`reactivity.maxShapeChangesPerFrame must be a positive integer; got ${maxShapeChangesPerFrame}`)
   }
-  // Two-word log entries when any relation is registered ( C2).
-  const logEntryWords: 1 | 2 = r.logEntryWords ?? (relations.length > 0 ? 2 : 1)
+  // Two-word log entries when any relation is registered ( C2). prefabs: true registers the
+  // built-in IsA relation, so it flips the width the same way a declared relation does.
+  const logEntryWords: 1 | 2 = r.logEntryWords ?? (relations.length > 0 || prefabs ? 2 : 1)
 
   const workers: WorkerOption = options.scheduler?.workers ?? 0
   if (typeof workers === 'number' && (!Number.isInteger(workers) || workers < 0)) {
@@ -129,6 +140,7 @@ export function resolveOptions(options: WorldOptions = {}): ResolvedWorldOptions
     generationBits,
     indexBits,
     threaded,
+    prefabs,
     maxHotArchetypes,
     reactivity: {
       maxWritesPerFrame,

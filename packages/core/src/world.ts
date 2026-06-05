@@ -25,7 +25,7 @@ import { Buffers, probeCapabilities } from './memory/index.js'
 import type { WorkerMode, SharedHandleManifest, RegionKey } from './memory/index.js'
 import { ComponentRegistry } from './registry.js'
 import type { AccessorWorld } from './component/index.js'
-import { SidecarStore, sidecarKey } from './component/index.js'
+import { SidecarStore, defineTag, sidecarKey } from './component/index.js'
 import type { SidecarKey } from './component/index.js'
 import { Bitmask } from './bitmask/index.js'
 import { Storage } from './storage/index.js'
@@ -101,6 +101,21 @@ export interface RelationsHost {
   handleOfIndex(index: number): EntityHandle
   /** Re-enter the despawn protocol for a cascaded victim. */
   despawn(handle: EntityHandle): void
+  /**
+   * The auto-registered `Prefab` tag def when the world was created with `prefabs: true`; null
+   * otherwise. The relations runtime keys the prefab API (definePrefab / spawnFrom / IsA) off it.
+   */
+  readonly prefabDef: ComponentDef<Schema> | null
+  /** The component ids in `handle`'s current archetype signature (a copy); [] for a dead handle. */
+  componentIdsOf(handle: EntityHandle): readonly number[]
+  /** Mint a live handle in the EMPTY archetype — the spawn step of definePrefab / spawnFrom. */
+  spawnEmpty(): EntityHandle
+  /**
+   * Copy `componentId`'s rich (sidecar) fields from src's slot to dst's. Only PRESENT (written)
+   * slots copy, so a never-touched field stays defaulted on dst. object<T> fields copy the
+   * REFERENCE — sidecar assignment semantics, same as a plain write.
+   */
+  copyRichFields(src: EntityHandle, dst: EntityHandle, componentId: ComponentId): void
   /**
    * deferral seam: while an observer drain is running, structural relation
    * ops issued by a handler must STAGE to the world's deferred command buffer rather than mutate the
@@ -383,12 +398,21 @@ export function createWorld(options: WorldOptions = {}): World {
   }
 
   // --- registry: mint dense user ids, wire accessor factories ---
+  // prefabs: true auto-appends the per-world `Prefab` tag AFTER user components (an ordinary
+  // registered tag, no reserved-id churn). Its stable name "ecsia:Prefab" rides the serialization
+  // registry + schemaHash like any user component, so both sides of a snapshot must agree on the
+  // flag. Per-world because registerComponentId binds a def to one world.
+  const prefabDef = resolved.prefabs ? (defineTag('ecsia:Prefab') as ComponentDef<Schema>) : null
+  const userComponents: readonly ComponentDef<Schema>[] =
+    prefabDef !== null
+      ? [...(resolved.components as readonly ComponentDef<Schema>[]), prefabDef]
+      : (resolved.components as readonly ComponentDef<Schema>[])
   const registry = new ComponentRegistry()
-  registry.register(resolved.components as readonly ComponentDef<Schema>[])
+  registry.register(userComponents)
 
   // Declare a sidecar column per rich field of every registered component. This
   // is the single place the sidecar learns about a rich column; ensureColumn is idempotent.
-  for (const def of resolved.components as readonly ComponentDef<Schema>[]) {
+  for (const def of userComponents) {
     const id = registry.idOf(def)
     if (id === undefined) continue
     let fieldIndex = 0
@@ -474,6 +498,7 @@ export function createWorld(options: WorldOptions = {}): World {
         if (pairResolver === null) return { componentId: 0 as ComponentId, unsatisfiable: true }
         return pairResolver(relationId, target)
       },
+      ...(prefabDef !== null ? { prefabId: registry.idOf(prefabDef) as ComponentId } : {}),
     },
     resolveLocation: (index) => entities.locationOfIndex(index),
     handleOf: (index) => entities.handleOfIndex(index),
@@ -596,10 +621,10 @@ export function createWorld(options: WorldOptions = {}): World {
 
   // --- serialization surface -------------------------
   // Reads archetype columns/signatures + the registry + the relation provider; drives deserialize-side
-  // spawn/migrate. The user-component metadata is the registered defs in dense-id order. Synthetic ids
-  // (pair/presence/overflow) are intentionally excluded from `components()` — they are reconstructed by
-  // re-minting on the receiver, never shipped as schema.
-  const userComponents = resolved.components as readonly ComponentDef<Schema>[]
+  // spawn/migrate. The user-component metadata is the registered defs in dense-id order (the
+  // auto-registered Prefab tag included). Synthetic ids (pair/presence/overflow) are intentionally
+  // excluded from `components()` — they are reconstructed by re-minting on the receiver, never
+  // shipped as schema.
   const componentIdByName = new Map<string, ComponentId>()
   for (const def of userComponents) {
     const id = registry.idOf(def)
@@ -643,6 +668,9 @@ export function createWorld(options: WorldOptions = {}): World {
         if (!f.persist) fnv('!persist')
       }
     }
+    // The prefabs flag is part of the wire contract (built-ins + default query exclusion must
+    // agree on both sides), beyond the "ecsia:Prefab" name the component loop already folds.
+    if (resolved.prefabs) fnv('!prefabs')
     const prov = serializationProvider
     if (prov !== null) for (const r of prov.relations()) fnv(r.name)
     return h >>> 0
@@ -883,6 +911,36 @@ export function createWorld(options: WorldOptions = {}): World {
         handleIndex: (handle) => handleIndexOf(handle as number),
         handleOfIndex: (index) => entities.handleOfIndex(index),
         despawn: (handle) => entities.despawn(handle),
+        prefabDef,
+        componentIdsOf: (handle) => {
+          if (!entities.isAlive(handle)) return []
+          const index = handleIndexOf(handle as number)
+          const archId = records.archetypeIdOf(index)
+          const arch = storage.archetypes.byId[archId] as Archetype | undefined
+          if (arch === undefined) return []
+          return Array.from(arch.signature as Iterable<number>)
+        },
+        spawnEmpty: () => entities.spawn(),
+        copyRichFields: (src, dst, componentId) => {
+          const def = registry.defOf(componentId) as ComponentRuntime<Schema> | undefined
+          if (def === undefined || !def.hasRichFields) return
+          const srcIndex = handleIndexOf(src as number)
+          const dstIndex = handleIndexOf(dst as number)
+          const srcGen = entities.decodeHandle(entities.handleOfIndex(srcIndex)).generation as number
+          const dstGen = entities.decodeHandle(entities.handleOfIndex(dstIndex)).generation as number
+          let fieldIndex = 0
+          for (const f of def.fields as readonly FieldDescriptor[]) {
+            if (f.rich !== undefined) {
+              const key = sidecarKey(componentId as number, fieldIndex)
+              // Only PRESENT (written) slots copy, so a never-touched field stays absent on dst —
+              // snapshot presence semantics survive the copy.
+              if (sidecar.hasColumn(key) && sidecar.isPresent(key, srcIndex, srcGen)) {
+                sidecar.write(key, dstIndex, dstGen, sidecar.read(key, srcIndex, srcGen))
+              }
+            }
+            fieldIndex += 1
+          }
+        },
         deferRelationOp: (op, subject, relation, target, payload) => {
           if (!observerCommands.deferring) return false
           const relationId = relation.id as RelationId

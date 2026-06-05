@@ -381,6 +381,16 @@ export const has = <C>(c: C): HasTerm<C> => ({ __term: 'has', c })
 export const without = <C>(c: C): WithoutTerm<C> => ({ __term: 'without', c })
 export const optional = <C>(c: C): OptionalTerm<C> => ({ __term: 'optional', c })
 
+/**
+ * Per-query options, passed like a term: `world.query(Health, { matchPrefabs: true })`.
+ * In a prefab-enabled world (`createWorld({ prefabs: true })`) queries skip prefab template
+ * entities by default; `matchPrefabs: true` matches templates AND instances. It contributes
+ * nothing to the query element. No-op in a world without prefabs.
+ */
+export interface QueryOptionsTerm {
+  readonly matchPrefabs: boolean
+}
+
 export type QueryTerm =
   | ReadTerm<unknown>
   | WriteTerm<unknown>
@@ -389,6 +399,7 @@ export type QueryTerm =
   | OptionalTerm<unknown>
   | PairDef<RelationDef<Schema | void>>
   | ComponentDef<Schema>
+  | QueryOptionsTerm
 
 // <...> entity narrowing (the escape hatch + the read-only shorthand surface).
 export type Has<C extends ComponentDef<Schema>> = { readonly [K in CompKey<C>]: ReadOf<C> }
