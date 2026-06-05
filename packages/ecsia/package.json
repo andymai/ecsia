@@ -1,7 +1,7 @@
 {
   "name": "ecsia",
   "version": "0.1.0",
-  "description": "Batteries-included, TypeScript-native Entity Component System: archetype/SoA storage, typed accessors, first-class relations, and auto-parallel worker execution that is bit-identical to the serial path. The umbrella package re-exporting the full cohesive public surface.",
+  "description": "Fast, type-safe entity component system for TypeScript with automatic multithreading.",
   "keywords": [
     "ecs",
     "entity-component-system",

@@ -1,7 +1,7 @@
 {
   "name": "@ecsia/relations",
   "version": "0.1.0",
-  "description": "First-class relations for the ecsia ECS: integer-encoded pairs as archetype members, exclusive/overflow storage, presence-bit wildcard matching, and despawn cascades.",
+  "description": "Entity relationships for ecsia: hierarchies, targeting, and other entity-to-entity links, with fast queries and despawn cascades.",
   "keywords": [
     "ecs",
     "entity-component-system",

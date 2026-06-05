@@ -1,7 +1,7 @@
 {
   "name": "@ecsia/core",
   "version": "0.1.0",
-  "description": "The single-threaded ecsia kernel: archetype/SoA tables, serial-only bitmask membership index, monomorphic typed accessors, live queries, and reactivity. Runs standalone; the opt-in scheduler/relations/serialization layers attach via injected seams.",
+  "description": "The ecsia core: archetype storage, typed component accessors, queries, and change tracking. Works standalone on a single thread.",
   "keywords": [
     "ecs",
     "entity-component-system",

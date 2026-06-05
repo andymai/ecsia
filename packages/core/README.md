@@ -1,7 +1,7 @@
 # @ecsia/core
 
-The single-threaded kernel of [**ecsia**](https://github.com/andymai/ecsia) — a
-batteries-included, TypeScript-native Entity Component System.
+The single-threaded kernel of [**ecsia**](https://github.com/andymai/ecsia) — a fast,
+type-safe Entity Component System for TypeScript.
 
 `@ecsia/core` provides archetype/SoA tables, a serial-only per-entity bitmask membership
 index, monomorphic typed accessors, live queries, and reactivity. It runs standalone; the

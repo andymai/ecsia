@@ -1,7 +1,7 @@
 # @ecsia/three
 
-A [THREE.js](https://threejs.org) bridge for [**ecsia**](https://github.com/andymai/ecsia) —
-a batteries-included, TypeScript-native Entity Component System.
+A [THREE.js](https://threejs.org) bridge for [**ecsia**](https://github.com/andymai/ecsia) — a fast,
+type-safe Entity Component System for TypeScript.
 
 `@ecsia/three` lets you drive `three.js` objects from ecsia components. It is **deliberately
 not** re-exported from the umbrella, because `three` is a large peer dependency — you opt in

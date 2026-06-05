@@ -1,7 +1,7 @@
 {
   "name": "@ecsia/schema",
   "version": "0.1.0",
-  "description": "Type-level field tokens and 1..8 arity query inference for the ecsia ECS. The compile-time vocabulary the kernel and umbrella build on.",
+  "description": "Component schema tokens and query type inference for ecsia.",
   "keywords": [
     "ecs",
     "entity-component-system",

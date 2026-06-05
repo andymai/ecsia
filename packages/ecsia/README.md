@@ -1,8 +1,8 @@
 # ecsia
 
-**A batteries-included, TypeScript-native Entity Component System** — archetype/SoA storage
-with ergonomic typed accessors, first-class relations, and *auto-parallel worker execution
-that is bit-identical to the serial path*.
+**A fast, type-safe Entity Component System for TypeScript.** Define components
+once and get fully typed queries everywhere, with optional automatic
+multithreading that produces results identical to a single-threaded run.
 
 This is the umbrella package: it re-exports the whole cohesive public API —
 world/entity/component/query/relations/scheduler/serialization — from one import, and
@@ -10,8 +10,7 @@ tree-shakes whatever you don't touch. (The power-user scoped packages — `@ecsi
 `@ecsia/schema`, `@ecsia/relations`, `@ecsia/scheduler`, `@ecsia/serialization` — remain
 available if you want to compose the layers by hand.)
 
-> **Status:** 0.1.0-ready, **unpublished**. There is no `ecsia` on npm to `pnpm add` yet —
-> it's a local workspace package for now. 932 tests, strict TypeScript, ESM-only.
+> **Status:** 0.1.0, not yet on npm — a local workspace package for now.
 
 ## Install
 

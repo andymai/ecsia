@@ -1,7 +1,7 @@
 {
   "name": "@ecsia/serialization",
   "version": "0.1.0",
-  "description": "Serialization for the ecsia ECS: bit-exact world snapshots, version-stamped deltas with a structural journal, entity-id and relation-target remap on load, and a zero-copy worker bootstrap.",
+  "description": "Save and load ecsia worlds: full snapshots, incremental deltas, and worker handoff.",
   "keywords": [
     "ecs",
     "entity-component-system",

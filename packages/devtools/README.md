@@ -1,7 +1,7 @@
 # @ecsia/devtools
 
-Inspection and HTML-report devtools for [**ecsia**](https://github.com/andymai/ecsia) — a
-batteries-included, TypeScript-native Entity Component System.
+Inspection and HTML-report devtools for [**ecsia**](https://github.com/andymai/ecsia) — a fast,
+type-safe Entity Component System for TypeScript.
 
 `@ecsia/devtools` is **deliberately not** re-exported from the umbrella, and nothing in the
 framework imports it — so it never lands in a consumer bundle unless you pull it in yourself.

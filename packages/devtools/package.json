@@ -1,7 +1,7 @@
 {
   "name": "@ecsia/devtools",
   "version": "0.1.0",
-  "description": "Inspection and HTML-report devtools for the ecsia ECS. Deliberately NOT re-exported from the umbrella and imported by nothing in the framework, so it never ships in a consumer bundle unless explicitly pulled in.",
+  "description": "Inspect ecsia worlds and schedules: entity and archetype reports, plus a breakdown of what runs in parallel and why.",
   "keywords": [
     "ecs",
     "entity-component-system",

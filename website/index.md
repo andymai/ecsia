@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: ecsia
-  text: A batteries-included, TypeScript-native ECS
-  tagline: Archetype/SoA storage with ergonomic typed accessors, first-class relations, and auto-parallel worker execution that is bit-identical to the serial path.
+  text: Fast, type-safe ECS for TypeScript
+  tagline: Typed components and queries, first-class entity relationships, and automatic multithreading — with results identical to a single-threaded run.
   actions:
     - theme: brand
       text: Get started

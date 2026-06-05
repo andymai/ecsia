@@ -1,13 +1,12 @@
 # ecsia
 
-**A batteries-included, TypeScript-native Entity Component System** — archetype/SoA
-storage with ergonomic typed accessors, first-class relations, and *auto-parallel
-worker execution that is bit-identical to the serial path*.
+**A fast, type-safe Entity Component System for TypeScript.** Define components
+once and get fully typed queries everywhere. When you're ready for more speed,
+the scheduler spreads your systems across worker threads automatically — and
+guarantees the results match a single-threaded run, bit for bit.
 
-> Status: **0.1.0-ready, unpublished.** Feature-complete, API-frozen, experimental.
-> 932 tests (unit + fast-check property + type-level + real-worker), strict-TypeScript,
-> ESM-only, CI green across Node 22/24 + Bun + Deno + a real Chromium tab. Not yet
-> published to npm — the bare name `ecsia` is staged for first publish.
+> **0.1.0, not yet on npm.** Feature-complete and API-frozen, but young — expect
+> rough edges. Runs on Node 22+, Bun, Deno, and modern browsers.
 
 ## Why ecsia
 

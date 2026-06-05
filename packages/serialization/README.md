@@ -1,7 +1,7 @@
 # @ecsia/serialization
 
-Serialization for [**ecsia**](https://github.com/andymai/ecsia) — a batteries-included,
-TypeScript-native Entity Component System.
+Serialization for [**ecsia**](https://github.com/andymai/ecsia) — a fast, type-safe Entity
+Component System for TypeScript.
 
 `@ecsia/serialization` round-trips a world bit-exactly (snapshot), produces version-stamped
 deltas that carry value **and** structural changes since a tick (no shadow map), remaps

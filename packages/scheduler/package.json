@@ -1,7 +1,7 @@
 {
   "name": "@ecsia/scheduler",
   "version": "0.1.0",
-  "description": "The ecsia frame scheduler: an access-graph conflict DAG, a wave executor, and an auto-parallel worker pool (worker_threads + Atomics wave-sync + fixed-index command-buffer merge) whose result is bit-identical to the serial path.",
+  "description": "System scheduler for ecsia: declare what each system reads and writes, and non-conflicting systems run in parallel across worker threads.",
   "keywords": [
     "ecs",
     "entity-component-system",

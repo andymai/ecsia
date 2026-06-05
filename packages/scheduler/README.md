@@ -1,7 +1,7 @@
 # @ecsia/scheduler
 
-The frame scheduler for [**ecsia**](https://github.com/andymai/ecsia) — a batteries-included,
-TypeScript-native Entity Component System.
+The frame scheduler for [**ecsia**](https://github.com/andymai/ecsia) — a fast, type-safe Entity
+Component System for TypeScript.
 
 `@ecsia/scheduler` derives an access-graph conflict DAG from each system's declared
 `{read, write}` set, runs the resulting waves, and — opt-in — dispatches disjoint-write work

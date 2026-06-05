@@ -1,7 +1,7 @@
 # @ecsia/relations
 
-First-class relations for [**ecsia**](https://github.com/andymai/ecsia) — a
-batteries-included, TypeScript-native Entity Component System.
+First-class relations for [**ecsia**](https://github.com/andymai/ecsia) — a fast,
+type-safe Entity Component System for TypeScript.
 
 `@ecsia/relations` adds integer-encoded relation pairs as first-class archetype members:
 exclusive/overflow storage, presence-bit wildcard matching (`O(archetypes)`), and despawn
