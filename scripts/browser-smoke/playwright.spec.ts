@@ -52,7 +52,7 @@ async function runVariant(
     await page.goto(`http://localhost:${port}/index.html?isolated=${expectIsolated}`, {
       waitUntil: 'load',
     })
-    await page.waitForSelector('#smoke-result', { timeout: 10_000 }).catch((e) => {
+    await page.waitForSelector('#smoke-result', { state: 'attached', timeout: 10_000 }).catch((e) => {
       throw new Error(`#smoke-result never appeared. In-page diagnostics:\n${diagnostics.join('\n') || '(none captured)'}\n${e}`)
     })
     return (await page.evaluate(() => (window as unknown as { __ecsiaBrowserSmoke: () => SmokeResult }).__ecsiaBrowserSmoke())) as SmokeResult

@@ -848,10 +848,10 @@ export function createWorld(options: WorldOptions = {}): World {
       // merge them into the manifest here — a worker needs them to resolve (archetypeId, row).
       const rec = entities.sharedRecordRegions()
       const extra: SharedHandleManifest['regions'][number][] = []
-      if (rec.archetypeId instanceof SharedArrayBuffer) {
+      if (rec.archetypeId instanceof (typeof SharedArrayBuffer === "undefined" ? class None {} : SharedArrayBuffer)) {
         extra.push({ key: 'entity.archetypeId' as RegionKey, backing: rec.archetypeId, element: 'u32' })
       }
-      if (rec.archetypeRow instanceof SharedArrayBuffer) {
+      if (rec.archetypeRow instanceof (typeof SharedArrayBuffer === "undefined" ? class None {} : SharedArrayBuffer)) {
         extra.push({ key: 'entity.archetypeRow' as RegionKey, backing: rec.archetypeRow, element: 'u32' })
       }
       return { columns: base.columns, regions: [...base.regions, ...extra] }
