@@ -11,16 +11,22 @@ inspection seams, devtools consumes the **`@ecsia/core` world** (the seam-carryi
 `@ecsia/scheduler` + `@ecsia/relations` directly — the same wiring a real devtools consumer uses, and
 the same wiring `examples/devtools-tour.ts` shows.
 
-```ts no-check
+```sh
 pnpm add @ecsia/devtools   # unpublished today — workspace-local for now
 ```
 :::
 
 ## `inspectWorld` — a snapshot of world state
 
-```ts no-check
+Devtools reads the world's internal seams, so it takes the seam-carrying `World` from
+`@ecsia/core` — import `createWorld` from `@ecsia/core` (not the umbrella) for a world you
+intend to inspect.
+
+```ts
+import { createWorld } from '@ecsia/core'
 import { inspectWorld } from '@ecsia/devtools'
 
+const world = createWorld()
 const report = inspectWorld(world)
 report.entities.alive          // live entity count
 report.components              // per-component: name, id, fields, rich fields, bytes/row, total
@@ -35,13 +41,17 @@ report.memory                 // column bytes + sidecar entries
 `explainPlan(scheduler, componentNameMap(world))` returns the derived plan: which systems share a wave,
 which conflicts separated them, and which systems are pinned to the main thread (and why).
 
-```ts no-check
+```ts
+import { createWorld } from '@ecsia/core'
+import { createScheduler } from 'ecsia'
 import { explainPlan, componentNameMap } from '@ecsia/devtools'
 
+const world = createWorld()
+const scheduler = createScheduler(world, [])
 const plan = explainPlan(scheduler, componentNameMap(world))
 plan.waves        // each wave's batches and the systems in them
 plan.conflicts    // pairwise: { a, b, on, kind } (read-write / write-write / …)
-plan.pins         // worker-ineligible systems + reason (e.g. 'rich-fields')
+plan.pinned       // worker-ineligible systems + reason ('main-thread' | 'rich-fields')
 ```
 
 ## `watchWorld` — per-frame deltas
@@ -54,9 +64,13 @@ created, etc.) you can assert on or render.
 `renderText(report)` and `renderHTML(report)` accept either a `WorldReport` or a `PlanExplain` and emit a
 string — no world access, no side effects.
 
-```ts no-check
+```ts
+import { createWorld } from '@ecsia/core'
+import { createScheduler } from 'ecsia'
 import { inspectWorld, explainPlan, renderText, componentNameMap } from '@ecsia/devtools'
 
+const world = createWorld()
+const scheduler = createScheduler(world, [])
 console.log(renderText(inspectWorld(world)))
 console.log(renderText(explainPlan(scheduler, componentNameMap(world))))
 ```

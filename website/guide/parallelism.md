@@ -120,7 +120,7 @@ is checked.
 The worker pool shares component columns over `SharedArrayBuffer`, which the browser only exposes in a
 **cross-origin-isolated** context. That means serving your app with both headers:
 
-```ts no-check
+```http
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```

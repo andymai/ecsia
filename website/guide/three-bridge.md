@@ -7,7 +7,7 @@ per-frame transform sync (to `Object3D`s and `InstancedMesh`es), and a frame dri
 `@ecsia/three` is deliberately **not** re-exported from `ecsia`. THREE is a large peer dependency
 with WebGL/DOM assumptions; the kernel stays renderer-agnostic. Install it explicitly:
 
-```ts no-check
+```sh
 pnpm add @ecsia/three three   # @ecsia/three is unpublished today — workspace-local for now
 ```
 :::
@@ -21,7 +21,7 @@ points one way (core ← three), so the kernel never imports a renderer.
 with a THREE object; `objectOf(handle)` resolves it back. `autoUnbindOn(anchor)` opts an anchor
 component into auto-teardown when the entity despawns.
 
-```ts no-check
+```ts
 import { createWorld, defineComponent } from 'ecsia'
 import { createThreeBindings } from '@ecsia/three'
 import { Object3D, Scene } from 'three'
@@ -46,17 +46,22 @@ system that writes position (a read-after-write conflict orders them — no manu
 - `makeTransformSyncSystem({ position, bindings })` — copies columns into each bound `Object3D`.
 - `makeInstancedSyncSystem({ mesh, position })` — writes a `THREE.InstancedMesh`'s `instanceMatrix`.
 
-```ts no-check
-import { createScheduler } from 'ecsia'
-import { makeTransformSyncSystem, makeInstancedSyncSystem } from '@ecsia/three'
-import { BufferGeometry, InstancedMesh, MeshBasicMaterial } from 'three'
+```ts
+import { createWorld, createScheduler, defineComponent } from 'ecsia'
+import { createThreeBindings, makeTransformSyncSystem, makeInstancedSyncSystem } from '@ecsia/three'
+import { BufferGeometry, InstancedMesh, MeshBasicMaterial, Scene } from 'three'
+
+const Position = defineComponent({ x: 'f32', y: 'f32', z: 'f32' }, { name: 'position' })
+const world = createWorld({ components: [Position], maxEntities: 1 << 16 })
+const bindings = createThreeBindings(world, new Scene())
 
 const mesh = new InstancedMesh(new BufferGeometry(), new MeshBasicMaterial(), 64)
 
 const transformSync = makeTransformSyncSystem({ position: Position, bindings })
 const instancedSync = makeInstancedSyncSystem({ mesh, position: Position })
 
-const scheduler = createScheduler(world, [Movement, transformSync, instancedSync])
+const scheduler = createScheduler(world, [transformSync, instancedSync])
+scheduler.update(1 / 60)
 ```
 
 ## Driver: the frame loop
@@ -64,9 +69,12 @@ const scheduler = createScheduler(world, [Movement, transformSync, instancedSync
 `createThreeDriver({ update, render })` runs the loop: a `requestAnimationFrame` loop in the browser, or
 manual `.tick(dt)` stepping in Node (no rAF). A fixed-timestep option is available.
 
-```ts no-check
+```ts
+import { createWorld, createScheduler } from 'ecsia'
 import { createThreeDriver } from '@ecsia/three'
 
+const world = createWorld()
+const scheduler = createScheduler(world, [])
 const driver = createThreeDriver({
   update: (dt) => scheduler.update(dt),
   render: () => {/* renderer.render(scene, camera) */},
@@ -81,11 +89,6 @@ for (let t = 0; t < 90; t++) driver.tick(1 / 60)
 The `three-boids` example in `examples/` runs the full bridge **headless** — it uses THREE's math and
 scene-graph core (`Object3D` / `InstancedMesh` / `Matrix4`) but no `WebGLRenderer`, so it runs in Node
 with no GPU and asserts that the THREE objects track the ECS positions every frame.
-
-::: warning Snippets here are shown, not compiled
-The blocks on this page are marked `no-check` because they require the `three` peer types in a way the
-doc-snippet checker doesn't wire. The compiled, asserted version lives in `examples/three-boids.ts`.
-:::
 
 ## See also
 

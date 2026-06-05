@@ -14,7 +14,7 @@ workspace (see [Use it today](#use-it-today)).
 
 ## Install (when published)
 
-```ts no-check
+```sh
 pnpm add ecsia   # not yet published — local workspace for now
 ```
 
@@ -22,7 +22,7 @@ pnpm add ecsia   # not yet published — local workspace for now
 
 Until the package is on npm, work inside the monorepo. Clone it and build the workspace:
 
-```ts no-check
+```sh
 pnpm install
 pnpm build              # tsc -b across all packages (strict, ESM, project refs)
 pnpm test               # vitest: unit + property (fast-check) + worker + type-level
