@@ -1,12 +1,14 @@
 // Compile-only query DSL inference obligations (type-system.md §5/§6, queries.md §9.1). Type-checked
 // standalone (see the runtime guard test that compiles this file); no assertions run.
 //
-// NOTE on component naming: the element prop name is `CompKey<C>` = the def's `name` LITERAL. The
-// value-level `defineComponent` types `name` as `string` (it is debug-only; §2.3 documents that
-// identical-schema components are structurally interchangeable), so distinct-typed-prop inference is
-// pinned here over hand-typed ComponentDefs whose `name` IS a literal — exactly the type machinery
-// the schema builder would feed once name-literal capture lands. The arity cap + LooseQueryElement
-// degradation + the read/write/optional fold are the load-bearing M4 obligations.
+// NOTE on component naming: the element prop name is `CompKey<C>` = the def's `name` LITERAL.
+// Name-literal capture HAS landed: `defineComponent({...}, { name: 'p' })` returns
+// `ComponentDef<S, 'p'>` (the literal threads through the `const N` param), so a REAL def produces a
+// precise named element key — not a `string`-index record. The "real-def named key" block below
+// drives an actual `defineComponent` call and pins that contract end-to-end (value type preserved,
+// key precise, NOT any). The hand-typed literal-name defs above exercise the same machinery the
+// builder now emits. The arity cap + LooseQueryElement degradation + the read/write/optional fold
+// are the other load-bearing M4 obligations.
 
 import type {
   ComponentDef,
@@ -62,9 +64,29 @@ const _t4 = Without(Health)
 const _t5 = optional(Health)
 void [_t1, _t2, _t3, _t4, _t5]
 
-// §6 arity cap: an 8-term query is fully inferred; the element exposes `handle`.
+// ── REAL-DEF NAMED KEY (name-literal capture, type-system.md §3 CompKey / §5.2) ──────────────────
+// Drive an ACTUAL `defineComponent` call (not a hand-typed literal-name def) and assert the named
+// shorthand surface holds against real public-API output: the element key is the captured name
+// literal ('p'/'vel'), the value type is the inferred Read/Write view (not widened, not any), and a
+// bogus method is rejected (the not-any sentinel). A regression that drops name-literal capture
+// collapses CompKey to `string` → `el.p` becomes a string-index access → the @ts-expect-error on the
+// bogus key/method goes unused → TS2578 → the guard fails.
 declare const w: { query: WorldQuery }
-const realPos = defineComponent({ x: 'f32' }, { name: 'p' })
+const realPos = defineComponent({ x: 'f32', y: 'f32' }, { name: 'p' })
+const realVel = defineComponent({ x: 'f32' }, { brand: 'vel' })
+w.query(read(realPos), write(realVel)).each((el) => {
+  const _px: number = el.p.x // real-def read view → precise named key, number field
+  el.vel.x = 1 // real-def write view → mutable named key
+  // @ts-expect-error real-def read view is Readonly; assignment is a compile error
+  el.p.x = 5
+  // @ts-expect-error name-literal capture makes `el.p` a PRECISE key, not a string index → no `zzz`
+  el.zzz
+  // @ts-expect-error the bogus method does not exist on the precise element (not any)
+  el.alsoBogus()
+  void _px
+})
+
+// §6 arity cap: an 8-term query is fully inferred; the element exposes `handle`.
 const q8 = w.query(
   read(realPos),
   read(realPos),

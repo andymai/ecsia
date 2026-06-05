@@ -178,12 +178,17 @@ type FieldValueRW<F extends FieldToken, RW extends 'r' | 'w'> = F extends VecTok
 export type ReadView<S extends Schema> = { readonly [K in keyof S]: FieldValueRW<S[K], 'r'> }
 export type WriteView<S extends Schema> = { -readonly [K in keyof S]: FieldValueRW<S[K], 'w'> }
 
-export interface ComponentDef<S extends Schema> {
+// `N` is the component's NAME LITERAL, captured by defineComponent so CompKey<C> can lift it to a
+// precise element-property key (type-system.md §3 CompKey / §5.2). It defaults to `string` so every
+// existing `ComponentDef<S>` annotation stays valid and an unbranded/inferred-name def degrades to a
+// string-index element key rather than a compile error. `name` is debug-only at runtime (§2.3); the
+// literal lives only in the type so the named-shorthand surface (entity.position, Has<C>) is real.
+export interface ComponentDef<S extends Schema, N extends string = string> {
   readonly schema: S
   readonly fields: readonly FieldDescriptor[]
   /** Assigned at world registration; UNREGISTERED (-1) until then. */
   readonly id: ComponentId
-  readonly name: string
+  readonly name: N
   readonly options: Required<ComponentOptions>
   readonly __nominalBrand?: string
   /** phantom carriers — never assigned a value; exist purely for inference. */
@@ -381,6 +386,29 @@ export interface Query<Terms extends readonly QueryTerm[]> {
   readonly count: number
 }
 
+// §6.1/§6.3 the PAST-CAP query surface (arity > MAX_QUERY_ARITY). Its element is the typed
+// LooseQueryElement by default, but `each`/iterators are GENERIC on the element so the explicit
+// escape hatch (a `(e: Has<A> & HasWrite<B>) => ...` annotation) binds `EL` from the annotation
+// rather than failing against the loose record — the loose element is NOT structurally assignable to
+// a precise `Has<C>`, so a non-generic `each` would reject the annotation. The default keeps the
+// unannotated case typed (LooseQueryElement, never `any`); the annotation drives typing past the cap
+// with zero inference cost (type-system.md §6.3, report §7.5 mitigation 3). `EL` is unconstrained so
+// any user annotation is accepted; the runtime terms still drive matching regardless.
+export interface LooseQuery {
+  readonly terms: readonly QueryTerm[]
+  each<EL = LooseQueryElement>(fn: (e: EL & { handle: EntityHandle }) => void): void
+  [Symbol.iterator](): Iterator<LooseQueryElement>
+  /** Flavor declarations (chainable; queries.md §8.1). */
+  added(): this
+  removed(): this
+  changed(...components: ComponentDef<Schema>[]): this
+  eachAdded<EL = LooseQueryElement>(fn: (e: EL & { handle: EntityHandle }) => void): void
+  eachRemoved(fn: (index: number, handle: EntityHandle) => void): void
+  eachChanged<EL = LooseQueryElement>(fn: (e: EL & { handle: EntityHandle }) => void): void
+  /** Count of currently-matching entities. O(1). */
+  readonly count: number
+}
+
 // §6.1 the arity-cap overload family: 1..8 fully inferred, 9+ → typed LooseQueryElement. Fixed-length
 // overloads bound TS instantiation to the matched arity; the catch-all stops recursion entirely (the
 // COMPILE-TIME budget assertion itself is M11 — this just lands the cap + escape hatch).
@@ -427,6 +455,8 @@ export interface WorldQuery {
   >(
     ...terms: [T0, T1, T2, T3, T4, T5, T6, T7]
   ): Query<[T0, T1, T2, T3, T4, T5, T6, T7]>
-  /** 9+ : degraded overload — element collapses to LooseQueryElement; compile time stays bounded. */
-  (...terms: QueryTerm[]): Query<readonly QueryTerm[]>
+  /** 9+ : degraded overload — returns a LooseQuery whose element is the typed LooseQueryElement and
+   *  whose `each` is generic-on-element for the explicit Has/HasWrite escape hatch (§6.3). Compile
+   *  time stays bounded: the catch-all stops the variadic fold entirely. */
+  (...terms: QueryTerm[]): LooseQuery
 }

@@ -88,10 +88,18 @@ function validateOptions(options?: ComponentOptions): void {
   }
 }
 
-export function defineComponent<const S extends Schema>(
+// `B`/`N` capture the brand/name LITERALS so the returned def's `name` is the literal the query DSL
+// lifts to a precise element key (CompKey, type-system.md §3/§5.2). The runtime `name` is
+// `brand ?? name ?? 'Component'`, so the literal type mirrors that precedence; absent both it widens
+// to `'Component'`. Defaulting the params to `string` keeps inference-free call sites unchanged.
+export function defineComponent<
+  const S extends Schema,
+  const B extends string = string,
+  const N extends string = string,
+>(
   schema: S,
-  options?: ComponentOptions & { readonly brand?: string; readonly name?: string },
-): ComponentDef<S> {
+  options?: ComponentOptions & { readonly brand?: B; readonly name?: N },
+): ComponentDef<S, string extends B ? (string extends N ? 'Component' : N) : B> {
   validateSchema(schema)
   validateOptions(options)
 
@@ -136,11 +144,18 @@ export function defineComponent<const S extends Schema>(
   if (options?.brand !== undefined) {
     Object.defineProperty(def, '__nominalBrand', { value: options.brand, enumerable: true, writable: false })
   }
-  return Object.preventExtensions(def)
+  // The runtime def is built as ComponentRuntime<S> (name: string); the captured literal lives only
+  // in the declared return type, so re-narrow here. The runtime value is unchanged.
+  return Object.preventExtensions(def) as unknown as ComponentDef<
+    S,
+    string extends B ? (string extends N ? 'Component' : N) : B
+  >
 }
 
-export function defineTag(name = 'Tag'): ComponentDef<Record<never, never>> {
-  return defineComponent({}, { storage: 'sparse', brand: name })
+export function defineTag<const N extends string = 'Tag'>(
+  name: N = 'Tag' as N,
+): ComponentDef<Record<never, never>, N> {
+  return defineComponent({}, { storage: 'sparse', brand: name }) as ComponentDef<Record<never, never>, N>
 }
 
 // §7.2: assign a dense ComponentId and wire the accessor factory now that `id` is known. The def
