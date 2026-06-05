@@ -329,8 +329,8 @@ export function createWorld(options: WorldOptions = {}): World {
 
   // --- buffers (world.md §7 step 2): one capability probe, one SAB-vs-AB decision (B-1) ---
   const workerMode: WorkerMode = resolved.threaded
-    ? resolved.scheduler.workers === 'postMessage-fallback'
-      ? 'postMessage-fallback'
+    ? resolved.scheduler.workers === 'no-sab'
+      ? 'no-sab'
       : 'auto'
     : 'single'
   const capabilities = probeCapabilities(workerMode, (message) => {

@@ -7,7 +7,7 @@
 import type { Tick } from '@ecsia/schema'
 import type { SystemBatch } from '../graph/index.js'
 
-export type WorkerMode = 'single' | 'sab' | 'postMessage-fallback'
+export type WorkerMode = 'single' | 'sab' | 'no-sab'
 
 /** SAB control block for one round's completion fence (scheduler.md §7.1). */
 export interface WaveCounter {

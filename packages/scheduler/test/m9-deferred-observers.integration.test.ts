@@ -23,7 +23,7 @@ function kit(opts?: { observerCadence?: 'frame-end' | 'per-system'; threaded?: b
   const world = createWorld({
     components: [Ticker, Spawned],
     maxEntities: 1 << 12,
-    ...(opts?.threaded ? { threaded: true, scheduler: { workers: 'postMessage-fallback' as const } } : {}),
+    ...(opts?.threaded ? { threaded: true, scheduler: { workers: 'no-sab' as const } } : {}),
     reactivity: { observerCadence: opts?.observerCadence ?? 'frame-end' },
   })
   // A system that writes Ticker every frame so onChange(Ticker) fires.

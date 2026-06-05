@@ -7,8 +7,8 @@
 //                                          same shape regardless of transport).
 //   single-thread     (parallel: false) — the v1 baseline serial executor.
 //
-// This file ADDS the third documented lane — the postMessage / no-SAB fallback — and proves it is NOT a
-// silent failure: `createWorld({ threaded:true, scheduler:{ workers:'postMessage-fallback' } })` builds a
+// This file ADDS the third documented lane — the no-SAB fallback — and proves it is NOT a
+// silent failure: `createWorld({ threaded:true, scheduler:{ workers:'no-sab' } })` builds a
 // correct world and the identical workload through the threaded frame loop reproduces the single-thread
 // result byte-for-byte (public-api.md §7 "Never silent"). Run twice for stability (the task's gate).
 
@@ -118,12 +118,12 @@ function runSingleThread(opts: { perGroup: number; ticks: number; seed: number }
   return { totalEnergy: energy, built }
 }
 
-// The threaded lane (postMessage-fallback OR explicit numeric pool): identical workload, awaited frame
+// The threaded lane (no-sab OR explicit numeric pool): identical workload, awaited frame
 // loop, driven by an in-process RoundDispatcher (PA-4: the dispatcher is the transport, not a code shape).
 async function runThreaded(opts: {
   perGroup: number
   ticks: number
-  workers: number | 'postMessage-fallback'
+  workers: number | 'no-sab'
   seed: number
 }): Promise<{ totalEnergy: number; built: boolean }> {
   const dt = 1 / 60
@@ -243,10 +243,10 @@ describe('worker example: SAB lane vs fallback lanes — identical results, neve
     }
   })
 
-  test("postMessage-fallback lane BUILDS and produces the IDENTICAL result to single-thread (no silent failure)", async () => {
+  test("no-sab lane BUILDS and produces the IDENTICAL result to single-thread (no silent failure)", async () => {
     for (let pass = 0; pass < 2; pass++) {
       const single = runSingleThread({ perGroup: 200, ticks: 30, seed: 23 })
-      const fallback = await runThreaded({ perGroup: 200, ticks: 30, workers: 'postMessage-fallback', seed: 23 })
+      const fallback = await runThreaded({ perGroup: 200, ticks: 30, workers: 'no-sab', seed: 23 })
       // Never silent: the threaded:true + no-SAB request still builds a correct world...
       expect(fallback.built).toBe(true)
       expect(single.built).toBe(true)

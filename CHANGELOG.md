@@ -65,6 +65,16 @@ power-user scoped packages `@ecsia/core`, `@ecsia/schema`, `@ecsia/relations`,
   declares `sideEffects: false` (the import graph of each package entry has no module-scope
   side effects), and requires Node `>=22.13`.
 
+### Changed
+
+- **`scheduler.workers: 'postMessage-fallback'` is now `'no-sab'`.** The old name promised a
+  postMessage worker transport that does not exist; the value's actual behavior is "use plain
+  (non-shared) `ArrayBuffer` backing" — i.e. single-threaded execution. The new name says so.
+- **Bare `threaded: true` now auto-detects `SharedArrayBuffer`.** Previously it silently
+  selected non-shared backing unless `scheduler.workers` was set; it now uses SAB-capable
+  backing when the runtime supports it and logs a warning (then runs single-threaded) when it
+  doesn't. Pass `scheduler: { workers: 'no-sab' }` to force non-shared backing explicitly.
+
 ### Fixed
 
 - **WorkerPool wide-column growth (>1024 rows-per-column).** A threaded column that grew past

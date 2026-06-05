@@ -36,7 +36,7 @@ describe('bootstrapForWorker — serial-phase guard + manifest shape (§3)', () 
 })
 
 describe('attachWorld — gating (§3.3 / §3.5)', () => {
-  it('refuses a non-shared bootstrap (postMessage-fallback required)', () => {
+  it('refuses a non-shared bootstrap (shared backing required)', () => {
     const fake: WorldBootstrap = {
       shared: false,
       handleLayout: { indexBits: 22, generationBits: 10 } as never,

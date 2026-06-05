@@ -38,9 +38,9 @@ describe('config — option-validation throws (config.ts §7)', () => {
   test('scheduler.workers must be a non-negative integer or the fallback sentinel (config.ts:120-122)', () => {
     expect(() => resolveOptions({ scheduler: { workers: -1 } })).toThrow(/workers must be a non-negative integer/)
     expect(() => resolveOptions({ scheduler: { workers: 2.5 } })).toThrow(ConfigError)
-    // Valid: a non-negative integer and the postMessage-fallback sentinel.
+    // Valid: a non-negative integer and the no-sab sentinel.
     expect(resolveOptions({ scheduler: { workers: 4 } }).scheduler.workers).toBe(4)
-    expect(resolveOptions({ scheduler: { workers: 'postMessage-fallback' } }).scheduler.workers).toBe('postMessage-fallback')
+    expect(resolveOptions({ scheduler: { workers: 'no-sab' } }).scheduler.workers).toBe('no-sab')
   })
 })
 

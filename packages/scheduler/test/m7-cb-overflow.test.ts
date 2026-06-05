@@ -3,7 +3,7 @@
 // reads the same SAB in place, so a worker-private grow would (a) hide overflow records and (b) push
 // `head` past the SAB → NaN-opcode crash in the apply decode. Instead the worker CAPS encoding, sets
 // `overflowed`, keeps `head <= words.length`, and the records that fit are applied without loss or
-// throw. A GROWABLE (plain-AB, postMessage-fallback) buffer still doubles and never caps.
+// throw. A GROWABLE (plain-AB, no-sab) buffer still doubles and never caps.
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, handleIndex } from '@ecsia/core'

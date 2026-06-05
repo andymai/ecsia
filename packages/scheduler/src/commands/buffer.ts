@@ -79,7 +79,7 @@ export function resetBuffer(cb: CommandBuffer): void {
  * command-buffer.md §3.3: ensure room for `need` more words. Returns true iff the caller may now write
  * `need` words at `cb.head`.
  *
- * Plain-AB (growable) buffers double on overflow and always return true — the postMessage-fallback
+ * Plain-AB (growable) buffers double on overflow and always return true — the no-sab
  * transport reads `{ words, head }` after the fence so a reallocated private buffer is fine.
  *
  * FIXED (SAB-backed) buffers MUST NOT reassign `cb.words` off the shared backing (review issue #3): the

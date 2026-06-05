@@ -15,7 +15,7 @@ export type RegionKey = string & { readonly __regionKey: unique symbol }
 
 // --- §4 capability probe ---------------------------------------------------
 
-export type WorkerMode = 'single' | 'sab' | 'postMessage-fallback' | 'auto'
+export type WorkerMode = 'single' | 'sab' | 'no-sab' | 'auto'
 
 export type BackingStrategy = 'resizable-sab' | 'grow-patch-sab' | 'resizable-ab' | 'grow-patch-ab'
 
@@ -76,7 +76,7 @@ export function selectBacking(
         throw new Error("workers:'sab' requires SharedArrayBuffer + cross-origin isolation")
       }
       return resizableSab ? 'resizable-sab' : 'grow-patch-sab'
-    case 'postMessage-fallback':
+    case 'no-sab':
       return resizableAb ? 'resizable-ab' : 'grow-patch-ab'
     case 'auto':
       if (sabAvailable) return resizableSab ? 'resizable-sab' : 'grow-patch-sab'

@@ -103,7 +103,7 @@ export function bootstrapForWorker(world: World): WorldBootstrap {
 
 export function attachWorld(bootstrap: WorldBootstrap): WorkerWorldView {
   if (!bootstrap.shared) {
-    throw new Error('attachWorld requires a shared (SharedArrayBuffer) bootstrap; use the postMessage-fallback path instead')
+    throw new Error("attachWorld requires a shared (SharedArrayBuffer) bootstrap; use the non-shared (workers:'no-sab') path instead")
   }
   // §3.3 / §10: single-arg. Recompute the local schema hash from the registry the worker was handed
   // (the dense component/relation id assignment is the producer-specific datum, §3.2) and assert it

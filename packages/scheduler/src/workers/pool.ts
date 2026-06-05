@@ -111,7 +111,7 @@ export class WorkerPool {
     if (manifest.regions.length === 0 && manifest.columns.length === 0) {
       this.#diag(
         'threaded:true requested but no SAB-backed buffers are available (cross-origin isolation absent or SAB unavailable); ' +
-          'the pool cannot share columns by reference. Run single-threaded or use the postMessage fallback.',
+          'the pool cannot share columns by reference. Run single-threaded instead.',
       )
     }
 

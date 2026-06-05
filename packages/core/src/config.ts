@@ -3,7 +3,7 @@
 
 export type ObserverCadence = 'frame-end' | 'per-system'
 export type ChangeTracking = 'component' | 'field'
-export type WorkerOption = number | 'postMessage-fallback'
+export type WorkerOption = number | 'no-sab'
 
 export interface ReactivityOptions {
   maxWritesPerFrame?: number
@@ -116,9 +116,9 @@ export function resolveOptions(options: WorldOptions = {}): ResolvedWorldOptions
   // Two-word log entries when any relation is registered (CANON C2; world.md §9.6).
   const logEntryWords: 1 | 2 = r.logEntryWords ?? (relations.length > 0 ? 2 : 1)
 
-  const workers: WorkerOption = options.scheduler?.workers ?? (threaded ? 'postMessage-fallback' : 0)
+  const workers: WorkerOption = options.scheduler?.workers ?? 0
   if (typeof workers === 'number' && (!Number.isInteger(workers) || workers < 0)) {
-    throw new ConfigError(`scheduler.workers must be a non-negative integer or 'postMessage-fallback'; got ${workers}`)
+    throw new ConfigError(`scheduler.workers must be a non-negative integer or 'no-sab'; got ${workers}`)
   }
 
   return {
