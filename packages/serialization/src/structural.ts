@@ -269,13 +269,16 @@ function applyComponentAdd(
   s.spawnInto(handle, [componentId])
   const dst = s.columnsOf(handle, componentId)
   if (dst === null) return
-  // Map field name → (column index, descriptor).
+  // Map field name → (column index, descriptor). RECEIVER-side persist enforcement: a field the
+  // receiver declares transient is excluded even when the producer (whose descriptor lacks the flag)
+  // carried a value for it — the receiver's declaration is honored unilaterally, so the spawnInto
+  // default above stands.
   let colIndex = 0
   const colByName = new Map<string, { col: { view: { [i: number]: number }; layout: { stride: number } }; field: FieldDescriptor }>()
   for (const f of dst.fields) {
     if (f.ctor === null) continue
     const col = dst.columns[colIndex]
-    if (col !== undefined) colByName.set(f.name, { col, field: f })
+    if (col !== undefined && f.persist) colByName.set(f.name, { col, field: f })
     colIndex += 1
   }
   for (const w of values) {

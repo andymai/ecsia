@@ -14,6 +14,7 @@ import {
   SERIALIZATION_FORMAT_VERSION,
   SNAPSHOT_MAGIC,
   assertPlatformLittleEndian,
+  createPersistedColumnsCache,
   elementOrdinal,
   writeJsonBytes,
   writeString,
@@ -59,6 +60,7 @@ export function createSnapshotSerializer(world: World, opts: SnapshotOptions = {
   assertPlatformLittleEndian()
   const includeRelations = opts.includeRelations ?? true
   const cur = new WriteCursor(opts.initialOutputBytes ?? 64 * 1024)
+  const persistedColumnsOf = createPersistedColumnsCache()
 
   function write(): void {
     if (world.phase !== 'serial') {
@@ -154,15 +156,17 @@ export function createSnapshotSerializer(world: World, opts: SnapshotOptions = {
       // Persisted columns only; a component whose every column is non-persisted is omitted entirely.
       // The receiver derives the same wire-position → column mapping from its own (schemaHash-matched)
       // descriptors, so the positional grammar stays aligned.
-      const persisted = a.components
-        .map((comp) => ({ comp, cols: comp.columns.filter((_, i) => comp.fields[i]?.persist !== false) }))
-        .filter((e) => e.cols.length > 0)
+      const persisted = persistedColumnsOf(a)
       cur.u32(a.id)
       cur.u16(persisted.length)
-      for (const { comp, cols } of persisted) {
+      for (const pc of persisted) {
+        const comp = a.components[pc.compIndex]
+        if (comp === undefined) continue
         cur.u32(comp.componentId as number)
-        cur.u16(cols.length)
-        for (const col of cols) {
+        cur.u16(pc.colIndices.length)
+        for (const ci of pc.colIndices) {
+          const col = comp.columns[ci]
+          if (col === undefined) continue
           const stride = col.layout.stride
           const elems = a.count * stride
           cur.u8(elementOrdinal(col.layout.element))

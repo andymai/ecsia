@@ -1,9 +1,10 @@
-// Version gating: v1 images load in the v2 reader (range check + per-section
-// gating); the v2 writer emits v2; a too-new image is rejected. v1-image-into-v1-reader and the inverse
-// (v2-into-v1) are one-way: a v1 build rejects v2 — documented, asserted here by simulating a v1 reader's
-// strict check. We synthesize a v1 image by down-converting a v2 snapshot of a rich-FREE world (the v1
-// wire is the v2 wire minus the 4-byte richSectionOffset header word, with the two section offsets
-// shifted down by 4 and the FLAG_HAS_RICH bit absent — which a rich-free world already satisfies).
+// Version gating: v1 snapshot images load in the current reader (range check + per-section
+// gating); the writer stamps the current version; a too-new image is rejected. Compatibility is
+// one-way: an old build rejects a newer image via its own strict check. We synthesize a v1 image by
+// down-converting a current snapshot of a rich-FREE world (the v1 wire is the v2+ wire minus the
+// 4-byte richSectionOffset header word, with the two section offsets shifted down by 4 and the
+// FLAG_HAS_RICH bit absent — which a rich-free world already satisfies; the snapshot layout is
+// unchanged between v2 and v3, which only changed the DELTA header).
 
 import { describe, it, expect } from 'vitest'
 import { createWorld, defineComponent } from '@ecsia/core'
@@ -32,17 +33,17 @@ function toV1(v2: Uint8Array): Uint8Array {
 }
 
 describe('RICH — version gating', () => {
-  it('the v2 writer stamps SERIALIZATION_FORMAT_VERSION = 2', () => {
+  it('the writer stamps the current SERIALIZATION_FORMAT_VERSION', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const src = createWorld({ components: asComps(P) })
     src.spawnWith(P)
     const bytes = createSnapshotSerializer(src).snapshotCopy()
-    expect(new DataView(bytes.buffer, bytes.byteOffset).getUint16(4, true)).toBe(2)
-    expect(SERIALIZATION_FORMAT_VERSION).toBe(2)
+    expect(new DataView(bytes.buffer, bytes.byteOffset).getUint16(4, true)).toBe(3)
+    expect(SERIALIZATION_FORMAT_VERSION).toBe(3)
     expect(MIN_SUPPORTED_VERSION).toBe(1)
   })
 
-  it('a v1 image loads in the v2 reader (range check + per-section gating)', () => {
+  it('a v1 image loads in the current reader (range check + per-section gating)', () => {
     const P = defineComponent({ x: 'f32', y: 'f32' }, { name: 'p' })
     const src = createWorld({ components: asComps(P) })
     const e1 = src.spawnWith(P)
@@ -62,7 +63,7 @@ describe('RICH — version gating', () => {
     expect((dst.entity(n2).read(R) as { y: number }).y).toBe(-7)
   })
 
-  it('a too-new (>v2) image is rejected with an explicit range error', () => {
+  it('a too-new image is rejected with an explicit range error', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
     const src = createWorld({ components: asComps(P) })
     src.spawnWith(P)

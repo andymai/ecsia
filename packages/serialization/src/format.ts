@@ -6,17 +6,19 @@ import type { ElementKind } from '@ecsia/core'
 import type { FieldDescriptor } from '@ecsia/schema'
 import type { WriteCursor, ReadCursor } from './cursor.js'
 
-// /: bumps the format to 2 (adds the version-gated RICH section + header
-// offset word). The bump is GRACEFUL, not a hard wire break: a v2 reader still loads v1 images (it
-// range-checks `MIN_SUPPORTED_VERSION <= v <= SERIALIZATION_FORMAT_VERSION` and gates the v2-only header
-// growth + RICH section on `version >= 2`). The inverse — a v2 image into a v1 reader — is NOT supported:
-// a v1 build's strict `version !== 1` check REJECTS a v2 image with "unsupported format version 2". That
-// is the documented one-way compatibility (forward-readers tolerate old images; old readers reject new).
-export const SERIALIZATION_FORMAT_VERSION = 2
-/** Oldest wire version a current reader accepts. v1 images load in the v2 reader (per-section gated). */
+// v2 added the version-gated RICH section + header offset word; v3 adds the schemaHash word to the
+// DELTA header (the gate snapshots have carried since v1), growing it 28→32 bytes. SNAPSHOT layout is
+// unchanged since v2, so the snapshot reader still range-checks `MIN_SUPPORTED_VERSION <= v <=
+// SERIALIZATION_FORMAT_VERSION` and per-section-gates the v2-only growth. DELTAS are different: the
+// header layout changed, so a pre-v3 delta is rejected loudly via `DELTA_MIN_SUPPORTED_VERSION`
+// (pre-publish, zero compat burden). Old readers reject new images via their strict version checks.
+export const SERIALIZATION_FORMAT_VERSION = 3
+/** Oldest SNAPSHOT wire version a current reader accepts (per-section gated). */
 export const MIN_SUPPORTED_VERSION = 1
 /** The version in which the RICH section + its header offset word first appear. */
 export const RICH_FORMAT_VERSION = 2
+/** The version in which the delta header gains its schemaHash word; older deltas are rejected. */
+export const DELTA_MIN_SUPPORTED_VERSION = 3
 export const SNAPSHOT_MAGIC = 0x45435349 // 'ECSI'
 /** The full-u32 NO_ENTITY sentinel as written in handle slots. */
 export const NO_ENTITY_U32 = 0xffffffff
@@ -69,6 +71,43 @@ export function persistedColumnIndices(fields: readonly FieldDescriptor[]): numb
     colIndex += 1
   }
   return out
+}
+
+/** One component's persisted-column selection within an archetype: the component's position in
+ * `a.components` plus the persisted column indices (in field order) within its column list. */
+export interface PersistedComponentColumns {
+  readonly compIndex: number
+  readonly colIndices: readonly number[]
+}
+
+/**
+ * A memoizing per-archetype-id persisted-column lookup. Persist flags are define-time constants and
+ * an archetype's component/column order is fixed by its signature, so the selection is computed once
+ * per archetype and reused — the snapshot/delta emit loops stay allocation-free per call.
+ */
+export function createPersistedColumnsCache(): (a: {
+  readonly id: number
+  readonly components: readonly { readonly columns: readonly unknown[]; readonly fields: readonly { readonly persist: boolean }[] }[]
+}) => readonly PersistedComponentColumns[] {
+  const byArch = new Map<number, readonly PersistedComponentColumns[]>()
+  return (a) => {
+    let cached = byArch.get(a.id)
+    if (cached === undefined) {
+      const entries: PersistedComponentColumns[] = []
+      for (let compIndex = 0; compIndex < a.components.length; compIndex++) {
+        const comp = a.components[compIndex]
+        if (comp === undefined) continue
+        const colIndices: number[] = []
+        for (let i = 0; i < comp.columns.length; i++) {
+          if (comp.fields[i]?.persist !== false) colIndices.push(i)
+        }
+        if (colIndices.length > 0) entries.push({ compIndex, colIndices })
+      }
+      cached = entries
+      byArch.set(a.id, cached)
+    }
+    return cached
+  }
 }
 
 /**: the wire is little-endian; raw SoA byte copies assume the platform is LE. */

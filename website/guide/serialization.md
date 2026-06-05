@@ -137,9 +137,11 @@ The rules:
   changed *only* in a skipped field still re-sends that row's persisted values — a harmless,
   receiver-idempotent over-send; the skipped value itself never reaches the wire.
 - **Mismatched flags fail loudly.** The persisted-field subset is folded into the `schemaHash`,
-  so loading an image produced under different `persist` flags throws instead of mis-reading
-  columns. (Relation payloads are name-keyed on the wire, so a skipped payload field is simply
-  omitted and re-defaults without affecting the hash.)
+  and **both** `load` (snapshots) and `applyDelta` (deltas carry the hash in their header) throw
+  on a mismatch instead of mis-reading columns. (Relation payloads are name-keyed on the wire,
+  so a skipped payload field is simply omitted and re-defaults without affecting the hash — and
+  the receiver enforces *its own* flags on apply, so a producer without the flag cannot write
+  into a payload field the receiver declared transient.)
 
 ## Structural journal & observer log
 

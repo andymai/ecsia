@@ -367,13 +367,14 @@ describe('— delta over a random tick range equals replaying the writes; no sha
 })
 
 // Decode a delta image's value section and return the set of entity handles whose rows it carries.
-// (Independent of the serializer internals — re-parses the wire per: a 24-byte header carrying the
+// (Independent of the serializer internals — re-parses the wire per: a 32-byte header carrying the
 // structural + value section offsets, then a value section in NATIVE element-width per field.)
 const ELEMENT_BYTES: Record<number, number> = { 0: 1, 1: 1, 2: 1, 3: 2, 4: 2, 5: 4, 6: 4, 7: 4, 8: 8 }
 function decodeDeltaHandles(bytes: Uint8Array): Set<number> {
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  // Header: magic(4) version(2) endian(1) flags(1) baselineTick(4) targetTick(4) structOff(4) valueOff(4).
-  const valueOff = dv.getUint32(20, true)
+  // Header: magic(4) version(2) endian(1) flags(1) schemaHash(4) baselineTick(4) targetTick(4)
+  // structOff(4) valueOff(4) richOff(4).
+  const valueOff = dv.getUint32(24, true)
   let off = valueOff
   const changedArchetypeCount = dv.getUint32(off, true)
   off += 4

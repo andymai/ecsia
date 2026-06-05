@@ -13,7 +13,7 @@ import {
   createDeltaSerializer,
   applyDelta,
 } from '../src/index.js'
-import { SNAPSHOT_MAGIC } from '../src/format.js'
+import { SERIALIZATION_FORMAT_VERSION, SNAPSHOT_MAGIC } from '../src/format.js'
 
 function makeWorld() {
   const P = defineComponent({ x: 'f32' }, { name: 'p' })
@@ -192,10 +192,11 @@ describe('applyDelta — header validation', () => {
     const { world } = makeWorld()
     // A snapshot has the magic but no delta flag → "not a delta image".
     const snap = createSnapshotSerializer(world).snapshotCopy()
-    // Reuse just the magic so applyDelta passes the magic check then trips the delta-flag check.
-    const bytes = new Uint8Array(24)
+    // Reuse just the magic + version so applyDelta passes those checks then trips the delta-flag check.
+    const bytes = new Uint8Array(32)
     const dv = new DataView(bytes.buffer)
     dv.setUint32(0, SNAPSHOT_MAGIC, true)
+    dv.setUint16(4, SERIALIZATION_FORMAT_VERSION, true)
     bytes[7] = 0 // flags: FLAG_IS_DELTA bit clear
     expect(() => applyDelta(world, bytes, new Map())).toThrow(/not a delta image/)
     expect(snap.length).toBeGreaterThan(0)

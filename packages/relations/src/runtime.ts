@@ -818,6 +818,22 @@ export function createRelations(world: World): RelationsApi {
     return []
   }
 
+  // RECEIVER-side persist enforcement for the apply path: keep only the payload keys THIS world's
+  // descriptors mark persisted, so a producer whose relation schema lacks the flag cannot plant
+  // values into fields the receiver declared transient (they re-default via addPair instead).
+  function filterPersistedPayload(rt: RelationRuntime, payload: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+    if (payload === undefined) return undefined
+    const out: Record<string, unknown> = {}
+    let any = false
+    for (const n of payloadFieldNames(rt)) {
+      if (n in payload) {
+        out[n] = payload[n]
+        any = true
+      }
+    }
+    return any ? out : undefined
+  }
+
   function readPairPayload(rt: RelationRuntime, subject: EntityHandle, target: EntityHandle): Record<string, unknown> | undefined {
     if (rt.storageKind === 'tag') return undefined
     const names = payloadFieldNames(rt)
@@ -878,7 +894,7 @@ export function createRelations(world: World): RelationsApi {
       const rt = byRelationId.get(relationId as number)
       if (rt === undefined) return
       if (target === null) return // a cleared exclusive target: nothing to re-establish
-      addPair(subject, rt.def, target, payload ?? undefined)
+      addPair(subject, rt.def, target, filterPersistedPayload(rt, payload))
     },
     relationIdOfPair(pairId) {
       return pairKeyById.get(pairId)?.relationId

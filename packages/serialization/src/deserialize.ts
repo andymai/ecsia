@@ -62,10 +62,11 @@ export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
     // --- HEADER ---
     const magic = cur.u32()
     if (magic !== SNAPSHOT_MAGIC) throw new Error('serialization: bad magic (not an ecsia snapshot)')
-    // /: the v2 reader accepts the version RANGE [MIN_SUPPORTED_VERSION,
-    // SERIALIZATION_FORMAT_VERSION] and per-section-gates the v2-only header growth + RICH section. A v1
-    // image (no richSectionOffset word, no RICH section) loads cleanly; a hypothetical newer (>v2) image
-    // is rejected. The inverse (v2 image into a v1 build) is rejected by the v1 build's strict check.
+    // The reader accepts the version RANGE [MIN_SUPPORTED_VERSION, SERIALIZATION_FORMAT_VERSION] and
+    // per-section-gates the v2-only header growth + RICH section. A v1 image (no richSectionOffset
+    // word, no RICH section) loads cleanly; the SNAPSHOT layout is unchanged since v2, so v2 images
+    // load too. A newer-than-this-build image is rejected; the inverse (a new image into an old build)
+    // is rejected by the old build's own strict check.
     const version = cur.u16()
     if (version < MIN_SUPPORTED_VERSION || version > SERIALIZATION_FORMAT_VERSION) {
       throw new Error(
