@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: ecsia
-  text: Fast, type-safe ECS for TypeScript
-  tagline: Typed components and queries, first-class entity relationships, and automatic multithreading — with results identical to a single-threaded run.
+  text: A fast, type-safe entity component system for TypeScript
+  tagline: Build simulations out of plain data — typed components and queries, links between entities, and automatic multithreading with results identical to a single-threaded run.
   actions:
     - theme: brand
       text: Get started
@@ -17,14 +17,14 @@ hero:
       link: /reference/
 
 features:
-  - title: SoA iteration, no Proxy
-    details: Components are schema'd numeric columns in (optionally shared) TypedArrays. Iteration uses monomorphic column accessors — e.position.x is fully typed, no casts, no Proxy.
-  - title: Auto-parallel, deterministic
-    details: threaded:true changes no system, query, or accessor code. The scheduler derives a conflict DAG and splits each wave's disjoint-write work across a worker pool. The result is bit-identical to single-threaded.
-  - title: First-class relations
-    details: Integer-encoded pairs as real archetype members — exclusive/overflow storage, presence-bit wildcards, and cascade directions. Relations cross worker boundaries (JS-object pair identity can't).
-  - title: One frozen surface
-    details: "ecsia re-exports the whole cohesive API — world, components, queries, systems, scheduler, relations, serialization — and tree-shakes what you don't touch."
+  - title: Fast iteration, fully typed
+    details: Each component field is stored in its own contiguous array, so loops over thousands of entities walk straight through memory. On top sits a typed API — e.position.x is a number, no casts, no Proxy.
+  - title: Multithreading is one flag
+    details: Set threaded:true and nothing else changes. Each system declares what it reads and writes; ecsia runs the systems that can't interfere with each other on worker threads — and the result is byte-for-byte identical to running on one thread.
+  - title: Entities can link to each other
+    details: "Parent/child trees, ownership, targeting — links are stored as plain numbers next to your component data, so they're fast to query, survive saving and loading, and work across threads. Cleanup can cascade: despawn a parent and its children go too."
+  - title: One import, pay for what you use
+    details: "The ecsia package re-exports the whole API — world, components, queries, systems, scheduler, links, saving. Bundlers drop whatever you don't touch."
 ---
 
 ## Status {#status}
@@ -36,8 +36,10 @@ released and the API may still shift before 1.0.
 
 - **Not on npm yet** — consume it from the local workspace (see [Getting started](/guide/getting-started)).
 - **Node `>=22.13`** — the engine floor. ESM-only, strict TypeScript.
-- **Browser parallelism needs COOP/COEP** — `SharedArrayBuffer` requires a cross-origin-isolated
-  context; without it ecsia logs a warning and runs single-threaded (never a silent failure).
+- **Browser multithreading needs two HTTP headers** — threads share memory through
+  `SharedArrayBuffer`, which browsers only allow on cross-origin-isolated pages (a server-side
+  opt-in via the COOP/COEP headers). Without it, ecsia logs a warning and runs single-threaded —
+  never a silent failure.
 - **The worker pool is Node-only today** — `worker_threads` + `Atomics`. The same user code runs
   single-threaded everywhere; the OS-thread pool is the Node path.
 
@@ -47,12 +49,17 @@ instructions.
 
 ## Quick start
 
+If you're new to the pattern: an entity component system (ECS) builds a simulation from
+three pieces. An **entity** is just an id. A **component** is typed data attached to an
+entity — here, a position and a velocity. A **system** is a function that runs over every
+entity that has the components it asks for.
+
 ```ts
 import {
   createWorld, defineComponent, defineSystem, createScheduler, read, write,
 } from 'ecsia'
 
-// Components are schema'd numeric SoA, stored in (optionally shared) TypedArrays.
+// Each field ('f32' = 32-bit float) becomes its own typed-array column in memory.
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
 
@@ -64,8 +71,8 @@ world.entity(e).write(Velocity).dx = 5
 const dt = 1 / 60
 const Movement = defineSystem({
   name: 'Movement',
-  read: [Velocity],
-  write: [Position],
+  read: [Velocity],   // this system only reads velocities…
+  write: [Position],  // …and only writes positions
   run({ query }) {
     for (const e of query(read(Velocity), write(Position))) {
       e.position.x += e.velocity.dx * dt
@@ -78,8 +85,8 @@ const scheduler = createScheduler(world, [Movement])
 scheduler.update(dt) // run one frame
 ```
 
-Go parallel with the **same** user code — `threaded: true` is a dispatcher choice, not a code-shape
-change:
+Go parallel with the **same** user code — `threaded: true` changes where systems run,
+not how you write them:
 
 ```ts
 import { createWorld, defineComponent } from 'ecsia'
@@ -96,14 +103,15 @@ Keep going: [Getting started →](/guide/getting-started)
 | Package | Role |
 |---|---|
 | `ecsia` | the batteries-included umbrella — start here |
-| `@ecsia/core` | archetype storage, typed accessors, queries, change tracking |
-| `@ecsia/schema` | component field tokens and query type inference |
-| `@ecsia/scheduler` | system access graph, wave executor, worker pool |
-| `@ecsia/relations` | entity-to-entity links with fast queries and cascades |
-| `@ecsia/serialization` | snapshots, deltas, worker bootstrap |
+| `@ecsia/core` | component storage, typed accessors, queries, change tracking |
+| `@ecsia/schema` | component field types and query type inference |
+| `@ecsia/scheduler` | works out which systems can run together, and runs them across threads |
+| `@ecsia/relations` | entity-to-entity links with fast queries and automatic cleanup |
+| `@ecsia/serialization` | snapshots, change payloads, worker bootstrap |
 | `@ecsia/three` | three.js bindings (opt-in, not in the umbrella) |
 | `@ecsia/devtools` | world inspector and schedule explainer (opt-in) |
 
-The kernel (`@ecsia/core`) runs standalone; `scheduler`, `relations`, and `serialization` are opt-in
-layers that attach via injected seams. `@ecsia/three` and `@ecsia/devtools` sit at the top of the
-graph and are deliberately **not** re-exported from the umbrella.
+`@ecsia/core` is a complete single-threaded ECS on its own; the scheduler, links, and
+saving layers plug into it without core knowing about them. `@ecsia/three` and
+`@ecsia/devtools` sit at the top of the graph and are deliberately **not** re-exported
+from the umbrella.

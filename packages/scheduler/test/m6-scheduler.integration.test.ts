@@ -1,4 +1,4 @@
-// scheduler INTEGRATION suite — end-to-end, in lieu of the deferred boids bench. A small system
+// scheduler INTEGRATION suite — end-to-end, in lieu of the deferred bird-flock bench. A small system
 // pipeline runs via the single-threaded executor and DETERMINISTICALLY mutates the right components;
 // the reactivity `.changed` flavor sees the writes after the frame (the wave/frame-boundary drain).
 //

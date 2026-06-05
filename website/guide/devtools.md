@@ -2,14 +2,15 @@
 
 `@ecsia/devtools` is a **data layer first, renderers second**. `inspectWorld` / `explainPlan` /
 `watchWorld` produce plain, serializable reports — no live handles, no class instances — so every fact
-is assertable headless. `renderText` / `renderHTML` are pure functions over exactly those report shapes.
+can be asserted in a headless test. `renderText` / `renderHTML` are pure functions over exactly those
+report shapes.
 
-::: tip Opt-in, and it reads core seams
+::: tip Opt-in, and it reads the core world directly
 `@ecsia/devtools` is **not** re-exported from `ecsia`, and nothing in the framework imports it —
-it sits at the top of the dependency graph. Because `inspectWorld`/`watchWorld` read the world's internal
-inspection seams, devtools consumes the **`@ecsia/core` world** (the seam-carrying `World`), driven with
-`@ecsia/scheduler` + `@ecsia/relations` directly — the same wiring a real devtools consumer uses, and
-the same wiring `examples/devtools-tour.ts` shows.
+it sits at the top of the dependency graph. Because `inspectWorld`/`watchWorld` read the world's
+built-in inspection hooks, devtools consumes the `World` from `@ecsia/core` (the one that carries
+those hooks), driven with `@ecsia/scheduler` + `@ecsia/relations` directly — the same wiring a real
+devtools consumer uses, and the same wiring `examples/devtools-tour.ts` shows.
 
 ```sh
 pnpm add @ecsia/devtools   # unpublished today — workspace-local for now
@@ -18,9 +19,8 @@ pnpm add @ecsia/devtools   # unpublished today — workspace-local for now
 
 ## `inspectWorld` — a snapshot of world state
 
-Devtools reads the world's internal seams, so it takes the seam-carrying `World` from
-`@ecsia/core` — import `createWorld` from `@ecsia/core` (not the umbrella) for a world you
-intend to inspect.
+Devtools reads the world's built-in inspection hooks, which only the `@ecsia/core` `World` exposes —
+so import `createWorld` from `@ecsia/core` (not the umbrella) for a world you intend to inspect.
 
 ```ts
 import { createWorld } from '@ecsia/core'
@@ -36,10 +36,17 @@ report.relations              // per-relation: name, pair count
 report.memory                 // column bytes + sidecar entries
 ```
 
-## `explainPlan` — visualise the scheduler's waves
+A quick vocabulary for reading the report: an archetype is the group of entities sharing the exact
+same set of components — stored as one table. A query selects every entity with a given set of
+components, with typed access to their fields. An archetype's temperature tells you how recently it
+has seen activity (hot = recently active, cold = not).
 
-`explainPlan(scheduler, componentNameMap(world))` returns the derived plan: which systems share a wave,
-which conflicts separated them, and which systems are pinned to the main thread (and why).
+## `explainPlan` — see the scheduler's waves
+
+A wave is a batch of systems that can safely run at the same time because none writes data another
+touches. `explainPlan(scheduler, componentNameMap(world))` returns the derived plan: which systems
+share a wave, which conflicts separated them, and which systems are pinned to the main thread (and
+why).
 
 ```ts
 import { createWorld } from '@ecsia/core'
@@ -61,8 +68,8 @@ created, etc.) you can assert on or render.
 
 ## Renderers: pure over the data layer
 
-`renderText(report)` and `renderHTML(report)` accept either a `WorldReport` or a `PlanExplain` and emit a
-string — no world access, no side effects.
+`renderText(report)` and `renderHTML(report)` accept either a `WorldReport` or a `PlanExplain` and emit
+a string — no world access, no side effects.
 
 ```ts
 import { createWorld } from '@ecsia/core'

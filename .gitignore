@@ -18,3 +18,4 @@ website/.snippet-check/
 
 # Transient JS emit of the bench builders, produced by scripts/bench-report.mjs (bench:report).
 bench/.report-dist/
+.claude/agent-memory-local/

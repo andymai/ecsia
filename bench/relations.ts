@@ -1,7 +1,7 @@
-// Relation-query micro-bench (ecsia-only — first-class integer pairs are an ecsia differentiator;
-// miniplex/bitECS have no native relation primitive). Builds a star topology: N subjects each related
-// to one of K targets via a non-exclusive `LinkedTo` relation, then times a wildcard subjectsOf walk
-// (the O(1)-presence-bit wildcard path) across all targets.
+// Relation-query micro-benchmark (timing one tiny loop). ecsia-only: first-class integer pairs are
+// an ecsia differentiator; miniplex/bitECS have no native relation primitive. Builds a star
+// topology: N subjects each related to one of K targets via a non-exclusive `LinkedTo` relation,
+// then times a wildcard subjectsOf walk (the O(1)-presence-bit wildcard path) across all targets.
 
 import { createWorld, defineComponent, createRelations } from 'ecsia'
 import type { EntityHandle } from 'ecsia'

@@ -1,14 +1,9 @@
-// Example: boids flocking bound to real THREE.js objects. This is the @ecsia/three bridge end to
-// end — the SAME flocking sim as boids.ts, but each boid is mirrored into a THREE.Object3D AND a
-// THREE.InstancedMesh every frame. Everything runs HEADLESS: we use three's math + scene-graph core
-// only (Object3D/InstancedMesh/Matrix4), never a WebGLRenderer, so it runs in Node with no GPU.
-//
-// The frame loop is driven by createThreeDriver().tick(dt) (manual stepping — no requestAnimationFrame
-// in Node). Each tick: the scheduler runs Cohesion → Movement → transformSync → instancedSync, then the
-// driver's render() callback (a no-op here; a real app would call renderer.render(scene, camera)).
-//
-// Components use the @ecsia/three transform conventions: position {x,y,z} f32. Velocity is the sim's
-// own component. We define them per-call (component ids are world-scoped) so main() can run repeatedly.
+// The flock of birds from birds.ts, mirrored into real three.js objects via the @ecsia/three
+// bridge. Each frame, two bridge systems copy every bird's position into a bound Object3D and
+// into an InstancedMesh (three.js's way of drawing many copies of one shape in a single draw
+// call). Everything runs headless (no GPU or window — pure data, runs in Node): we use three's
+// math objects only, never a renderer. The thing to notice: the bridge systems are ordinary
+// systems, so the scheduler orders them after Movement from their read/write declarations alone.
 
 import { createWorld, defineComponent, defineSystem, createScheduler, read, write } from 'ecsia'
 import type { EntityHandle } from 'ecsia'
@@ -20,35 +15,35 @@ import {
 } from '@ecsia/three'
 import { BufferGeometry, InstancedMesh, Matrix4, MeshBasicMaterial, Object3D, Scene, Vector3 } from 'three'
 
-export interface ThreeBoidsOptions {
-  /** Number of boids. Default 64. */
+export interface ThreejsBirdsOptions {
+  /** Number of birds. Default 64. */
   readonly count?: number
   /** Fixed ticks to run. Default 90. */
   readonly ticks?: number
   /** Fixed timestep seconds. Default 1/60. */
   readonly dt?: number
-  /** Cohesion pull toward the centroid per second. Default 0.5. */
+  /** Strength of the pull toward the flock's center, per second. Default 0.5. */
   readonly cohesion?: number
-  /** Deterministic PRNG seed. Default 1. */
+  /** Seed for the random-number generator. Default 1. */
   readonly seed?: number
 }
 
-export interface ThreeBoidsResult {
+export interface ThreejsBirdsResult {
   readonly count: number
   readonly ticks: number
-  /** Centroid of the ECS positions at end state. */
+  /** The centroid (the average position — the flock's center) of the ECS positions at the end. */
   readonly centroid: { x: number; y: number; z: number }
-  /** The bound Object3D world positions at end state (one per boid, in spawn order). */
+  /** The bound Object3D world positions at the end (one per bird, in spawn order). */
   readonly objectPositions: ReadonlyArray<{ x: number; y: number; z: number }>
-  /** The InstancedMesh per-slot translations at end state (sorted by x for stable comparison). */
+  /** The InstancedMesh per-slot translations at the end (sorted by x for stable comparison). */
   readonly instanceTranslationsByX: ReadonlyArray<{ x: number; y: number; z: number }>
-  /** The InstancedMesh's live instance count at end state. */
+  /** The InstancedMesh's live instance count at the end. */
   readonly instanceCount: number
-  /** Max abs difference between an ECS position and its bound Object3D (proves the sync tracks). */
+  /** Max abs difference between an ECS position and its bound Object3D (proof the sync kept up). */
   readonly maxObjectDrift: number
 }
 
-function lcg(seed: number): () => number {
+function seededRandom(seed: number): () => number {
   let s = seed >>> 0 || 1
   return () => {
     s = (Math.imul(s, 1664525) + 1013904223) >>> 0
@@ -56,23 +51,25 @@ function lcg(seed: number): () => number {
   }
 }
 
-export function main(opts: ThreeBoidsOptions = {}): ThreeBoidsResult {
+export function main(opts: ThreejsBirdsOptions = {}): ThreejsBirdsResult {
   const count = opts.count ?? 64
   const ticks = opts.ticks ?? 90
   const dt = opts.dt ?? 1 / 60
   const cohesion = opts.cohesion ?? 0.5
-  const rand = lcg(opts.seed ?? 1)
+  const rand = seededRandom(opts.seed ?? 1)
 
   const Position = defineComponent({ x: 'f32', y: 'f32', z: 'f32' }, { name: 'position' })
   const Velocity = defineComponent({ dx: 'f32', dy: 'f32', dz: 'f32' }, { name: 'velocity' })
 
   const world = createWorld({ components: [Position, Velocity], maxEntities: 1 << 16 })
 
-  // The THREE side: a scene-graph of Object3Ds (one per boid) + a single InstancedMesh for the whole
-  // flock. Constructed headless — no renderer touches them.
+  // The three.js side: one Object3D per bird plus a single InstancedMesh for the whole flock.
+  // Built headless — no renderer ever touches them.
   const scene = new Scene()
   const bindings = createThreeBindings(world, scene)
-  bindings.autoUnbindOn(Position) // auto-teardown on despawn (none here, but wires the contract)
+  // Unbinds automatically when an entity despawns (is removed from the world) — none do here,
+  // but a real app wants this wired up.
+  bindings.autoUnbindOn(Position)
   const mesh = new InstancedMesh(new BufferGeometry(), new MeshBasicMaterial(), count)
 
   const handles: EntityHandle[] = []
@@ -85,6 +82,8 @@ export function main(opts: ThreeBoidsOptions = {}): ThreeBoidsResult {
     bindings.bind(h, new Object3D())
   }
 
+  // Cohesion: the pull toward the group's center that makes individuals form a flock. Each tick it
+  // recomputes the centroid (the average position — the flock's center) and steers velocities at it.
   const centroid = { x: 0, y: 0, z: 0 }
   const Cohesion = defineSystem({
     name: 'Cohesion',
@@ -127,20 +126,20 @@ export function main(opts: ThreeBoidsOptions = {}): ThreeBoidsResult {
     },
   })
 
-  // The bridge systems. transformSync mirrors columns → each bound Object3D; instancedSync writes the
-  // InstancedMesh's instanceMatrix. Both declare read-only access, so they layer after Movement (which
-  // writes Position) on the read-after-write conflict — no manual ordering needed.
+  // The bridge systems. transformSync copies each entity's position into its bound Object3D;
+  // instancedSync writes the InstancedMesh's per-instance matrices. Both only read Position, so
+  // the scheduler runs them after Movement (which writes Position) — no manual ordering needed.
   const transformSync = makeTransformSyncSystem({ position: Position, bindings })
   const instancedSync = makeInstancedSyncSystem({ mesh, position: Position })
 
   const scheduler = createScheduler(world, [Cohesion, Movement, transformSync, instancedSync])
 
-  // Drive the frame loop through the bridge's driver (manual tick — no rAF in Node). render() is a
-  // no-op stand-in for renderer.render(scene, camera).
+  // The bridge's driver steps the frame loop by hand — there's no requestAnimationFrame in Node.
+  // render() is a no-op stand-in for renderer.render(scene, camera).
   const driver = createThreeDriver({ update: (d) => scheduler.update(d), render: () => {} })
   for (let t = 0; t < ticks; t++) driver.tick(dt)
 
-  // Read back the end state from BOTH sides and confirm the THREE objects track the ECS.
+  // Read the end state from BOTH sides and confirm the three.js objects track the ECS data.
   let cx = 0
   let cy = 0
   let cz = 0

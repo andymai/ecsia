@@ -1,16 +1,17 @@
-// Worker example — the no-silent-failure threading gate. The worker-sim
-// example's main() runs the SAME disjoint-write workload under two transports:
+// The threading fallback gate: if threading isn't available, ecsia must say so loudly and fall
+// back — never drop work silently. The worker-sim example's workload (two systems that write
+// different components) runs under three setups:
 //
-//   SAB lane          (parallel: true)  — threaded:true + scheduler.workers:2, driven by the in-process
-//                                          RoundDispatcher the example ships (the wave/round/dispatch path
-//                                          a real WorkerPool parallelizes; the contract is that user code is the
-//                                          same shape regardless of transport).
-//   single-thread     (parallel: false) — the v1 baseline serial executor.
+//   SharedArrayBuffer lane (parallel: true)  — threaded:true + scheduler.workers:2, driven by the
+//                                              in-process RoundDispatcher the example ships.
+//                                              (SharedArrayBuffer is memory several threads can
+//                                              read and write at once — what real threading needs.)
+//   single-thread          (parallel: false) — the baseline serial executor.
 //
-// This file ADDS the third documented lane — the no-SAB fallback — and proves it is NOT a
-// silent failure: `createWorld({ threaded:true, scheduler:{ workers:'no-sab' } })` builds a
-// correct world and the identical workload through the threaded frame loop reproduces the single-thread
-// result byte-for-byte (never silent). Run twice for stability.
+// This file ADDS the third documented lane — workers:'no-sab', the fallback for hosts without
+// shared memory — and proves it is not a silent failure: the world still builds, and the
+// identical workload through the threaded frame loop reproduces the single-thread result
+// exactly. Run twice for stability.
 
 import { describe, expect, test } from 'vitest'
 import {
@@ -23,7 +24,7 @@ import {
 import type { EntityHandle, RoundDispatcher, SystemContext, SystemDef, Tick, World } from 'ecsia'
 import { main as workerSim } from '../worker-sim.js'
 
-function lcg(seed: number): () => number {
+function seededRandom(seed: number): () => number {
   let s = seed >>> 0 || 1
   return () => {
     s = (Math.imul(s, 1664525) + 1013904223) >>> 0
@@ -31,15 +32,16 @@ function lcg(seed: number): () => number {
   }
 }
 
-// The single-thread baseline replica of the example's disjoint-write workload. Returns one observable
-// scalar (total kinetic energy) for an exact cross-lane comparison.
+// The single-thread baseline: a replica of the example's workload (two systems writing different
+// components). Returns one observable number (total kinetic energy) for an exact comparison
+// across lanes.
 function runSingleThread(opts: { perGroup: number; ticks: number; seed: number }): {
   totalEnergy: number
   built: boolean
 } {
   const dt = 1 / 60
   const gravity = 4
-  const rand = lcg(opts.seed)
+  const rand = seededRandom(opts.seed)
 
   const PositionA = defineComponent({ x: 'f32', y: 'f32' }, { name: 'positionA' })
   const VelocityA = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocityA' })
@@ -118,8 +120,10 @@ function runSingleThread(opts: { perGroup: number; ticks: number; seed: number }
   return { totalEnergy: energy, built }
 }
 
-// The threaded lane (no-sab OR explicit numeric pool): identical workload, awaited frame
-// loop, driven by an in-process RoundDispatcher (the dispatcher is the transport, not a code shape).
+// The threaded lane ('no-sab' or an explicit numeric pool): the identical workload through the
+// awaited threaded frame loop, driven by an in-process RoundDispatcher — the object the
+// scheduler hands each round's batches to for execution. Swapping the dispatcher never reshapes
+// the user code.
 async function runThreaded(opts: {
   perGroup: number
   ticks: number
@@ -128,7 +132,7 @@ async function runThreaded(opts: {
 }): Promise<{ totalEnergy: number; built: boolean }> {
   const dt = 1 / 60
   const gravity = 4
-  const rand = lcg(opts.seed)
+  const rand = seededRandom(opts.seed)
 
   const PositionA = defineComponent({ x: 'f32', y: 'f32' }, { name: 'positionA' })
   const VelocityA = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocityA' })
@@ -228,8 +232,8 @@ async function runThreaded(opts: {
   return { totalEnergy: energy, built }
 }
 
-describe('worker example: SAB lane vs fallback lanes — identical results, never silent', () => {
-  test('SAB-lane (example main, threaded:true) === single-thread fallback (run twice for stability)', async () => {
+describe('worker example: SharedArrayBuffer lane vs fallback lanes — identical results, never silent', () => {
+  test('SharedArrayBuffer lane (example main, threaded:true) matches single-thread (run twice for stability)', async () => {
     for (let pass = 0; pass < 2; pass++) {
       const sab = await workerSim({ perGroup: 256, ticks: 40, parallel: true, seed: 11 })
       const serial = await workerSim({ perGroup: 256, ticks: 40, parallel: false, seed: 11 })
@@ -247,7 +251,7 @@ describe('worker example: SAB lane vs fallback lanes — identical results, neve
     for (let pass = 0; pass < 2; pass++) {
       const single = runSingleThread({ perGroup: 200, ticks: 30, seed: 23 })
       const fallback = await runThreaded({ perGroup: 200, ticks: 30, workers: 'no-sab', seed: 23 })
-      // Never silent: the threaded:true + no-SAB request still builds a correct world...
+      // Never silent: asking for threaded:true without shared memory still builds a working world...
       expect(fallback.built).toBe(true)
       expect(single.built).toBe(true)
       // ...and the workload reproduces the single-thread answer exactly.
@@ -257,7 +261,7 @@ describe('worker example: SAB lane vs fallback lanes — identical results, neve
     }
   })
 
-  test("an explicit numeric worker pool ('SAB lane' shape) also matches single-thread", async () => {
+  test('an explicit numeric worker pool also matches single-thread', async () => {
     const single = runSingleThread({ perGroup: 150, ticks: 25, seed: 5 })
     const pooled = await runThreaded({ perGroup: 150, ticks: 25, workers: 2, seed: 5 })
     expect(pooled.built).toBe(true)

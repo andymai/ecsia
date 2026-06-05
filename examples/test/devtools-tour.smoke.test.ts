@@ -1,11 +1,13 @@
-// Smoke + regression test for the @ecsia/devtools tour. Locks the data-layer report facts the example
-// renders: entity counts, the wave shape, a known write-write conflict ordering, and the pinned
-// rich-field system. Every assertion reads the plain report objects (not the rendered strings).
+// Smoke + regression test for the @ecsia/devtools tour. Locks in the report facts the example
+// renders: entity counts, the wave shape (a wave is a batch of systems that can safely run at
+// the same time), a known write-write conflict, and the system kept on the main thread by its
+// rich field (a field holding a real JS object rather than a number). Every assertion reads the
+// plain report objects, not the rendered strings.
 
 import { describe, expect, test } from 'vitest'
 import { main as devtoolsTour } from '../devtools-tour.js'
 
-describe('example: devtools-tour (inspect + explain over the dot-cascade world)', () => {
+describe('example: devtools-tour (inspect + explain over the damage-over-time world)', () => {
   const { report, plan, reportText, planText } = devtoolsTour()
 
   test('inspectWorld reports the live entity census', () => {
@@ -17,10 +19,10 @@ describe('example: devtools-tour (inspect + explain over the dot-cascade world)'
     const names = report.components.map((c) => c.name)
     expect(names).toEqual(['health', 'burning', 'position', 'label'])
 
-    // label carries an object<T> rich field; the others are pure column components.
+    // label carries an object<T> rich field; the others store plain numbers in typed arrays.
     const label = report.components.find((c) => c.name === 'label')!
     expect(label.richFields).toEqual(['tag'])
-    expect(label.bytesPerRow).toBe(0) // object field is sidecar-backed → no column bytes
+    expect(label.bytesPerRow).toBe(0) // the object field lives in a side store, not a typed array
 
     const position = report.components.find((c) => c.name === 'position')!
     expect(position.bytesPerRow).toBe(8) // 2 × f32
@@ -30,8 +32,8 @@ describe('example: devtools-tour (inspect + explain over the dot-cascade world)'
   })
 
   test('inspectWorld surfaces archetypes, queries and relations', () => {
-    // Several archetypes exist (the spawnWith targets + the empty archetype). Every one carries a
-    // hot/cold temperature flag.
+    // Several archetypes (groups of entities sharing the same component set) exist — the
+    // spawnWith targets plus the empty one. Every archetype carries a hot/cold temperature flag.
     expect(report.archetypes.length).toBeGreaterThan(0)
     for (const a of report.archetypes) expect(['hot', 'cold']).toContain(a.temperature)
 
@@ -46,8 +48,9 @@ describe('example: devtools-tour (inspect + explain over the dot-cascade world)'
   })
 
   test('explainPlan lays the systems into waves and explains the WHY', () => {
-    // Burn (w: health,burning), Move (r: burning, w: position), Tagger (r: label, w: health). Burn↔Tagger
-    // write-write on health and Burn↔Move read-write on burning force serialization → ≥2 waves.
+    // Burn writes health+burning; Move reads burning, writes position; Tagger reads label, writes
+    // health. Burn↔Tagger both write health and Burn↔Move collide on burning, so the systems
+    // can't all share one wave — the plan needs at least 2.
     expect(plan.waves.length).toBeGreaterThanOrEqual(2)
 
     // Each wave carries at least one batch with at least one system.
@@ -64,7 +67,8 @@ describe('example: devtools-tour (inspect + explain over the dot-cascade world)'
     const rw = plan.conflicts.find((c) => c.kind === 'read-write' && c.on === 'burning')
     expect(rw).toBeDefined()
 
-    // Tagger reads a rich (object) Label field → worker-ineligible → pinned with reason 'rich-fields'.
+    // Tagger reads Label's object field, so it can't run on a worker thread — it's kept on the
+    // main thread, and the plan gives the reason as 'rich-fields'.
     const pin = plan.pinned.find((p) => p.system === 'Tagger')
     expect(pin).toBeDefined()
     expect(pin!.reason).toBe('rich-fields')

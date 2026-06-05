@@ -1,8 +1,9 @@
-// The bench runner ("consolidated cross-library macro-benches"). Runs three
-// buckets with tinybench and emits a JSON + console report:
+// The bench runner: consolidated cross-library macro-benchmarks (timing a realistic workload, rather
+// than one tiny loop). Runs three buckets with tinybench and emits a JSON + console report:
 // 1. iterate-N — Position+Velocity integration: ecsia vs miniplex vs bitECS.
 // 2. relation-query — ecsia wildcard subjectsOf walk (ecsia-only differentiator).
-// 3. parallel-speedup — worker-parallel sim (in-process dispatcher) vs single-thread, wall-clock.
+// 3. parallel-speedup — worker-parallel sim (in-process dispatcher) vs single-thread, measured as
+//    wall-clock (real elapsed) time.
 //
 // Runnable ON DEMAND (pnpm bench:macro), NOT in the default test run — `main()` takes options so the
 // smoke test can drive it at tiny sizes. The full suite uses larger N + more iterations.
@@ -21,7 +22,7 @@ export interface BenchOptions {
   readonly relTargets?: number
   /** tinybench time budget per task (ms). Default 200. */
   readonly time?: number
-  /** Particles per group + ticks for the parallel bucket. */
+  /** Particles per group + ticks (one tick = one step of the simulation) for the parallel bucket. */
   readonly parPerGroup?: number
   readonly parTicks?: number
   /** Quiet console output (the smoke test). Default false. */
@@ -74,11 +75,11 @@ export async function main(opts: BenchOptions = {}): Promise<BenchReport> {
   const ecsiaCursorIter = makeEcsiaCursorIter(entities)
   const miniIter = makeMiniplexIter(entities)
   const bitIter = makeBitEcsIter(entities)
-  // HONESTY GATE: the showcased ecsia-cursor row must integrate against the SAME data the accessor
-  // path does — a measurement of a fast-but-wrong loop is worthless. Cross-validate one full step of
-  // both ecsia loops at the bench's own N (which crosses the 1024 column-growth boundary) before
-  // timing, so a regression that makes the cursor return corrupt values fails the bench, not silently
-  // reports a misleadingly-fast number.
+  // Cross-check: the showcased ecsia-cursor fast path must produce the same values as the plain
+  // accessor path, or the bench aborts — a measurement of a fast-but-wrong loop is worthless. Run one
+  // full step of both ecsia loops at the bench's own N (which crosses the 1024 column-growth
+  // boundary) before timing, so a regression that makes the cursor return corrupt values fails the
+  // bench instead of silently reporting a misleadingly fast number.
   assertCursorMatchesAccessor(entities)
   iterBench.add('ecsia', () => ecsiaIter.step())
   iterBench.add('ecsia-cursor', () => ecsiaCursorIter.step())

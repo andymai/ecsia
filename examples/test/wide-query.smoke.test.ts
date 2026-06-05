@@ -1,15 +1,15 @@
-// Over-cap query escape hatch. MAX_QUERY_ARITY = 8;
-// past it the per-element tuple inference degrades to a typed LooseQueryElement — NEVER `any`. The
-// other suites only validate the cap at the TYPE level; this one EXERCISES a 9-term query at runtime
-// through the umbrella and proves the degraded element is still typed (the Has<C>/HasWrite<C>
-// annotation escape hatch reads real fields, not `any`).
+// Queries are fully typed up to 8 components (MAX_QUERY_ARITY). Past that, the per-element type
+// degrades to a typed LooseQueryElement — never `any` — and the escape hatch is to annotate the
+// loop variable with Has<C> / HasWrite<C>. Other suites only validate the cap at the type level;
+// this one actually runs a 9-term query through the umbrella and reads real typed fields via
+// that escape hatch.
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, read, write, MAX_QUERY_ARITY } from 'ecsia'
 import type { ComponentDef, Has, HasWrite, Schema } from 'ecsia'
 
-// Nine single-field components → a 9-term query, one past the inference cap. Literal `name`s so the
-// element property keys (CompKey<C> = the name literal) carry through to the typed escape hatch.
+// Nine single-field components → a 9-term query, one past the typing cap. Literal `name`s so
+// each component shows up as a property key (CompKey<C> = the name literal) on the typed element.
 const A = defineComponent({ v: 'f32' }, { name: 'wq_a' })
 const B = defineComponent({ v: 'f32' }, { name: 'wq_b' })
 const D = defineComponent({ v: 'f32' }, { name: 'wq_d' })
@@ -20,7 +20,7 @@ const H = defineComponent({ v: 'f32' }, { name: 'wq_h' })
 const I = defineComponent({ v: 'f32' }, { name: 'wq_i' })
 const J = defineComponent({ v: 'f32' }, { name: 'wq_j' })
 
-describe('over-cap query: a 9-term query degrades to a TYPED element, never `any`', () => {
+describe('past the 8-component cap: a 9-term query stays typed, never `any`', () => {
   test(`MAX_QUERY_ARITY is 8 and a 9-term query runs + reads typed fields via the annotation escape hatch`, () => {
     expect(MAX_QUERY_ARITY).toBe(8)
 
@@ -31,9 +31,9 @@ describe('over-cap query: a 9-term query degrades to a TYPED element, never `any
     ;(world.entity(h).write(A) as { v: number }).v = 2
     ;(world.entity(h).write(J) as { v: number }).v = 5
 
-    // 9 terms — one past MAX_QUERY_ARITY. The element type past the cap is LooseQueryElement; the
-    // documented escape hatch is to annotate the iteration variable with Has<C> & HasWrite<C> so the
-    // fields stay typed (number), not `any`.
+    // 9 terms — one past MAX_QUERY_ARITY. Past the cap the element type is LooseQueryElement;
+    // the documented escape hatch is annotating the iteration variable with Has<C> & HasWrite<C>
+    // so the fields stay typed (number), not `any`.
     const q = world.query(
       write(A),
       read(B),
@@ -59,7 +59,7 @@ describe('over-cap query: a 9-term query degrades to a TYPED element, never `any
   })
 })
 
-// Pure type-level non-`any` guard: if the over-cap element collapsed to `any`, the `IsNotAny` check
+// Type-level guard: if the past-the-cap element ever collapsed to `any`, the `IsNotAny` check
 // below would resolve to `false` and the assignment would fail to compile.
 type IsAny<T> = 0 extends 1 & T ? true : false
 type IsNotAny<T> = IsAny<T> extends true ? false : true

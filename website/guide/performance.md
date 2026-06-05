@@ -7,42 +7,51 @@ markdown this page includes. Re-running the command regenerates both, so **the p
 with the artifact**.
 
 ::: warning Numbers will vary
-These are wall-clock measurements on one machine at one moment. Your CPU, Node version, thermal state,
-and background load will move them — sometimes a lot. Treat the **shapes** (which loop is faster, where
-the worker curve crosses 1×) as the durable story; treat the absolute milliseconds as a snapshot. The
-environment block above each table records exactly what produced it.
+These are wall-clock measurements (real elapsed time) on one machine at one moment. Your CPU, Node
+version, thermal state, and background load will move them — sometimes a lot. Treat the **shapes**
+(which loop is faster, where the worker curve crosses 1×) as the durable story; treat the absolute
+milliseconds as a snapshot. The environment block above each table records exactly what produced it.
 :::
 
 ## Methodology
 
-**What each loop does.** The single-thread iteration bench is the canonical ECS hot loop: integrate
-`Position` from `Velocity` for every entity, one frame per timed op, allocation-free in the inner loop so
-the measurement is storage/iteration cost — not GC.
+**What each loop does.** The single-thread iteration bench is the classic ECS hot loop — the small
+stretch of code that runs over every entity, every frame, and therefore dominates the cost. Here it
+adds each entity's `Velocity` to its `Position`, one frame per timed op. The inner loop is
+allocation-free — it creates no objects while running — so the measurement is storage and iteration
+cost, not garbage collection.
 
 - **ecsia `.each`** — the ergonomic accessor path: per-row proxy objects, write-log aware.
-- **ecsia `eachChunk`** — the opt-in column cursor: raw typed-array columns + a row span, indexing
-  `Float32Array` directly. Bypasses the per-row accessor and the reactivity write-log push.
+- **ecsia `eachChunk`** — the opt-in column cursor. ecsia stores each component field in its own
+  contiguous array (a column), a layout called Structure-of-Arrays (SoA). `eachChunk` hands you those
+  raw typed-array columns plus a row span, and the loop indexes `Float32Array` directly — bypassing
+  the per-row accessor and the reactivity write-log push.
 - **miniplex** — array-of-objects iteration.
-- **bitECS** — raw struct-of-arrays loop over a flat query result. The reference single-thread ceiling.
+- **bitECS** — a raw SoA loop over a flat query result. The reference single-thread ceiling.
 
 Before timing, the harness cross-validates one full step of `eachChunk` against `.each` at the bench's
-own N (which crosses the 1024-row column-growth boundary). A fast-but-wrong cursor fails the run instead
-of silently reporting a misleading number.
+own N (which crosses the 1024-row column-growth boundary). A fast-but-wrong cursor fails the run
+instead of silently reporting a misleading number.
 
-**Why per-entity work matters for the speedup bench.** The worker-pool bench is not a toy `hp + 1`. Each
-entity runs an iterated damped-oscillator integrator (hundreds of transcendental sub-steps) per frame.
-That is deliberate: parallel speedup only appears once the per-wave compute amortizes the dispatch +
-wave-sync overhead. A trivial body would be pure overhead and would *never* beat single-thread — which is
-exactly why benchmarks that show "linear scaling" on trivial work are misleading. We make the work heavy
-enough to be honest about where the crossover actually is.
+**Why per-entity work matters for the speedup bench.** The worker-pool bench is not a toy doing
+trivial arithmetic per entity. Each entity runs an iterated damped-oscillator integrator (a small
+spring-physics simulation): hundreds of sub-steps of expensive math calls (sin/cos/exp) per frame.
+That is deliberate. Parallel speedup only appears once each wave — a batch of systems that can safely
+run at the same time because none writes data another touches — amortizes the coordination cost,
+meaning the per-frame work is large enough that the dispatch overhead (the fixed cost of handing work
+to worker threads) and the synchronization between waves stop mattering. A trivial body would be pure
+overhead and would *never* beat single-thread — which is exactly why benchmarks that show "linear
+scaling" on trivial work are misleading. We make the work heavy enough to be honest about where the
+crossover actually is.
 
 **Single-process discipline.** Every bucket runs sequentially in one process. The iteration bench uses
-[tinybench](https://github.com/tinylibs/tinybench) with a fixed time budget; the worker-pool bench is the
-only thing that spawns OS threads, and it does so one configuration at a time. No two measurements
+[tinybench](https://github.com/tinylibs/tinybench) with a fixed time budget; the worker-pool bench is
+the only thing that spawns OS threads, and it does so one configuration at a time. No two measurements
 compete for cores.
 
-**Environment disclosure.** `bench/RESULTS.json` and the table header carry the Node version, CPU model
-and logical core count, the date, and the commit SHA. A number without its machine is not a number.
+**Environment disclosure.** `bench/RESULTS.json` and the table header carry the Node version, CPU
+model and logical core count, the date, and the commit SHA. A number without its machine is not a
+number.
 
 ## Results
 
@@ -50,32 +59,36 @@ and logical core count, the date, and the commit SHA. A number without its machi
 
 ## Honest analysis
 
-- **bitECS wins raw single-thread iteration.** Its flat SoA loop is the ceiling for a JavaScript ECS, and
-  we do not pretend otherwise. If your entire workload is one tight integrate loop on a single thread,
-  bitECS is the fastest tool here.
-- **ecsia `.each` beats miniplex.** The ergonomic accessor path — proxies, write-log awareness, and all —
-  still out-iterates miniplex's array-of-objects walk. You do not pay for ecsia's ergonomics by dropping
-  below the closest ergonomic competitor.
+- **bitECS wins raw single-thread iteration.** Its flat SoA loop is the ceiling for a JavaScript ECS,
+  and we do not pretend otherwise. If your entire workload is one tight integrate loop on a single
+  thread, bitECS is the fastest tool here.
+- **ecsia `.each` beats miniplex.** The ergonomic accessor path — proxies, write-log awareness, and
+  all — still out-iterates miniplex's array-of-objects walk. You do not pay for ecsia's ergonomics by
+  dropping below the closest ergonomic competitor.
 - **ecsia `eachChunk` lands within ~1.4× of bitECS on a modern V8** (and on some machines/runs edges
-  *ahead*, because it is the same raw-typed-array shape bitECS uses). The column cursor is the answer when
-  a hot loop needs bitECS-class throughput without leaving ecsia's type-safe storage.
-- **The tracked-write row is the cost you opt into.** Attaching a `.changed()` filter and draining it each
-  frame is markedly more expensive than the bare integrate loop — that is the write-log doing real work so
-  reactivity, deltas, and change observers are available. You pay it only when you ask for it; the plain
-  `.each` and `eachChunk` rows are what you get when you don't.
+  *ahead*, because it is the same raw-typed-array shape bitECS uses). The column cursor is the answer
+  when a hot loop needs bitECS-class throughput without leaving ecsia's type-safe storage.
+- **The tracked-write row is the cost you opt into.** Attaching a `.changed()` filter and draining it
+  each frame is markedly more expensive than the bare integrate loop — that is the write-log doing
+  real work so reactivity, deltas, and change observers are available. You pay it only when you ask
+  for it; the plain `.each` and `eachChunk` rows are what you get when you don't.
 - **The worker curve is the capability nobody else ships.** No mainstream JS ECS ships a real
   `worker_threads` + Atomics auto-parallel scheduler. The speedup column **crosses 1× between 1 and 2
-  workers**: at one worker you pay dispatch and wave-sync overhead for nothing (it is *slower* than the
-  single-thread executor — dispatch overhead is real and we show it), and the parallel win only materializes
-  once a second worker shares the load. The `byte-identical` column confirms every threaded run reproduces
-  the single-thread result exactly; the speedup is genuine parallelism, not a relaxed-correctness shortcut.
-  This holds **at any column size**: when a threaded column grows past its initial address-space
-  reservation (`INITIAL_ROWS 64 × GROWTH_RESERVE_FACTOR 16 = 1024` rows) it re-backs onto a new
-  `SharedArrayBuffer`, and the pool re-wraps every worker's view at the wave fence before the next dispatch
-  (one generation check per wave when nothing grew). The earlier 0.1.0 pre-release per-column growth cap is
-  retired — growing past 1024 rows is covered directly by
-  `packages/scheduler/test/worker-growth-boundary.test.ts` (1024 in-place grow + 1025/1040 re-backing) and
-  the above-reservation case in the heavy-pool smoke.
+  workers**: at one worker you pay dispatch and wave-sync overhead for nothing (it is *slower* than
+  the single-thread executor — dispatch overhead is real and we show it), and the parallel win only
+  materializes once a second worker shares the load. The `byte-identical` column confirms every
+  threaded run produces byte-for-byte the same result as the single-thread run; the speedup is genuine
+  parallelism, not a relaxed-correctness shortcut.
+
+  This holds **at any column size**. In a threaded world, each column lives in a `SharedArrayBuffer` —
+  memory several threads can read and write at once — with address space reserved up front for
+  `INITIAL_ROWS 64 × GROWTH_RESERVE_FACTOR 16 = 1024` rows. When a column grows past that reservation,
+  it re-backs: it moves to a new, larger `SharedArrayBuffer`. The pool then re-wraps every worker's
+  view of that column at the wave fence (the synchronization point between waves) before the next
+  dispatch; when nothing grew, this costs one generation check per wave. The earlier 0.1.0 pre-release
+  per-column growth cap is retired — growing past 1024 rows is covered directly by
+  `packages/scheduler/test/worker-growth-boundary.test.ts` (1024 in-place grow + 1025/1040 re-backing)
+  and the above-reservation case in the heavy-pool smoke test.
 
 ## Reproduce
 
@@ -97,12 +110,13 @@ pnpm bench:macro:pool   # the worker-pool speedup sweep on its own, with the pri
 
 ## Regression guard
 
-CI does **not** run `bench:report`. Wall-clock on shared CI runners is noise — a slow neighbor on the
-runner would flap the suite — so we deliberately **do not assert milliseconds in CI**. What CI *does*
-guard is correctness and behavior with counter-based assertions: the worker-pool smoke asserts every
-threaded configuration is byte-identical to single-thread (the `byte-identical` column above), and the
-bench builders are pinned so `eachChunk` cannot silently diverge from `.each`. Performance regressions are
-caught by re-running `bench:report` on a fixed machine and comparing `RESULTS.json`, not by a CI timer.
+CI does **not** run `bench:report`. Wall-clock time on shared CI runners is noise — a slow neighbor on
+the runner would flap the suite — so we deliberately **do not assert milliseconds in CI**. What CI
+*does* guard is correctness and behavior, with counter-based assertions: the worker-pool smoke test (a
+quick check that it compiles and runs, not a measurement) asserts every threaded configuration is
+byte-identical to single-thread (the `byte-identical` column above), and the bench builders are pinned
+so `eachChunk` cannot silently diverge from `.each`. Performance regressions are caught by re-running
+`bench:report` on a fixed machine and comparing `RESULTS.json`, not by a CI timer.
 
 ## See also
 

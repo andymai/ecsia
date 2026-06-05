@@ -1,7 +1,8 @@
-// Bench self-check: the macro-bench harness compiles + runs end-to-end at tiny sizes so CI proves the
-// cross-library comparison wiring works (ecsia/miniplex/bitECS builders, the relation walk, and the
-// parallel serial-vs-threaded measurement) WITHOUT paying the full measurement cost. The real numbers
-// come from `pnpm bench:macro` on demand.
+// Smoke test for the bench harness — a quick check that it compiles and runs, not a measurement. It
+// drives the macro-benchmark harness (the realistic-workload benches) end-to-end at tiny sizes so CI
+// proves the cross-library comparison wiring works (ecsia/miniplex/bitECS builders, the relation
+// walk, and the parallel serial-vs-threaded measurement) WITHOUT paying the full measurement cost.
+// The real numbers come from `pnpm bench:macro` on demand.
 
 import { describe, expect, test } from 'vitest'
 import { makeEcsiaIter, makeEcsiaCursorIter, makeMiniplexIter, makeBitEcsIter } from '../iterate.js'

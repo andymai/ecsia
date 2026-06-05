@@ -1,15 +1,13 @@
-// Example: the @ecsia/devtools tour. Builds the dot-cascade-style world (Health + Burning + a ChildOf
-// relation + a Burn system, plus a rich-field 'label' component to force a worker-INELIGIBLE system),
-// then prints inspectWorld + explainPlan as text. The smoke test asserts the report facts (entity
-// counts, the wave shape, a known write-write conflict, and the pinned rich-field system).
-//
-// This is a DATA-LAYER demo: every fact the renderers print is also an assertable field on the plain
-// report objects the inspect/explain functions return.
+// A tour of @ecsia/devtools. Builds a small world — the damage-over-time setup of Health, Burning,
+// and a ChildOf relation, plus a Label component holding a rich field (a real JS object rather
+// than a number — these pin a system to the main thread) — then inspects it with inspectWorld and
+// explainPlan and prints both as text. The thing to notice: every fact the text renderers print
+// is also a plain, assertable field on the report objects, which is what the smoke test checks.
 
-// devtools is an OPT-IN, core-level diagnostic: inspectWorld/watchWorld read the world's internal
-// `__serialize`/`__inspect` seams, which the ecsia umbrella facade deliberately omits.
-// So this example takes the world from @ecsia/core (the seam-carrying World) and drives it with the
-// scheduler/relations packages directly — the same way a real devtools consumer would wire it.
+// devtools is an opt-in diagnostic: inspectWorld reads internal inspection hooks
+// (`__serialize`/`__inspect`) that the ecsia umbrella deliberately leaves off its facade. So this
+// example takes its world from @ecsia/core — the version that carries those hooks — and wires in
+// the scheduler and relations packages directly, the same way a real devtools consumer would.
 import { createWorld, defineComponent, read, write, object } from '@ecsia/core'
 import { createScheduler, defineSystem } from '@ecsia/scheduler'
 import type { SchedulerHandle } from '@ecsia/scheduler'
@@ -31,8 +29,9 @@ export interface DevtoolsTourResult {
 }
 
 export function main(): DevtoolsTourResult {
-  // Position drives the worker-eligible movement system; Label carries an object<T> RICH field, so any
-  // system touching it is worker-INELIGIBLE (pinned to the main thread, reason 'rich-fields').
+  // Position drives a system that can run on a worker thread. Label carries an object<string>
+  // field, so any system touching it can't run on a worker — the plan keeps it on the main
+  // thread and reports the reason as 'rich-fields'.
   const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
   const Burning = defineComponent({ stacks: 'i32' }, { name: 'burning' })
   const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
@@ -42,7 +41,7 @@ export function main(): DevtoolsTourResult {
   const rel = createRelations(world)
   const ChildOf = rel.defineRelation(null, { exclusive: true, cascade: 'deleteSubject' })
 
-  // A small mob graph: 1 root + 3 children, two of them burning.
+  // A small mob graph: one root with three children, two of them burning.
   const root = world.spawnWith([Health, { hp: 100 }], [Position, { x: 0, y: 0 }], [Label, { tag: 'root' }])
   const a = world.spawnWith([Health, { hp: 6 }], [Burning, { stacks: 3 }], [Position, { x: 1, y: 0 }])
   const b = world.spawnWith([Health, { hp: 4 }], [Burning, { stacks: 2 }], [Position, { x: 2, y: 0 }])
@@ -51,9 +50,10 @@ export function main(): DevtoolsTourResult {
   rel.addPair(b, ChildOf, root)
   rel.addPair(c, ChildOf, root)
 
-  // Burn writes Health + Burning (worker-eligible). Move reads Burning, writes Position (worker-eligible;
-  // conflicts with Burn on Burning, read-write). Tagger reads Label (rich/object) → worker-INELIGIBLE,
-  // and writes Health → a write-write conflict with Burn on Health forcing them apart.
+  // Burn writes Health and Burning. Move reads Burning and writes Position, so it must wait for
+  // Burn. Tagger reads Label (the rich field — so it can't run on a worker thread) and writes
+  // Health, colliding with Burn's Health write; that forces them into different waves (a wave is
+  // a batch of systems that can safely run at the same time). explainPlan reports all of this.
   const Burn = defineSystem({
     name: 'Burn',
     read: [],
@@ -88,7 +88,7 @@ export function main(): DevtoolsTourResult {
 
   const scheduler: SchedulerHandle = createScheduler(world, [Burn, Move, Tagger])
 
-  // Drive a couple of frames so the world has live state + matched queries to inspect.
+  // Run a couple of frames so the world has live state and matched queries to inspect.
   scheduler.update(1)
   scheduler.update(1)
 

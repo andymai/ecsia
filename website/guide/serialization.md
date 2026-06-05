@@ -1,18 +1,29 @@
-# Serialization
+# Saving and syncing
 
-ecsia serializes through **two structurally separate transports**:
+Once a world is running — in ecsia's entity component system (ECS), each thing in your
+world is an entity (just an id) whose data lives in components (typed pieces of data
+attached to entities) — you'll want to get its state out: saved to disk, sent over a
+network, or handed to a worker thread. ecsia serializes through **two structurally separate
+transports**:
 
-- **Copy snapshot / delta** → `Uint8Array` bytes, for network, persistence, or cross-isolate copy.
-- **Zero-copy worker bootstrap** → `SharedArrayBuffer` handles (never bytes), for intra-process worker
-  handoff. (See [Parallelism](/guide/parallelism).)
+- **Copy snapshot / delta** → `Uint8Array` bytes, for network, persistence, or copying a
+  world into a separate JS context. A snapshot is a complete copy of the world's state at
+  one moment; a delta is just the changes since a known point, small enough to send over a
+  network.
+- **Zero-copy worker bootstrap** → `SharedArrayBuffer` handles (never bytes), for handing a
+  world to worker threads inside the same process. A `SharedArrayBuffer` is memory several
+  threads can read and write at once, so nothing needs copying. (See
+  [Multithreading](/guide/parallelism).)
 
-The bytes path never carries SAB handles; the bootstrap path never carries value bytes.
+The bytes path never carries `SharedArrayBuffer` handles; the bootstrap path never carries
+value bytes.
 
 ## Snapshot: a whole world, bit-exact
 
 `createSnapshotSerializer(world)` round-trips a world bit-exactly. `createSnapshotDeserializer(world)`
-loads it into a fresh world, returning an entity-id **remap** (load mints new handles; the table maps
-producer handles → loaded handles). Both must run in the world's serial phase.
+loads it into a fresh world, returning an entity-id **remap** (loading mints new entity
+handles, and the table maps each producer handle to its loaded handle). Both must run in the
+world's serial phase — a point where no systems are mid-run.
 
 ```ts
 import {
@@ -32,13 +43,17 @@ const { remap, entitiesCreated } = createSnapshotDeserializer(dst).load(bytes)
 // `remap` maps each producer handle to its freshly-minted handle in `dst`.
 ```
 
-`snapshot()` returns a view onto a reusable buffer (valid until the next call); `snapshotCopy()` returns
-a fresh detached buffer safe to transfer or persist.
+`snapshot()` returns a view onto a reusable buffer (valid until the next call); `snapshotCopy()`
+returns a fresh detached buffer safe to transfer or persist.
 
 ## Delta: changes since a tick
 
-`createDeltaSerializer(world, sinceTick)` emits the value **and** structural changes since a tick, driven
-by per-row version stamps — **no shadow map** on the core. Apply it with `applyDelta(world, bytes,
+`createDeltaSerializer(world, sinceTick)` emits both the value changes **and** the
+structural changes — anything that alters what components an entity has: spawning,
+despawning, adding or removing a component — since a tick (one step of the simulation). It
+is driven by per-row **version stamps**, counters recording when each value last changed.
+There is **no shadow map** on the core: ecsia doesn't keep a second copy of your data to
+detect changes — the version stamps do it. Apply a delta with `applyDelta(world, bytes,
 remap)`, passing the remap that ties producer handles to this world's handles.
 
 ```ts
@@ -65,10 +80,12 @@ const remap = new Map<EntityHandle, EntityHandle>()
 
 ### Epsilon mode (lower-level option)
 
-The package-level `createDeltaSerializer` accepts an opt-in numeric **`epsilon`** tolerance: a changed
-row whose every changed numeric field is within `epsilon` of the last emitted value is dropped from the
-value section. Rich fields and structural ops are never epsilon-filtered. The serializer owns its own
-shadow for this (the core stays shadow-free), so it is opt-in precisely because the memory cost is real.
+The package-level `createDeltaSerializer` accepts an opt-in numeric **`epsilon`** tolerance:
+a changed row whose every changed numeric field is within `epsilon` of the last emitted
+value is dropped from the value section. Rich fields (`object<T>()` fields, which hold
+arbitrary JS values) and structural ops are never epsilon-filtered. To compare against the
+last emitted value, the serializer keeps its own private copy of the numeric data — the core
+stays shadow-free — which is exactly why epsilon is opt-in: the memory cost is real.
 
 ```ts
 import { createDeltaSerializer } from '@ecsia/serialization'
@@ -84,10 +101,10 @@ const patch = ser.deltaCopy()
 
 ## Structural journal & observer log
 
-The delta interleaves a **structural section** (spawns/despawns/add/remove since the tick) ahead of the
-value section, so a single patch restores both shape and values. For a standalone stream of structural
-ops, `@ecsia/serialization` exposes `createObserverLog` and the `encodeStructuralOps` /
-`applyStructuralOps` pair.
+The delta interleaves a **structural section** (spawns/despawns/add/remove since the tick)
+ahead of the value section, so a single patch restores both shape and values. For a
+standalone stream of structural ops, `@ecsia/serialization` exposes `createObserverLog` and
+the `encodeStructuralOps` / `applyStructuralOps` pair.
 
 ```ts
 import { createObserverLog } from '@ecsia/serialization'
@@ -100,39 +117,53 @@ const log = createObserverLog(world)
 
 ## Re-backing notices: keeping worker views live across column growth
 
-The zero-copy bootstrap hands each worker its column SABs **once**, by reference. A length-tracking view
-auto-widens when a column grows *in place* (`SharedArrayBuffer.prototype.grow` within the column's
-reserved address space), so most growth re-points nothing. But when a column grows **past its
-reservation**, the buffer layer must allocate a **new** `SharedArrayBuffer`, copy, and re-back — and a
-worker's captured view would otherwise keep reading the abandoned buffer.
+The zero-copy bootstrap hands each worker its column `SharedArrayBuffer`s **once**, by
+reference — workers then read and write that shared memory directly. That raises a question:
+what happens when a column needs more room?
 
-The buffer layer journals every such re-backing: a **monotonic growth generation** plus a list of
-**re-backing notices** carrying the new SAB handle + layout per affected column. At each **wave fence**,
-before the next dispatch, the worker pool reads the generation (a single integer check — zero cost when
-nothing grew), and only if it advanced does it **drain** the notices and broadcast them to every worker.
-Each worker re-wraps the named columns onto their new backing and **acknowledges on the wave counter**;
-the dispatch does not proceed until all workers have applied. The new SAB references travel by
-`postMessage` (a `SharedArrayBuffer` cannot ride inside another SAB), while the *signal* to apply rides
-the same Atomics fence the wave loop already uses — so the result stays **serial-equivalent at any column
-size**, with no per-wave overhead in steady state.
+1. **The problem.** Each column reserves address space up front, and most growth happens *in
+   place* (`SharedArrayBuffer.prototype.grow` within that reservation) — a length-tracking
+   view auto-widens, so nothing needs re-pointing. But when a column grows **past its
+   reservation**, the buffer layer must allocate a **new** `SharedArrayBuffer`, copy the
+   data over, and re-back the column. A worker's captured view would otherwise keep reading
+   the abandoned buffer.
+2. **A growth counter records every move.** The buffer layer keeps a **growth generation** —
+   a counter that only ever increases, ticking once per re-backing — alongside a list of
+   **re-backing notices**, each carrying the new `SharedArrayBuffer` handle and layout for
+   an affected column.
+3. **Workers re-point at the wave fence.** A wave is a batch of systems that run at the same
+   time; the **wave fence** is the synchronization point between waves. At each fence,
+   before the next dispatch, the worker pool reads the growth counter. Only if it advanced
+   does the pool **drain** the notices and broadcast them to every worker. Each worker
+   re-wraps the named columns onto their new backing and **acknowledges on the wave
+   counter**; the dispatch does not proceed until all workers have applied. The new
+   `SharedArrayBuffer` references travel by `postMessage` (a `SharedArrayBuffer` cannot ride
+   inside another one), while the *signal* to apply rides the same `Atomics` fence the wave
+   loop already uses — `Atomics` being the JS primitives threads use to coordinate.
+4. **Zero overhead when nothing grew.** Checking the counter is a single integer read, so in
+   steady state there is no per-wave cost. And because every worker re-points before the
+   next wave starts, the result stays serial-equivalent — byte-identical to a
+   single-threaded run — at any column size.
 
-This is the producer side of `applyColumnsAdded` on the worker view: in-place growth emits nothing
-(views auto-widen); only re-backing onto a new SAB produces a notice.
+This is the producer side of `applyColumnsAdded` on the worker view: in-place growth emits
+nothing (views auto-widen); only re-backing onto a new `SharedArrayBuffer` produces a notice.
 
 ## Version gating
 
-The wire is versioned (`SERIALIZATION_FORMAT_VERSION`). On load, the deserializer range-checks the
-header version and **throws** on an unsupported version or a schema mismatch rather than silently
-mis-reading bytes. The zero-copy worker `attachWorld` likewise throws on a `schemaHash` mismatch — a
-worker built from a different component schema than the host is rejected as stale code, not run blindly.
+The wire is versioned (`SERIALIZATION_FORMAT_VERSION`). On load, the deserializer
+range-checks the header version and **throws** on an unsupported version or a schema
+mismatch rather than silently mis-reading bytes. The zero-copy worker `attachWorld` likewise
+throws on a `schemaHash` mismatch — a worker built from a different component schema than
+the host is rejected as stale code, not run blindly.
 
 ## Carrying entity references across the wire (RF-NOREMAP)
 
 ::: warning A handle stored inside an `object<T>` is NOT remapped
-On a round-trip, entity ids are remapped — but only through the channels the serializer can see:
-**`eid` column fields** and **relation targets**. An `EntityHandle` buried inside an `object<T>()` rich
-field is opaque JSON; it is serialized as a raw number and is **not** remapped, so after loading it
-points into the producer's index space and is almost certainly invalid.
+On a round-trip, entity ids are remapped — but only through the channels the serializer can
+see: **`eid` column fields** and **relation targets**. An `EntityHandle` buried inside an
+`object<T>()` rich field is opaque JSON; it is serialized as a raw number and is **not**
+remapped, so after loading it points into the producer's index space and is almost certainly
+invalid.
 :::
 
 To carry a reference that survives the wire, either:
@@ -155,5 +186,7 @@ const handle = index.get('player-1')
 
 ## See also
 
-- [Reactivity](/guide/reactivity) — `changedSince` reads the same version stamps the delta rides.
-- [Parallelism](/guide/parallelism) — the zero-copy `bootstrapForWorker` / `attachWorld` handoff.
+- [Reacting to changes](/guide/reactivity) — `changedSince` reads the same version stamps
+  the delta rides.
+- [Multithreading](/guide/parallelism) — the zero-copy `bootstrapForWorker` / `attachWorld`
+  handoff.

@@ -1,8 +1,9 @@
-// Fast, NON-FLAKY smoke for the REAL worker-pool speedup bench (bench/worker-pool/heavy-pool.ts).
-// It stands up the genuine @ecsia/scheduler WorkerPool (node:worker_threads + Atomics) at tiny sizes and
-// asserts the threaded run is byte-for-byte IDENTICAL to the single-thread executor over the SAME heavy
-// workload — the correctness gate behind the speedup claim. Speedup MAGNITUDE is informational (measured
-// by `pnpm bench:macro:pool`), never asserted here, so CI stays deterministic.
+// Fast, NON-FLAKY smoke test (a quick check that it compiles and runs, not a measurement) for the
+// REAL worker-pool speedup bench (bench/worker-pool/heavy-pool.ts). It stands up the genuine
+// @ecsia/scheduler WorkerPool (node:worker_threads + Atomics) at tiny sizes and asserts the threaded
+// run is byte-for-byte IDENTICAL to the single-thread executor over the SAME heavy workload — the
+// correctness gate behind the speedup claim. Speedup MAGNITUDE is informational (measured by
+// `pnpm bench:macro:pool`), never asserted here, so CI stays deterministic.
 //
 // Requires the BUILT scheduler dist (worker-entry + the worker can't load TS); `pnpm build` runs first in
 // the suite. Worker counts are clamped to os.cpus().length inside main().
@@ -31,10 +32,12 @@ describe('REAL worker-pool heavy bench reproduces the single-thread result on OS
     60_000,
   )
 
-  // ABOVE the 1024-row per-column reservation: each group now holds 1100 rows, so every column re-backs
-  // onto a new SAB and the wave-fence re-backing protocol (memory-buffers ) must keep the threaded
-  // run byte-identical to single-thread. Bounded per the resource budget (perGroup ≤ 2048, frames ≤ 6,
-  // workers ≤ 4). The boundary itself is unit-covered by scheduler/test/worker-growth-boundary.test.ts.
+  // ABOVE the 1024-row per-column reservation: each group now holds 1100 rows, so every column
+  // re-backs — moves to a new, larger SharedArrayBuffer (SAB, memory several threads can read and
+  // write at once). The re-backing protocol at the wave fence (the synchronization point between
+  // waves; see docs/spec/memory-buffers.md) must keep the threaded run byte-identical to
+  // single-thread. Bounded per the resource budget (perGroup ≤ 2048, frames ≤ 6, workers ≤ 4). The
+  // boundary itself is unit-covered by scheduler/test/worker-growth-boundary.test.ts.
   test(
     'threaded run with groups GROWN PAST the 1024-row reservation stays byte-identical to single-thread',
     async () => {

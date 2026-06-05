@@ -167,7 +167,7 @@ describe('@ecsia/three makeInstancedSyncSystem', () => {
     const world = createWorld({ components: [Position] })
     const mesh = mkMesh(8)
 
-    // Spawn 3 boids in one archetype. Archetype-walk order == spawn order, so slots are 0,1,2.
+    // Spawn 3 birds in one archetype. Archetype-walk order == spawn order, so slots are 0,1,2.
     const h0 = world.spawnWith([Position, { x: 100, y: 0, z: 0 }])
     const h1 = world.spawnWith([Position, { x: 200, y: 0, z: 0 }])
     const h2 = world.spawnWith([Position, { x: 300, y: 0, z: 0 }])

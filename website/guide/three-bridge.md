@@ -1,7 +1,10 @@
 # THREE.js bridge
 
-`@ecsia/three` mirrors ECS entities into THREE.js objects: an `EntityHandle → THREE.Object3D` registry,
-per-frame transform sync (to `Object3D`s and `InstancedMesh`es), and a frame driver.
+`@ecsia/three` keeps three.js objects in sync with your ECS entities (an entity is just an id — a
+thing in your world whose data lives in components). It gives you three pieces: an
+`EntityHandle → THREE.Object3D` registry, per-frame transform sync — to plain `Object3D`s and to
+`InstancedMesh`es (three.js's way of drawing many copies of one shape in a single draw call) — and a
+frame driver.
 
 ::: tip Opt-in, not in the umbrella
 `@ecsia/three` is deliberately **not** re-exported from `ecsia`. THREE is a large peer dependency
@@ -38,12 +41,13 @@ bindings.bind(h, new Object3D())
 bindings.objectOf(h)              // → the bound Object3D
 ```
 
-## Sync systems: columns → THREE every frame
+## Sync systems: component data → THREE every frame
 
-Two read-only systems copy transform columns to the THREE side each frame, so they layer **after** any
-system that writes position (a read-after-write conflict orders them — no manual ordering needed):
+Two read-only systems copy transform data to the THREE side each frame. Because they declare a read
+on position, the scheduler automatically orders them **after** any system that writes position — a
+read-after-write conflict does the ordering, so you never sequence them by hand:
 
-- `makeTransformSyncSystem({ position, bindings })` — copies columns into each bound `Object3D`.
+- `makeTransformSyncSystem({ position, bindings })` — copies positions into each bound `Object3D`.
 - `makeInstancedSyncSystem({ mesh, position })` — writes a `THREE.InstancedMesh`'s `instanceMatrix`.
 
 ```ts
@@ -66,8 +70,8 @@ scheduler.update(1 / 60)
 
 ## Driver: the frame loop
 
-`createThreeDriver({ update, render })` runs the loop: a `requestAnimationFrame` loop in the browser, or
-manual `.tick(dt)` stepping in Node (no rAF). A fixed-timestep option is available.
+`createThreeDriver({ update, render })` runs the loop: a `requestAnimationFrame` loop in the browser,
+or manual `.tick(dt)` stepping in Node (no rAF). A fixed-timestep option is available.
 
 ```ts
 import { createWorld, createScheduler } from 'ecsia'
@@ -86,9 +90,10 @@ for (let t = 0; t < 90; t++) driver.tick(1 / 60)
 
 ## A complete headless example
 
-The `three-boids` example in `examples/` runs the full bridge **headless** — it uses THREE's math and
-scene-graph core (`Object3D` / `InstancedMesh` / `Matrix4`) but no `WebGLRenderer`, so it runs in Node
-with no GPU and asserts that the THREE objects track the ECS positions every frame.
+The `threejs-birds` example in `examples/` simulates a flock of birds and runs the full bridge
+**headless** — it uses THREE's math and scene-graph core (`Object3D` / `InstancedMesh` / `Matrix4`)
+but no `WebGLRenderer`, so it runs in Node with no GPU and asserts that the THREE objects track the
+ECS positions every frame.
 
 ## See also
 

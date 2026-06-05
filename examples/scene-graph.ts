@@ -1,8 +1,9 @@
-// Example: a scene-graph hierarchy. A `ChildOf` EXCLUSIVE relation (one parent per node) wires the
-// tree; a transform-propagation pass walks nodes in depth order so a child's
-// world transform = parent world transform ∘ local transform. Demonstrates the first-class relations
-// runtime (createRelations), exclusive-relation re-target without archetype churn, depthOf, and
-// targetsOf for parent resolution — all through the ecsia umbrella.
+// A scene graph: a tree of objects where each child's position is relative to its parent. A
+// ChildOf exclusive relation (each entity can have at most one — i.e. one parent) wires the tree;
+// a propagation pass walks nodes shallowest-first so each child's world position = its parent's
+// world position + its own local offset. Demonstrates createRelations, depthOf, and targetsOf,
+// all through the ecsia umbrella. The thing to notice: re-parenting is a cheap in-place write —
+// entities never move between archetypes (the groups of entities sharing the same component set).
 
 import { createWorld, defineComponent, createRelations } from 'ecsia'
 import type { EntityHandle } from 'ecsia'
@@ -41,19 +42,21 @@ const DEFAULT_NODES: readonly SceneNodeSpec[] = [
 export function main(opts: SceneGraphOptions = {}): SceneGraphResult {
   const specs = opts.nodes ?? DEFAULT_NODES
 
-  // Per-call defs: component ids are world-scoped, so a fresh main() gets fresh registrations.
+  // Component definitions get their id when registered with a world, so a fresh main() makes
+  // fresh ones — that lets the example run repeatedly.
   const LocalTransform = defineComponent({ x: 'f32', y: 'f32' }, { name: 'local' })
   const WorldTransform = defineComponent({ x: 'f32', y: 'f32' }, { name: 'world' })
 
   const world = createWorld({ components: [LocalTransform, WorldTransform], maxEntities: 1 << 16 })
   const rel = createRelations(world)
-  // Exclusive: a node has at most one parent; re-parenting is an in-place eid write, no migration.
+  // Exclusive: a node has at most one parent. Re-parenting overwrites the link in place — no
+  // storage migration.
   const ChildOf = rel.defineRelation(null, { exclusive: true })
 
   const handles: EntityHandle[] = []
   for (const spec of specs) {
-    // Value-carrying spawn: initialize LocalTransform inline; WorldTransform stays membership-only (it
-    // is computed by the propagation pass below).
+    // spawnWith both creates the entity and fills in LocalTransform; WorldTransform is attached
+    // empty — the propagation pass below computes it.
     handles.push(world.spawnWith([LocalTransform, { x: spec.local.x, y: spec.local.y }], WorldTransform))
   }
   for (let i = 0; i < specs.length; i++) {
@@ -61,8 +64,8 @@ export function main(opts: SceneGraphOptions = {}): SceneGraphResult {
     if (parent !== null) rel.addPair(handles[i]!, ChildOf, handles[parent]!)
   }
 
-  // Propagate transforms in depth order: a node's world transform needs its parent's already computed,
-  // so we sort by depthOf (root depth 0) before composing. depthOf walks the exclusive parent chain.
+  // A node's world transform needs its parent's already computed, so sort by depthOf (root =
+  // depth 0) before composing. depthOf walks the exclusive parent chain.
   const order = handles
     .map((h, i) => ({ h, i, depth: rel.depthOf(h, ChildOf) }))
     .sort((a, b) => a.depth - b.depth)
@@ -71,10 +74,9 @@ export function main(opts: SceneGraphOptions = {}): SceneGraphResult {
   for (const { h, depth } of order) {
     if (depth > maxDepth) maxDepth = depth
 
-    // The EntityRef + its accessors are pooled per-world: a later world.entity()
-    // call rebinds the SAME singleton to a new row, and the stale-ref guard now THROWS if you read a
-    // ref after it rebound. So resolve every input to PLAIN NUMBERS before binding the next view —
-    // never hold two live accessors across a world.entity() call.
+    // world.entity() reuses ONE pooled reference per world: the next call re-points it, and
+    // reading a stale reference throws. So copy every input out to plain numbers before binding
+    // the next view — never hold two live accessors across a world.entity() call.
     const lt = world.entity(h).read(LocalTransform)
     const lx = lt.x
     const ly = lt.y

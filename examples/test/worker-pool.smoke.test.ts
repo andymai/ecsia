@@ -1,14 +1,16 @@
-// Execution-backed threaded smoke. The other worker
-// smoke tests drive scheduler.updateThreaded with an IN-PROCESS RoundDispatcher — they exercise the
-// wave/round/dispatch frame loop but NOT a real OS-thread pool. This test closes that gap: it stands up
-// the genuine @ecsia/scheduler WorkerPool (node:worker_threads + Atomics wave-sync) and drives a real
-// world through scheduler.updateThreaded(pool, dt), then asserts the worker-thread run reproduces the
-// single-thread executor's column state byte-for-byte. So the umbrella's "genuinely runs threaded"
-// claim is backed by EXECUTION on real threads, not by construction.
+// The one worker test that uses REAL OS threads. The other worker smoke tests drive
+// scheduler.updateThreaded with an in-process dispatcher — they exercise the threaded frame loop
+// but never leave the main thread. This test closes that gap: it stands up the genuine
+// @ecsia/scheduler WorkerPool (node:worker_threads, synchronized via Atomics), drives a real
+// world through scheduler.updateThreaded(pool, dt), and asserts the worker-thread run reproduces
+// the single-thread run's component data exactly. So the umbrella's "genuinely runs threaded"
+// claim is backed by execution on real threads, not by construction.
 //
-// Reuses the built worker-entry (dist) + the scheduler's kernel fixture (a .mjs a raw worker_threads Worker can
-// load without a TS transform), exactly as packages/scheduler/test/m7-threaded-update.integration.test.ts
-// does — the same real-pool path, reached from the umbrella's public surface.
+// Reuses the built worker entry (dist) plus the scheduler suite's kernel fixture — a kernel is
+// the function the worker thread runs, and the fixture is a plain .mjs file a raw worker_threads
+// Worker can load without a TypeScript transform. This is the same path
+// packages/scheduler/test/m7-threaded-update.integration.test.ts takes, reached here through the
+// umbrella's public surface.
 
 import { fileURLToPath } from 'node:url'
 import { describe, expect, test, afterEach } from 'vitest'
@@ -47,11 +49,12 @@ function seed(threaded: boolean, workers: number, n: number) {
 }
 
 describe('worker example genuinely runs threaded on a REAL WorkerPool', () => {
-  test('disjoint-write wave on real OS threads reproduces the single-thread column state', async () => {
+  test('two systems writing different components run on real OS threads and reproduce the single-thread state', async () => {
     const N = 32
     const FRAMES = 3
 
-    // Single-thread reference: defineSystem bodies are the arithmetic twins of the worker kernels.
+    // Single-thread reference: these system bodies do the same arithmetic as the worker kernels
+    // in the fixture module.
     const ref = seed(false, 0, N)
     const Regen = defineSystem({
       name: 'Regen',
@@ -71,7 +74,9 @@ describe('worker example genuinely runs threaded on a REAL WorkerPool', () => {
     })
     const refSched = createScheduler(ref.world, [Regen, Channel])
 
-    // Threaded run: the SAME plan, dispatched to 2 real worker threads through the public frame loop.
+    // Threaded run: the SAME plan, dispatched to 2 real worker threads through the public frame
+    // loop. The local run()/kernel bodies are empty placeholders — the real arithmetic lives in
+    // the kernel module the workers load.
     const thr = seed(true, 2, N)
     const RegenT = defineSystem({ name: 'Regen', read: [], write: [thr.Health], run() {} })
     const ChannelT = defineSystem({ name: 'Channel', read: [], write: [thr.Mana], run() {} })
@@ -94,7 +99,8 @@ describe('worker example genuinely runs threaded on a REAL WorkerPool', () => {
       await thrSched.updateThreaded(pool, 1)
     }
 
-    // The pool returned to the serial phase, and every entity's columns equal the single-thread run.
+    // The pool returned to the serial phase, and every entity's component values equal the
+    // single-thread run's.
     expect(thr.world.phase).toBe('serial')
     for (let i = 0; i < N; i++) {
       expect(thr.world.entity(thr.handles[i]!).read(thr.Health).hp).toBe(
