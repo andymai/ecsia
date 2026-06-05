@@ -14,6 +14,9 @@ underneath — `@ecsia/core`, `@ecsia/schema`, `@ecsia/relations`, `@ecsia/sched
 
 > **Status:** 0.1.0, not yet on npm — a local workspace package for now.
 
+Full documentation — guides and a generated API reference — at
+**[andymai.github.io/ecsia](https://andymai.github.io/ecsia/)**.
+
 ## Install
 
 ```sh

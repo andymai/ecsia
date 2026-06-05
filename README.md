@@ -7,7 +7,7 @@ Build simulations out of plain data, and let ecsia run them across threads for y
 [![CI](https://github.com/andymai/ecsia/actions/workflows/ci.yml/badge.svg)](https://github.com/andymai/ecsia/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
-**[Getting Started](./website/guide/getting-started.md)** · **[Core Concepts](./website/guide/core-concepts.md)** · **[Multithreading](./website/guide/parallelism.md)** · **[Performance](./website/guide/performance.md)**
+**[Getting Started](https://andymai.github.io/ecsia/guide/getting-started)** · **[Core Concepts](https://andymai.github.io/ecsia/guide/core-concepts)** · **[Multithreading](https://andymai.github.io/ecsia/guide/parallelism)** · **[Performance](https://andymai.github.io/ecsia/guide/performance)**
 
 </div>
 
@@ -118,18 +118,20 @@ compose them by hand.
 
 ## Documentation
 
-- **[Getting Started](./website/guide/getting-started.md)** — install, first world, first system
-- **[Core Concepts](./website/guide/core-concepts.md)** — entities, components, queries, and how ecsia stores them
-- **[Multithreading](./website/guide/parallelism.md)** — how `threaded: true` works, what runs where, and why results stay identical
-- **[Linking entities](./website/guide/relations.md)** — parent/child hierarchies and other entity-to-entity links
-- **[Reacting to changes](./website/guide/reactivity.md)** — run code when components are added, removed, or modified
-- **[Saving and syncing](./website/guide/serialization.md)** — snapshots, change payloads, worker handoff
-- **[three.js bridge](./website/guide/three-bridge.md)** — keeping three.js objects in sync with your data
-- **[Devtools](./website/guide/devtools.md)** — inspect a world and see why the scheduler made its choices
-- **[Performance](./website/guide/performance.md)** — measured benchmarks, methodology, reproduce instructions
+- **[Getting Started](https://andymai.github.io/ecsia/guide/getting-started)** — install, first world, first system
+- **[Core Concepts](https://andymai.github.io/ecsia/guide/core-concepts)** — entities, components, queries, and how ecsia stores them
+- **[Multithreading](https://andymai.github.io/ecsia/guide/parallelism)** — how `threaded: true` works, what runs where, and why results stay identical
+- **[Linking entities](https://andymai.github.io/ecsia/guide/relations)** — parent/child hierarchies and other entity-to-entity links
+- **[Reacting to changes](https://andymai.github.io/ecsia/guide/reactivity)** — run code when components are added, removed, or modified
+- **[Saving and syncing](https://andymai.github.io/ecsia/guide/serialization)** — snapshots, change payloads, worker handoff
+- **[three.js bridge](https://andymai.github.io/ecsia/guide/three-bridge)** — keeping three.js objects in sync with your data
+- **[Devtools](https://andymai.github.io/ecsia/guide/devtools)** — inspect a world and see why the scheduler made its choices
+- **[Performance](https://andymai.github.io/ecsia/guide/performance)** — measured benchmarks, methodology, reproduce instructions
 
-The same pages build into a VitePress site (`pnpm docs:build`), including a generated
-API reference.
+The full site — these guides plus a generated API reference — lives at
+**[andymai.github.io/ecsia](https://andymai.github.io/ecsia/)** and redeploys on every
+push to main. The sources are in [`website/`](./website) (`pnpm docs:dev` for a local
+preview).
 
 ## Packages
 
@@ -176,7 +178,7 @@ single-threaded result:
 | 4 | 3.60x |
 | 8 | 6.48x |
 
-Methodology and full tables on the [performance page](./website/guide/performance.md).
+Methodology and full tables on the [performance page](https://andymai.github.io/ecsia/guide/performance).
 
 ## Development
 
