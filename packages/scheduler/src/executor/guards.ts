@@ -50,7 +50,9 @@ export function makeScopedQuery(world: World, sb: SystemBox, dev: boolean): Worl
             `system '${sb.name}' issues a write(${def.name}) term but '${def.name}' is not in its declared write set (Must-Fix #2)`,
           )
         }
-      } else if (!readSet.has(id) && !writeSet.has(id)) {
+      } else if (role === 'read' && !readSet.has(id) && !writeSet.has(id)) {
+        // `with`/`without` are presence FILTERS (role 'other'), not data access — declaring the
+        // filtered component would be spurious, so only genuine read terms are access-checked.
         warn(
           `system '${sb.name}' references ${def.name} in a query but it is not in the system's declared read/write set`,
         )
