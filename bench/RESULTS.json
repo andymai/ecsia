@@ -1,0 +1,92 @@
+{
+  "env": {
+    "node": "v24.11.0",
+    "cpuModel": "AMD Ryzen 9 7950X3D 16-Core Processor",
+    "cpuCores": 32,
+    "date": "2026-06-05",
+    "commit": "b05e4d3",
+    "smoke": false
+  },
+  "config": {
+    "iterEntities": 50000,
+    "iterReps": 3,
+    "iterTimeMs": 300,
+    "poolPerGroup": 1024,
+    "poolFrames": 60,
+    "poolWorkers": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "poolSeed": 1234
+  },
+  "iterate": [
+    {
+      "name": "ecsia .each",
+      "hz": 1979.2821495621645,
+      "meanMs": 0.5059006952862258,
+      "nsPerEntity": 10.118013905724517
+    },
+    {
+      "name": "ecsia eachChunk",
+      "hz": 13689.587698513127,
+      "meanMs": 0.07309017612667638,
+      "nsPerEntity": 1.4618035225335275
+    },
+    {
+      "name": "miniplex",
+      "hz": 1523.2570533714863,
+      "meanMs": 0.6650321039823034,
+      "nsPerEntity": 13.300642079646067
+    },
+    {
+      "name": "bitECS",
+      "hz": 18983.6863145237,
+      "meanMs": 0.052720745036019596,
+      "nsPerEntity": 1.0544149007203918
+    }
+  ],
+  "trackedWrite": {
+    "name": "ecsia .each + .changed()",
+    "hz": 158.30124769702806,
+    "meanMs": 6.414970125000053,
+    "nsPerEntity": 128.29940250000107
+  },
+  "pool": {
+    "perGroup": 1024,
+    "groupCount": 8,
+    "totalEntities": 8192,
+    "heavyIters": 512,
+    "frames": 60,
+    "cpuCount": 32,
+    "serialMs": 11972.630111999999,
+    "serialChecksum": 2137.908802683087,
+    "perWorker": [
+      {
+        "workers": 1,
+        "ms": 12180.524484000001,
+        "speedup": 0.9829322315083323,
+        "checksum": 2137.908802683087
+      },
+      {
+        "workers": 2,
+        "ms": 6343.962271999997,
+        "speedup": 1.8872480003298489,
+        "checksum": 2137.908802683087
+      },
+      {
+        "workers": 4,
+        "ms": 3328.534163999997,
+        "speedup": 3.5969677708256236,
+        "checksum": 2137.908802683087
+      },
+      {
+        "workers": 8,
+        "ms": 1846.4341669999994,
+        "speedup": 6.48419008160609,
+        "checksum": 2137.908802683087
+      }
+    ]
+  }
+}

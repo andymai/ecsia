@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": ".report-dist",
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["iterate.ts", "relations.ts", "worker-pool/heavy-pool.ts"]
+}

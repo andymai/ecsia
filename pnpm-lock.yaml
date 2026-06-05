@@ -8,6 +8,15 @@ importers:
 
   .:
     devDependencies:
+      '@ecsia/ecsia':
+        specifier: workspace:*
+        version: link:packages/ecsia
+      '@ecsia/scheduler':
+        specifier: workspace:*
+        version: link:packages/scheduler
+      '@ecsia/schema':
+        specifier: workspace:*
+        version: link:packages/schema
       '@playwright/test':
         specifier: 1.49.1
         version: 1.49.1
