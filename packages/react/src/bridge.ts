@@ -126,6 +126,7 @@ export class ComponentStore {
       // Re-check on the first post-subscribe getSnapshot: the world may have ticked between the
       // render that computed the snapshot and this subscription (no observer covered the gap).
       this.#dirty = true
+      this.#bridge.__registerComponentStore(this.#def, this.watchedHandle, this)
       this.#bridge.__activateEntityWatcher(this.#def, this, VALUE_KINDS)
     }
     return () => {
@@ -144,6 +145,15 @@ export class ComponentStore {
       if (!snapshotsEqual(this.#snapshot, next)) this.#snapshot = next
       this.#dirty = false
     }
+    return this.#snapshot
+  }
+
+  // No observer covers server renders, so the cache is never invalidated there: always recompute,
+  // keeping the previous object's identity when the values match — a shared ticking server world
+  // stays honest without breaking memoization.
+  readonly getServerSnapshot = (): Readonly<Record<string, unknown>> | undefined => {
+    const next = computeSnapshot(this.#world, this.watchedHandle, this.#def)
+    if (!snapshotsEqual(this.#snapshot, next)) this.#snapshot = next
     return this.#snapshot
   }
 
@@ -182,6 +192,7 @@ export class HasStore {
     if (!this.#active) {
       this.#active = true
       this.#dirty = true
+      this.#bridge.__registerHasStore(this.#def, this.watchedHandle, this)
       this.#bridge.__activateEntityWatcher(this.#def, this, PRESENCE_KINDS)
     }
     return () => {
@@ -201,6 +212,8 @@ export class HasStore {
     }
     return this.#value
   }
+
+  readonly getServerSnapshot = (): boolean => this.#world.has(this.watchedHandle, this.#def)
 
   onEvent(kind: Kind, eventHandle: EntityHandle): void {
     if (kind !== 'remove' && eventHandle !== this.watchedHandle) return
@@ -230,6 +243,7 @@ export class QueryStore {
     if (!this.#active) {
       this.#active = true
       this.#dirty = true
+      this.#bridge.__registerQueryStore(this.#query, this)
       this.#bridge.__activateQueryWatcher(this.#comps, this)
     }
     return () => {
@@ -252,6 +266,13 @@ export class QueryStore {
     return this.#handles
   }
 
+  readonly getServerSnapshot = (): readonly EntityHandle[] => {
+    const next: EntityHandle[] = []
+    this.#query.each((e) => next.push(e.handle))
+    if (!sameMembership(this.#handles, next)) this.#handles = next
+    return this.#handles
+  }
+
   markDirty(): void {
     if (this.#dirty) return
     this.#dirty = true
@@ -265,7 +286,7 @@ class EffectWatcher implements EntityWatcher {
   readonly #handle: EntityHandle
   readonly watchedIndex: number
   readonly #callback: (snapshot: Readonly<Record<string, unknown>> | undefined, ctx: ObserverContext) => void
-  #lastWasAbsent = false
+  #lastWasAbsent: boolean
 
   constructor(
     world: EcsiaWorld,
@@ -278,6 +299,10 @@ class EffectWatcher implements EntityWatcher {
     this.#handle = handle
     this.watchedIndex = world.decodeHandle(handle).index
     this.#callback = callback
+    // Seed from current state: a watcher mounted on a handle whose index carries a still-draining
+    // remove (a previous occupant's, or its own death) must not fire a callback(undefined) for a
+    // value it never saw.
+    this.#lastWasAbsent = computeSnapshot(world, handle, def) === undefined
   }
 
   onEvent(kind: Kind, eventHandle: EntityHandle, ctx: ObserverContext): void {
@@ -308,41 +333,21 @@ export class ReactBridge {
     this.#world = world
   }
 
+  // Store factories: create-on-render, insert-on-first-subscribe. A render may never commit
+  // (aborted transition, renderToString), and a render-phase map insert would leak the entry for
+  // the world's lifetime — so the store only enters the map when its subscription activates, and
+  // an uncommitted render's store is plain garbage.
+
   componentStore(handle: EntityHandle, def: ComponentDef<Schema>): ComponentStore {
-    let byHandle = this.#componentStores.get(def)
-    if (byHandle === undefined) {
-      byHandle = new Map()
-      this.#componentStores.set(def, byHandle)
-    }
-    let store = byHandle.get(handle)
-    if (store === undefined) {
-      store = new ComponentStore(this, this.#world, handle, def)
-      byHandle.set(handle, store)
-    }
-    return store
+    return this.#componentStores.get(def)?.get(handle) ?? new ComponentStore(this, this.#world, handle, def)
   }
 
   hasStore(handle: EntityHandle, def: ComponentDef<Schema>): HasStore {
-    let byHandle = this.#hasStores.get(def)
-    if (byHandle === undefined) {
-      byHandle = new Map()
-      this.#hasStores.set(def, byHandle)
-    }
-    let store = byHandle.get(handle)
-    if (store === undefined) {
-      store = new HasStore(this, this.#world, handle, def)
-      byHandle.set(handle, store)
-    }
-    return store
+    return this.#hasStores.get(def)?.get(handle) ?? new HasStore(this, this.#world, handle, def)
   }
 
   queryStore(query: QueryLike): QueryStore {
-    let store = this.#queryStores.get(query)
-    if (store === undefined) {
-      store = new QueryStore(this, query)
-      this.#queryStores.set(query, store)
-    }
-    return store
+    return this.#queryStores.get(query) ?? new QueryStore(this, query)
   }
 
   /** Register a useComponentEffect callback; returns its dispose. Not shared — one per hook. */
@@ -359,6 +364,34 @@ export class ReactBridge {
   }
 
   // --- store wiring (package-internal; `__` marks it off the public surface) ---
+
+  // Register methods run at (re)subscribe time. First-wins on a key collision: two renders can
+  // race a fresh store for the same key before either commits — the loser still works through its
+  // own watcher and converges to the canonical store at its next render. A resubscribe after
+  // eviction (strict mode's unsubscribe/resubscribe pair) re-inserts, so later renders keep
+  // resolving to the same store and its snapshot identity.
+
+  __registerComponentStore(def: ComponentDef<Schema>, handle: EntityHandle, store: ComponentStore): void {
+    let byHandle = this.#componentStores.get(def)
+    if (byHandle === undefined) {
+      byHandle = new Map()
+      this.#componentStores.set(def, byHandle)
+    }
+    if (!byHandle.has(handle)) byHandle.set(handle, store)
+  }
+
+  __registerHasStore(def: ComponentDef<Schema>, handle: EntityHandle, store: HasStore): void {
+    let byHandle = this.#hasStores.get(def)
+    if (byHandle === undefined) {
+      byHandle = new Map()
+      this.#hasStores.set(def, byHandle)
+    }
+    if (!byHandle.has(handle)) byHandle.set(handle, store)
+  }
+
+  __registerQueryStore(query: QueryLike, store: QueryStore): void {
+    if (!this.#queryStores.has(query)) this.#queryStores.set(query, store)
+  }
 
   __activateEntityWatcher(def: ComponentDef<Schema>, watcher: EntityWatcher, kinds: readonly Kind[]): void {
     for (const kind of kinds) this.#acquire(def, kind)
@@ -435,6 +468,14 @@ export class ReactBridge {
   __liveObserverCount(): number {
     let n = 0
     for (const kinds of this.#observers.values()) n += kinds.size
+    return n
+  }
+
+  /** Live store-map entry count — the render-phase leak probe (uncommitted renders must leave 0). */
+  __liveStoreCount(): number {
+    let n = this.#queryStores.size
+    for (const byHandle of this.#componentStores.values()) n += byHandle.size
+    for (const byHandle of this.#hasStores.values()) n += byHandle.size
     return n
   }
 

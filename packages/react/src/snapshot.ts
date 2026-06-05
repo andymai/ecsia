@@ -67,9 +67,11 @@ export function computeSnapshot(
 }
 
 /**
- * Field-shallow equality between two snapshots: scalars/strings/object-refs by `===`, vec copies
- * elementwise. Used to keep the previous snapshot's identity when a write lands the same values,
- * so `useSyncExternalStore` sees no change and the hook does not re-render.
+ * Field-shallow equality between two snapshots: scalars/strings by `===`, arrays element-by-`===`
+ * (vec copies, but also an array held in an `object<T>` field — two distinct arrays with identical
+ * elements compare equal), other object refs by `===`. Used to keep the previous snapshot's
+ * identity when a write lands the same values, so `useSyncExternalStore` sees no change and the
+ * hook does not re-render.
  */
 export function snapshotsEqual(
   a: Readonly<Record<string, unknown>> | undefined,

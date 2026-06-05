@@ -60,6 +60,14 @@ which fire once per `scheduler.update(dt)` — run the simulation loop (a driver
 outside the loop (e.g. in a click handler) becomes visible at the next tick. A world
 that never ticks appears frozen.
 
+## SSR
+
+Hooks render synchronously on the server: `getServerSnapshot` recomputes from the world
+on every server render pass, so each `renderToString` reflects the world's state at that
+moment. Create a **world per request** — a shared, ticking server world can change
+between render passes, and the emitted HTML must match the world the client hydrates
+against.
+
 ## Links
 
 - Repository & full docs: https://github.com/andymai/ecsia

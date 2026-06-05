@@ -1,7 +1,8 @@
 // The hook surface. Every value-bearing hook is useSyncExternalStore over a bridge store:
 // subscribe registers the listener (refcounted core observer underneath), getSnapshot returns the
-// store's CACHED snapshot, and getServerSnapshot is the same computation (ecsia reads are
-// synchronous and Node-safe). Handles in, snapshots out — no EntityRef ever crosses this surface.
+// store's CACHED snapshot, and getServerSnapshot always recomputes (identity-preserved when values
+// match) — no observer invalidates the cache on the server, and ecsia reads are synchronous and
+// Node-safe. Handles in, snapshots out — no EntityRef ever crosses this surface.
 //
 // Visibility latency: hooks reflect world state as of the last completed update()'s observer
 // drain. A world that is not ticking appears frozen to hooks.
@@ -27,7 +28,7 @@ export function useQuery(...terms: readonly QueryTerm[]): readonly EntityHandle[
   // the SAME cached LiveQuery — its identity is the bridge's term-signature key.
   const query = world.query(...(terms as QueryTerm[])) as unknown as QueryLike
   const store = bridgeFor(world).queryStore(query)
-  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot)
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot)
 }
 
 /** The first handle matching `terms`, or `undefined`. Same re-render cut as {@link useQuery}. */
@@ -48,7 +49,7 @@ export function useComponent<const C extends ComponentDef<Schema>>(
 ): ComponentSnapshot<C> | undefined {
   const world = useWorld()
   const store = bridgeFor(world).componentStore(handle, def)
-  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot) as
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot) as
     | ComponentSnapshot<C>
     | undefined
 }
@@ -60,7 +61,7 @@ export function useComponent<const C extends ComponentDef<Schema>>(
 export function useHas(handle: EntityHandle, def: ComponentDef<Schema>): boolean {
   const world = useWorld()
   const store = bridgeFor(world).hasStore(handle, def)
-  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot)
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot)
 }
 
 /**

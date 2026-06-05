@@ -1,9 +1,10 @@
 // Concurrency smoke: world.update() interleaved with startTransition renders. useSyncExternalStore
-// detects mid-render store changes and re-renders consistently, so the COMMITTED tree never shows a
+// detects mid-render store changes and re-renders consistently, so NO committed tree ever shows a
 // torn frame where useQuery and useComponent disagree (a listed row whose component reads as gone).
+// A per-commit effect log records (rowCount, tornCount) for EVERY commit, not just the final tree.
 
 import { describe, expect, test } from 'vitest'
-import { startTransition, useState } from 'react'
+import { startTransition, useEffect, useState } from 'react'
 import { render, act, screen } from '@testing-library/react'
 import { defineComponent } from '@ecsia/core'
 import type { EntityHandle } from '@ecsia/core'
@@ -23,8 +24,20 @@ describe('startTransition smoke', () => {
       for (let i = 0; i < 4; i++) spawned.push(world.spawnWith([Health, { hp: i + 1 }]))
       tick()
 
+      const commits: Array<{ rows: number; torn: number }> = []
+      const logCommit = (): void => {
+        const rows = Array.from(document.querySelectorAll('[data-row]'))
+        commits.push({
+          rows: rows.length,
+          torn: rows.filter((r) => r.textContent === 'TORN').length,
+        })
+      }
+
       function Row({ handle, Health: def }: { handle: EntityHandle; Health: ReturnType<typeof mkHealth> }) {
         const health = useComponent(handle, def)
+        // No dep array: observes the committed tree after every commit that re-rendered this row —
+        // value-write commits re-render only rows, which App's effect would never see.
+        useEffect(logCommit)
         return <li data-row="">{health === undefined ? 'TORN' : `hp:${health.hp}`}</li>
       }
 
@@ -33,6 +46,7 @@ describe('startTransition smoke', () => {
         const [generation, setGeneration] = useState(0)
         bumpGeneration = () => setGeneration((g) => g + 1)
         const handles = useQuery(read(Health))
+        useEffect(logCommit)
         return (
           <ul data-testid="list" data-generation={generation}>
             {handles.map((h) => (
@@ -72,6 +86,13 @@ describe('startTransition smoke', () => {
       }
 
       expect(Number(screen.getByTestId('list').dataset['generation'])).toBeGreaterThan(0)
+
+      // EVERY committed frame held the invariant — not just the final tree.
+      expect(commits.length).toBeGreaterThan(1)
+      for (const [i, commit] of commits.entries()) {
+        expect(commit.torn, `commit ${i} (${commit.rows} rows)`).toBe(0)
+        expect(commit.rows, `commit ${i}`).toBeGreaterThan(0)
+      }
     },
     15_000,
   )

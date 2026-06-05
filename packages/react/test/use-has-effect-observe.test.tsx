@@ -151,6 +151,35 @@ describe('useComponentEffect', () => {
     expect(calls).toEqual([undefined])
   })
 
+  test("a previous occupant's draining remove never fires a watcher mounted on the new occupant without the component", () => {
+    const Health = mkHealth()
+    const { world, tick } = makeKit([Health])
+    const stale = world.spawnWith([Health, { hp: 1 }])
+    tick()
+
+    // The freelist reuses the slot: same index, no Health on the new occupant. The despawn's
+    // remove event is still draining when the watcher mounts.
+    world.despawn(stale)
+    const fresh = world.spawn()
+    expect(world.decodeHandle(fresh).index).toBe(world.decodeHandle(stale).index)
+
+    const calls: unknown[] = []
+    function Probe({ handle }: { handle: EntityHandle }) {
+      useComponentEffect(handle, Health, (snapshot) => {
+        calls.push(snapshot)
+      })
+      return null
+    }
+    render(
+      <WorldProvider world={world}>
+        <Probe handle={fresh} />
+      </WorldProvider>,
+    )
+
+    tick()
+    expect(calls).toEqual([])
+  })
+
   test('events coalesce: many writes in one tick -> one callback', () => {
     const Health = mkHealth()
     const { world, tick } = makeKit([Health])

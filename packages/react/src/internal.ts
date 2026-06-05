@@ -7,3 +7,8 @@ import type { EcsiaWorld } from './world.js'
 export function liveObserverCount(world: EcsiaWorld): number {
   return bridgeFor(world).__liveObserverCount()
 }
+
+/** Live store-map entry count held by `world`'s bridge — the render-phase leak tests' probe. */
+export function liveStoreCount(world: EcsiaWorld): number {
+  return bridgeFor(world).__liveStoreCount()
+}

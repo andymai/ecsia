@@ -3,8 +3,8 @@
 // after unmount — asserted via observe()/dispose() accounting on a wrapped world.
 
 import { describe, expect, test } from 'vitest'
-import { StrictMode } from 'react'
-import { render, screen } from '@testing-library/react'
+import { StrictMode, useState } from 'react'
+import { act, render, screen } from '@testing-library/react'
 import { defineComponent, onChange } from '@ecsia/core'
 import type { EntityHandle } from '@ecsia/core'
 import { read } from '@ecsia/schema'
@@ -53,6 +53,37 @@ describe('strict-mode refcount hygiene', () => {
     unmount()
     expect(liveObservers()).toBe(0)
     expect(liveObserverCount(world)).toBe(0)
+  })
+
+  test("StrictMode's unsubscribe/resubscribe keeps the canonical store: snapshot identity survives a re-render", () => {
+    const Health = mkHealth()
+    const { world, tick } = makeKit([Health])
+    const e = world.spawnWith([Health, { hp: 3 }])
+    tick()
+
+    // StrictMode's effect double-invoke unsubscribes (evicting the store) then resubscribes; the
+    // resubscribe must re-insert, or the next render would mint a duplicate store whose fresh
+    // snapshot object busts memoization.
+    const seen: unknown[] = []
+    let force: () => void = () => {}
+    function Probe({ handle }: { handle: EntityHandle }) {
+      const [, setN] = useState(0)
+      force = () => setN((n) => n + 1)
+      seen.push(useComponent(handle, Health))
+      return null
+    }
+    render(
+      <StrictMode>
+        <WorldProvider world={world}>
+          <Probe handle={e} />
+        </WorldProvider>
+      </StrictMode>,
+    )
+    const base = seen[seen.length - 1]
+    expect(base).toEqual({ hp: 3 })
+
+    act(() => force())
+    expect(seen[seen.length - 1]).toBe(base)
   })
 
   test('two hooks on the same (entity, component) share one refcounted observer set', () => {
