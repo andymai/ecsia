@@ -13,7 +13,7 @@ import type { AccessorWorld } from '../src/internal.js'
 const newBuffers = (): Buffers => new Buffers({ capabilities: probeCapabilities('single'), maxEntities: 1 << 20 })
 
 function stubWorld(): AccessorWorld {
-  return { trackWrite: () => {}, handleIndex: (h) => h as number }
+  return { tracking: { active: true }, trackWrite: () => {}, handleIndex: (h) => h as number }
 }
 
 describe('defineComponent — fail-fast validation (define.ts §2)', () => {
@@ -133,7 +133,7 @@ describe('makeAccessorFactory — guards + vec setter + whole-instance rebind (a
   test('the vec setter writes the whole row from an ArrayLike and tracks (accessor.ts:183-187)', () => {
     const buffers = newBuffers()
     const calls: number[] = []
-    const trackingWorld: AccessorWorld = { trackWrite: (i) => calls.push(i), handleIndex: (h) => h as number }
+    const trackingWorld: AccessorWorld = { tracking: { active: true }, trackWrite: (i) => calls.push(i), handleIndex: (h) => h as number }
     const Vel = defineComponent({ v: vec('f32', 3) }, { name: 'c17' }) as ComponentDef<Schema>
     new ComponentRegistry().register([Vel])
     const set = buildColumnSet({ buffers, archetypeId: 0, def: Vel, world: trackingWorld, initialCapacity: 4 })

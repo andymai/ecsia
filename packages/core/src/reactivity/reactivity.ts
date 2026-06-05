@@ -41,6 +41,10 @@ export interface ReactivityDeps {
   refOf(index: number): EntityRef
   /** index → its current FULL (generational) handle — for the structural journal's portable handles (§7.3). */
   resolveHandle(index: number): number
+  /** The accessor's shared write-path fast-out cell. Reactivity flips `.active` whenever a write consumer
+   * (changed-flavor pointer / change observer) or changeVersion stamping (de)registers, so the setter's
+   * `track()` can skip the handleIndex decode + closure hops when no consumer is present (P7). */
+  readonly tracking: { active: boolean }
 }
 
 /** Per-query write-log flavor state (reactivity.md §5.1): a LogPointer + a per-frame dedup bitset. */
@@ -276,6 +280,7 @@ export class Reactivity {
   /** Enable per-row changeVersion stamping (a `.changed` predicate consumer / serializer exists). */
   enableChangeVersion(): void {
     this.#changeVersion.enabled = true
+    this.#deps.tracking.active = true
   }
 
   /**
@@ -319,9 +324,12 @@ export class Reactivity {
 
   // --- observers (§7) --------------------------------------------------------
 
-  /** Recompute the write-log fast-out flag after any consumer (de)registers (§3.3). */
+  /** Recompute the write-log fast-out flag after any consumer (de)registers (§3.3). Also refreshes the
+   * accessor's shared `tracking.active` cell: true iff trackWrite would do real work (a write-log
+   * consumer exists OR changeVersion stamping is enabled). When false the setter skips the whole chain. */
   #refreshWriteLogActive(): void {
     this.#writeLogActive = this.#changedPointers.length > 0 || this.#observers.hasChangeObservers
+    this.#deps.tracking.active = this.#writeLogActive || this.#changeVersion.enabled
   }
 
   observe(term: ObserverTerm, handler: ObserverHandler): ObserverHandle {

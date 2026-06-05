@@ -52,6 +52,9 @@ function stubWorld(): AccessorWorld & { calls: Array<[number, number, number?]> 
     calls,
     trackWrite: (index, componentId, fieldIndex) => calls.push([index, componentId as number, fieldIndex]),
     handleIndex: (h) => (h as number) & 0x3fffff,
+    // A live consumer is "present" for these spy tests so the setter's P7 fast-out does not skip the
+    // trackWrite call site under test.
+    tracking: { active: true },
   }
 }
 

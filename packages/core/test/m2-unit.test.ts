@@ -20,6 +20,7 @@ const newBuffers = (): Buffers =>
 function stubWorld(): AccessorWorld {
   return {
     trackWrite: () => {},
+    tracking: { active: true },
     handleIndex: (h) => (h as number) & 0x3fffff,
   }
 }
