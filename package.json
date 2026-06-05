@@ -17,6 +17,7 @@
     "bench": "vitest bench --run",
     "bench:macro": "BENCH_MACRO=1 vitest run --project bench",
     "bench:macro:pool": "BENCH_MACRO=1 vitest run --project bench bench/test/heavy-pool.smoke.test.ts",
+    "bench:report": "node scripts/bench-report.mjs",
     "smoke:runtime": "node scripts/runtime-smoke.mjs",
     "smoke:browser:bundle": "node scripts/browser-smoke/build.mjs",
     "smoke:browser": "playwright test --config scripts/browser-smoke/playwright.config.ts",
@@ -26,6 +27,9 @@
     "docs:build": "pnpm docs:api && vitepress build website && pnpm docs:check"
   },
   "devDependencies": {
+    "@ecsia/ecsia": "workspace:*",
+    "@ecsia/scheduler": "workspace:*",
+    "@ecsia/schema": "workspace:*",
     "@playwright/test": "1.49.1",
     "@types/node": "^22.10.0",
     "@types/three": "^0.169.0",

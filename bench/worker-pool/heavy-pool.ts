@@ -45,12 +45,15 @@ const DAMP = 0.015
 // equal to single-thread (asserted by the smoke).
 const MAX_ROWS_PER_COLUMN = 1024
 
-const WORKER_ENTRY = fileURLToPath(
-  new URL('../../packages/scheduler/dist/workers/worker-entry.js', import.meta.url),
-)
-const KERNEL_MODULE = fileURLToPath(
-  new URL('../../packages/scheduler/test/fixtures/heavy-bench-kernels.mjs', import.meta.url),
-)
+// Default relative to THIS file's source location (bench/worker-pool/ → repo root is ../../). The
+// tsx-free report runner (scripts/bench-report.mjs) emits this module to a different depth, so it sets
+// ECSIA_WORKER_ENTRY / ECSIA_KERNEL_MODULE to absolute paths; the vitest source path uses the default.
+const WORKER_ENTRY =
+  process.env['ECSIA_WORKER_ENTRY'] ??
+  fileURLToPath(new URL('../../packages/scheduler/dist/workers/worker-entry.js', import.meta.url))
+const KERNEL_MODULE =
+  process.env['ECSIA_KERNEL_MODULE'] ??
+  fileURLToPath(new URL('../../packages/scheduler/test/fixtures/heavy-bench-kernels.mjs', import.meta.url))
 
 interface Body6 {
   px: number

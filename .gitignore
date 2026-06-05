@@ -15,3 +15,6 @@ website/.vitepress/cache/
 website/reference/
 # Per-page snippet scratch files written by scripts/check-doc-snippets.mjs.
 website/.snippet-check/
+
+# Transient JS emit of the bench builders, produced by scripts/bench-report.mjs (bench:report).
+bench/.report-dist/
