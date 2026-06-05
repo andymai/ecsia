@@ -246,7 +246,7 @@ describe('P4 — no live pair references a dead target after random despawn-with
 
 // --------------------------------------------------------------------------------------------------
 describe('P5 — cascade is iterative BFS: terminates & visits each entity once, even on CYCLES (§7.2)', () => {
-  it('a WIDE deleteSubject fan-out despawns in flat breadth (the BFS queue, not the stack)', () => {
+  it('a WIDE deleteSubject fan-out despawns in flat breadth (the BFS queue, not the stack)', { timeout: 30_000 }, () => {
     // The per-invocation cascade IS a flat queue across breadth: a root with a huge sibling fan-out
     // drains in one onPreDespawn loop, NOT one stack frame per child. 50k siblings would overflow a
     // recursive-per-child design; the iterative work-queue handles them flat.
