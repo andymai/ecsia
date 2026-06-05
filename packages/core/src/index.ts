@@ -148,3 +148,6 @@ export type { ColumnSet } from './component/index.js'
 
 export type { StorageStrategy } from '@ecsia/schema'
 export type { ResolvedPair } from './query/index.js'
+
+// INTERNAL (cross-package): portable dev-mode flag
+export { IS_DEV } from './env.js'
