@@ -749,7 +749,7 @@ export class LiveQuery {
  * q.eachChunk((c) => {
  * const px = c.column(Position, 'x'), py = c.column(Position, 'y')
  * const dx = c.column(Velocity, 'dx'), dy = c.column(Velocity, 'dy')
- * for (let i = 0; i < c.count; i) { px[i] += dx[i] * dt; py[i] += dy[i] * dt }
+ * for (let i = 0; i < c.count; i++) { px[i] += dx[i] * dt; py[i] += dy[i] * dt }
  * })
  * ```
  *

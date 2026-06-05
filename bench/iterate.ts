@@ -92,6 +92,49 @@ export function makeEcsiaCursorIter(n: number): IterCase {
   }
 }
 
+// The pinned-columns variant. Where eachChunk re-resolves its column views every call, bindColumns
+// resolves them ONCE at setup and invokes the factory to mint a persistent runner closure — V8
+// specializes the captured views into the optimized loop, which is the whole win. The two contract
+// points the factory shape encodes: the runner takes zero arguments, and the live row count is read
+// from the identity-stable `meta` inside the runner. All spawning happens before the bind, so column
+// growth never invalidates the binding (the pre-sizing discipline the docs recommend).
+export function makeEcsiaPinnedIter(n: number): IterCase {
+  const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
+  const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
+  const world = createWorld({ components: [Position, Velocity], maxEntities: nextPow2(n) })
+  let first = 0 as unknown as ReturnType<typeof world.spawnWith>
+  for (let i = 0; i < n; i++) {
+    const h = world.spawnWith(Position, Velocity)
+    if (i === 0) first = h
+    const v = world.entity(h).write(Velocity) as { dx: number; dy: number }
+    v.dx = 1
+    v.dy = 0.5
+  }
+  const q = world.query(write(Position), write(Velocity))
+  const run = q.bindColumns(
+    [Position, 'x'],
+    [Position, 'y'],
+    [Velocity, 'dx'],
+    [Velocity, 'dy'],
+    ([px, py, dx, dy], meta) => () => {
+      const count = meta.count
+      for (let i = 0; i < count; i++) {
+        px[i] = px[i]! + dx[i]! * DT
+        py[i] = py[i]! + dy[i]! * DT
+      }
+    },
+  )
+  return {
+    name: 'ecsia-pinned',
+    step() {
+      run()
+    },
+    sampleX() {
+      return (world.entity(first).read(Position) as { x: number }).x
+    },
+  }
+}
+
 interface MiniEntity {
   position: { x: number; y: number }
   velocity: { dx: number; dy: number }
