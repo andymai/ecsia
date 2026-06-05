@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/andymai/ecsia/compare/core-v0.2.0...core-v0.3.0) (2026-06-05)
+
+
+### Features
+
+* field-level serialization control (persist flags) + schemaHash-gated deltas ([#16](https://github.com/andymai/ecsia/issues/16)) ([37df715](https://github.com/andymai/ecsia/commit/37df71551bbda819dc81de7171869d912fc67935))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.3.0
+
 ## [0.2.0](https://github.com/andymai/ecsia/compare/core-v0.1.0...core-v0.2.0) (2026-06-05)
 
 
