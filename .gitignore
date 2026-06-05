@@ -5,3 +5,6 @@ coverage/
 .DS_Store
 *.log
 references/
+
+# Internal working documents (research, specs, planning) — local only, never shipped.
+docs/
