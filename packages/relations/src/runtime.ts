@@ -86,6 +86,8 @@ interface RelationsApi {
   getPair(subject: EntityHandle, relation: RelationDef<Schema | void>, target: EntityHandle): PairAccessor
   subjectsOf(relation: RelationDef<Schema | void>, target: EntityHandle): Iterable<EntityHandle>
   targetsOf(subject: EntityHandle, relation: RelationDef<Schema | void>): Iterable<EntityHandle>
+  /** Q-PA1: the single current target of an exclusive relation (eid column read, O(1)); null if absent. Throws on a non-exclusive relation. */
+  targetOf(subject: EntityHandle, relation: RelationDef<Schema | void>): EntityHandle | null
   depthOf(relation: RelationDef<Schema | void>, subject: EntityHandle): number
   readonly Pair: (relation: RelationDef<Schema | void>, target: EntityHandle | typeof Wildcard) => unknown
 }
@@ -421,7 +423,10 @@ export function createRelations(world: World): RelationsApi {
   }
 
   function hasPair(subject: EntityHandle, relation: RelationDef<Schema | void>, target: EntityHandle): boolean {
-    if (!host.isAlive(subject)) return false
+    // P4 (no-dangling): both endpoints must be the LIVE occupants of their indices. handleIndex strips
+    // the generation, so a stale handle whose index was recycled would otherwise alias the live entity
+    // now in that slot. isAlive checks the generation, closing the aliasing class.
+    if (!host.isAlive(subject) || !host.isAlive(target)) return false
     const rt = requireRuntime(relation)
     const sIdx = host.handleIndex(subject)
     if (rt.exclusive) {
@@ -440,6 +445,12 @@ export function createRelations(world: World): RelationsApi {
 
   function getPair(subject: EntityHandle, relation: RelationDef<Schema | void>, target: EntityHandle): PairAccessor {
     const rt = requireRuntime(relation)
+    // P4 (no-dangling): a stale (recycled-index) endpoint must not alias the live occupant. Guard both
+    // ends before resolving indices; an inert accessor is the safe answer for a dead pair.
+    if (!host.isAlive(subject) || !host.isAlive(target)) {
+      const inert = (): Record<string, unknown> => ({})
+      return { read: inert, write: inert }
+    }
     const sIdx = host.handleIndex(subject)
     const tIdx = host.handleIndex(target)
     if (rt.exclusive) {
@@ -466,12 +477,18 @@ export function createRelations(world: World): RelationsApi {
 
   function* subjectsOf(relation: RelationDef<Schema | void>, target: EntityHandle): Iterable<EntityHandle> {
     const rt = requireRuntime(relation)
+    // P4 (no-dangling): the back-ref index is keyed by bare entity INDEX (handleIndex strips generation),
+    // so a despawned handle whose index was recycled would alias the live entity now in that slot. Guard
+    // the queried target's liveness/generation FIRST — a dead handle has no subjects.
+    if (!host.isAlive(target)) return
     const set = rt.backref.get(host.handleIndex(target)) ?? EMPTY_SET
     for (const s of set) if (host.isAlive(s)) yield s
   }
 
   function* targetsOf(subject: EntityHandle, relation: RelationDef<Schema | void>): Iterable<EntityHandle> {
     const rt = requireRuntime(relation)
+    // P4 (no-dangling): a stale (recycled-index) subject must not alias the live occupant of that slot.
+    if (!host.isAlive(subject)) return
     const sIdx = host.handleIndex(subject)
     if (rt.exclusive) {
       const t = readExclusiveTarget(rt, subject)
@@ -500,6 +517,13 @@ export function createRelations(world: World): RelationsApi {
       const h = host.handleOfIndex(tIdx)
       if (host.isAlive(h)) yield h
     }
+  }
+
+  function targetOf(subject: EntityHandle, relation: RelationDef<Schema | void>): EntityHandle | null {
+    const rt = requireRuntime(relation)
+    if (!rt.exclusive) throw new Error('targetOf: only valid for exclusive (single-target) relations')
+    if (!host.isAlive(subject)) return null
+    return readExclusiveTarget(rt, subject)
   }
 
   // --- §9 lazy hierarchy depth -----------------------------------------------
@@ -830,6 +854,7 @@ export function createRelations(world: World): RelationsApi {
     getPair,
     subjectsOf,
     targetsOf,
+    targetOf,
     depthOf,
     Pair,
   }

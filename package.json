@@ -12,7 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b --noEmit false",
-    "bench": "vitest bench --run"
+    "typecheck:extras": "tsc -p examples/tsconfig.json && tsc -p bench/tsconfig.json",
+    "bench": "vitest bench --run",
+    "bench:macro": "BENCH_MACRO=1 vitest run --project bench"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
