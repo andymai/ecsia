@@ -8,7 +8,15 @@
 // matchingArchetypes contiguous rows (the hot path, O(A) matched at archetype creation, NOT per
 // entity) and pokes the per-(archetype, component) accessor singleton — zero allocation per row.
 
-import type { ArchetypeId, ComponentDef, ComponentId, EntityHandle, FieldDescriptor, Schema } from '@ecsia/schema'
+import type {
+  ArchetypeId,
+  ComponentDef,
+  ComponentId,
+  EntityHandle,
+  FieldDescriptor,
+  QueryTerm,
+  Schema,
+} from '@ecsia/schema'
 import type { ColumnSet } from '../component/index.js'
 import type { Archetype } from '../storage/index.js'
 import type { Column, TypedArray } from '../memory/index.js'
@@ -96,6 +104,7 @@ export class LiveQuery {
   readonly current: SparseSetU32
   readonly #byId: Archetype[]
   readonly #deps: LiveQueryDeps
+  readonly #queryFn: ((terms: readonly QueryTerm[]) => LiveQuery) | null
   readonly #bindings = new Map<string, ValueBinding>()
   #delta: DeltaLists | null = null
   #reactivity: ReactivityQueryHooks | null = null
@@ -109,16 +118,31 @@ export class LiveQuery {
     current: SparseSetU32,
     byId: Archetype[],
     deps: LiveQueryDeps,
+    queryFn: ((terms: readonly QueryTerm[]) => LiveQuery) | null = null,
   ) {
     this.compiled = compiled
     this.terms = terms
     this.current = current
     this.#byId = byId
     this.#deps = deps
+    this.#queryFn = queryFn
   }
 
   get count(): number {
     return this.current.size
+  }
+
+  /**
+   * Derive a narrower query: sugar over `world.query([...this.terms, ...terms])`, riding the same
+   * canonical-hash dedup — deriving is REFERENCE-identical to writing the combined query directly
+   * (the hash is order-independent, so chaining order is irrelevant too). No new matching machinery;
+   * flavors (.added/.removed/.changed) are per cached query state, NOT inherited from this one.
+   * Re-deriving a term already present behaves exactly like listing it twice in `world.query`
+   * (duplicates are tolerated: identical matching, the read/write split stays type-level).
+   */
+  derive(...terms: readonly QueryTerm[]): LiveQuery {
+    if (this.#queryFn === null) throw new Error('LiveQuery.derive: not attached to a query engine')
+    return this.#queryFn([...(this.terms as readonly QueryTerm[]), ...terms])
   }
 
   // --- flavor declaration ----------------------------------

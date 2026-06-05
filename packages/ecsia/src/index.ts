@@ -226,6 +226,7 @@ export type {
   ColumnViewOf,
   ColumnViews,
   BoundColumnsMeta,
+  DerivedQuery,
   QueryTerm,
   QueryElement,
   Has,
