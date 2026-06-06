@@ -748,6 +748,56 @@ export function createWorld(options: WorldOptions = {}): World {
     }
   }
 
+  // Cold residents in ascending entity-index order. This ordering is a CONTRACT shared by
+  // coldArchetypeView and changedRows below: the delta serializer pairs changedRows' row numbers
+  // with the materialized view's rows, so both must enumerate residents identically.
+  const coldResidentsSorted = (archetypeId: number): number[] => {
+    const out = [...storage.coldResidentsOf(archetypeId)]
+    out.sort((a, b) => a - b)
+    return out
+  }
+
+  // Cold archetypes keep their entities in per-TYPE shared blocks (non-contiguous rows), but the
+  // wire format reads contiguous per-archetype columns — so the serialize view MATERIALIZES scratch
+  // copies. Read-only consumers (snapshot/delta/structural) never write back through these. The
+  // copy cost is per-archetypes() call and proportional to cold residency, which is the rare case
+  // by construction; the alternative was silently dropping cold entities from snapshots.
+  const coldArchetypeView = (arch: Archetype): SerializeArchetype | null => {
+    const residents = coldResidentsSorted(arch.id as number)
+    if (residents.length === 0) return null
+    const rows = new Uint32Array(residents.length)
+    for (let i = 0; i < residents.length; i++) rows[i] = (entities.handleOfIndex(residents[i] as number) as number) >>> 0
+    const components: SerializeComponentColumns[] = []
+    for (let i = 0; i < arch.signature.length; i++) {
+      const c = arch.signature[i] as number as ComponentId
+      const block = storage.coldColumnSet(c)
+      if (block === undefined) continue // tag / pair / no column — same skip as the hot view
+      const def = registry.defOf(c)
+      if (def === undefined) continue
+      const fields: FieldDescriptor[] = []
+      for (const f of def.fields as readonly FieldDescriptor[]) if (f.ctor !== null) fields.push(f)
+      const columns = block.columns.map((src) => {
+        const stride = src.layout.stride
+        const Ctor = src.view.constructor as new (n: number) => typeof src.view
+        const view = new Ctor(residents.length * stride)
+        for (let r = 0; r < residents.length; r++) {
+          const srcRow = storage.coldRowOf(residents[r] as number, c)
+          if (srcRow < 0) continue
+          for (let a = 0; a < stride; a++) view[r * stride + a] = src.view[srcRow * stride + a] as number
+        }
+        return { ...src, view }
+      })
+      components.push({ componentId: c, columns, fields })
+    }
+    return {
+      id: arch.id as number,
+      signature: arch.signature as unknown as readonly number[],
+      count: residents.length,
+      rows,
+      components,
+    }
+  }
+
   const serialize: SerializationSurface = {
     schemaHash: computeSchemaHash,
     components(): readonly SerializeComponentMeta[] {
@@ -772,10 +822,17 @@ export function createWorld(options: WorldOptions = {}): World {
     archetypes(): readonly SerializeArchetype[] {
       const out: SerializeArchetype[] = []
       for (const arch of storage.archetypes.byId as Archetype[]) {
-        if (arch.cold || arch.count === 0) continue
+        if (arch.cold) {
+          // Cold archetypes serialize through a materialized view — omitting them was silent
+          // data loss ("whole world at one tick" is the snapshot contract).
+          const view = coldArchetypeView(arch)
+          if (view !== null) out.push(view)
+          continue
+        }
+        if (arch.count === 0) continue
         out.push(archetypeView(arch))
       }
-      // id-ascending (byId is already in id order, but tag/cold gaps are filtered above).
+      // id-ascending (byId is already in id order, but tag/empty gaps are filtered above).
       out.sort((a, b) => a.id - b.id)
       return out
     },
@@ -851,7 +908,20 @@ export function createWorld(options: WorldOptions = {}): World {
       const index = handleIndexOf(handle as number)
       const archId = records.archetypeIdOf(index)
       const arch = storage.archetypes.byId[archId] as Archetype | undefined
-      if (arch === undefined || arch.cold) return null
+      if (arch === undefined) return null
+      if (arch.cold) {
+        // Cold receivers write straight into the shared per-type blocks at the entity's cold row —
+        // returning null here silently dropped every snapshot/delta value bound for a cold entity.
+        const set = storage.coldColumnSet(componentId as ComponentId)
+        if (set === undefined) return null
+        const row = storage.coldRowOf(index, componentId as ComponentId)
+        if (row < 0) return null
+        const def = registry.defOf(componentId as ComponentId)
+        if (def === undefined) return null
+        const fields: FieldDescriptor[] = []
+        for (const f of def.fields as readonly FieldDescriptor[]) if (f.ctor !== null) fields.push(f)
+        return { columns: set.columns as readonly Column[], fields, row }
+      }
       const set = arch.columnSets.get(componentId as ComponentId)
       if (set === undefined) return null
       const def = registry.defOf(componentId as ComponentId)
@@ -867,6 +937,9 @@ export function createWorld(options: WorldOptions = {}): World {
         if (arch.cold) continue
         for (let r = 0; r < arch.count; r++) handles.push((arch.rows[r] as number) as EntityHandle)
       }
+      // Cold residents too — leaving them alive made a 'replace' load mix stale entities into the
+      // loaded state. Snapshot the map first: despawn mutates cold.archOf mid-iteration.
+      for (const index of [...storage.archetypes.cold.archOf.keys()]) handles.push(entities.handleOfIndex(index))
       for (const h of handles) if (entities.isAlive(h)) entities.despawn(h)
     },
     aliveCount() {
@@ -1191,6 +1264,13 @@ export function createWorld(options: WorldOptions = {}): World {
     },
     changedRows(archetypeId, since) {
       const arch = storage.archetypes.byId[archetypeId] as Archetype | undefined
+      if (arch !== undefined && arch.cold) {
+        // Cold rows have no per-archetype rows array; enumerate residents in the SAME ascending
+        // index order as coldArchetypeView so the delta serializer's row numbers line up with the
+        // materialized view it reads values from. Stamps are per-entity, so changedSince is exact.
+        const residents = coldResidentsSorted(archetypeId)
+        return (reactivity as Reactivity).changedRows(archetypeId, since, residents.length, (row) => residents[row] as number)
+      }
       const count = arch === undefined ? 0 : arch.count
       const rows = arch?.rows
       return (reactivity as Reactivity).changedRows(archetypeId, since, count, (row) =>
