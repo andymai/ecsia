@@ -123,6 +123,12 @@ const DECODER = new TextDecoder()
 
 export function writeString(cur: WriteCursor, s: string): void {
   const bytes = ENCODER.encode(s)
+  // u16 length framing: silently masking a longer string (& 0xffff) would leave the overflow bytes
+  // in the stream to be misparsed by the next read — poisoning the whole image. Pair-payload
+  // strings are arbitrary user data, so this is reachable from world state; fail loudly instead.
+  if (bytes.length > 0xffff) {
+    throw new Error(`serialization: string exceeds the u16 wire limit (${bytes.length} bytes > 65535) — shorten the value or store it in an object<T> field (u32-framed JSON)`)
+  }
   cur.u16(bytes.length)
   for (const b of bytes) cur.u8(b)
 }

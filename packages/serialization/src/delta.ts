@@ -458,10 +458,16 @@ export function applyDelta(world: World, bytes: Uint8Array, remap: ReadonlyMap<E
   if ((flags & FLAG_HAS_STRUCTURAL) !== 0 && structOff < valueOff) {
     applyStructuralOps(world, bytes.subarray(structOff, valueOff), work)
   }
-  // Propagate newly-created handles back to a mutable caller table (no-op for a ReadonlyMap caller).
-  if (work.size !== remap.size) {
+  // Propagate creates AND destroys back to a mutable caller table (no-op for a ReadonlyMap caller):
+  // without destroy propagation, a stream-lifetime remap (replication G4) grows without bound under
+  // entity churn. Equal sizes can mask paired create+destroy, so diff both directions whenever the
+  // structural section ran.
+  if ((flags & FLAG_HAS_STRUCTURAL) !== 0 || work.size !== remap.size) {
     const mutable = remap as Map<EntityHandle, EntityHandle>
-    if (typeof mutable.set === 'function') for (const [k, v] of work) if (!remap.has(k)) mutable.set(k, v)
+    if (typeof mutable.set === 'function' && typeof mutable.delete === 'function') {
+      for (const [k, v] of work) if (!remap.has(k)) mutable.set(k, v)
+      for (const k of remap.keys()) if (!work.has(k)) mutable.delete(k)
+    }
   }
 
   // --- SECTION V: write the changed values into the receiver entities resolved via the remap. ---
