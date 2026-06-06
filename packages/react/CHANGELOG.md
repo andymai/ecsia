@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.7.6](https://github.com/andymai/ecsia/compare/react-v0.7.5...react-v0.7.6) (2026-06-06)
+
+
+### Bug Fixes
+
+* bindings-package bugs — recycled-index unbind eviction, dead where-term extraction, matchPrefabs crash, cached disposed handle ([#40](https://github.com/andymai/ecsia/issues/40)) ([463162a](https://github.com/andymai/ecsia/commit/463162a16f9b10b12c1872a84c2cbbb8025b4bc5))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.7.6
+    * @ecsia/schema bumped to 0.7.6
+  * devDependencies
+    * @ecsia/relations bumped to 0.7.6
+    * @ecsia/scheduler bumped to 0.7.6
+
 ## [0.7.5](https://github.com/andymai/ecsia/compare/react-v0.7.4...react-v0.7.5) (2026-06-06)
 
 
