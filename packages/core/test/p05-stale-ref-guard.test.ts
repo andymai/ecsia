@@ -5,7 +5,7 @@
 // Components are module-scope singletons registerable to ONE world, so each test mints its own defs.
 
 import { describe, expect, test } from 'vitest'
-import { createWorld, defineComponent } from '@ecsia/core'
+import { createWorld, defineComponent, onRemove } from '@ecsia/core'
 
 function setup() {
   const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
@@ -67,5 +67,74 @@ describe('EntityRef stale-binding guard (random-access path)', () => {
     const ref = world.entity(h)
     world.despawn(h)
     expect(() => ref.read(Position)).toThrow(/world\.entity\(h\)/)
+  })
+})
+
+describe('accessor VIEW stale guard (dev mode) — the held-view re-point footgun', () => {
+  test('a held read view throws after world.entity() re-points it at ANOTHER entity', () => {
+    const { world, Position } = setup()
+    const a = world.spawnWith([Position, { x: 1, y: 1 }])
+    const b = world.spawnWith([Position, { x: 2, y: 2 }])
+    const viewA = world.entity(a).read(Position)
+    expect(viewA.x).toBe(1) // fresh — fine
+    void world.entity(b).read(Position) // re-pokes the pooled singleton at b
+    // Pre-guard this read returned 2 (entity b's data) silently.
+    expect(() => viewA.x).toThrow(/stale accessor view/)
+  })
+
+  test('a held write view throws on assignment after a re-point (no silent cross-entity write)', () => {
+    const { world, Position } = setup()
+    const a = world.spawnWith([Position, { x: 1, y: 1 }])
+    const b = world.spawnWith([Position, { x: 2, y: 2 }])
+    const wa = world.entity(a).write(Position)
+    void world.entity(b).read(Position)
+    expect(() => {
+      wa.x = 99 // pre-guard this landed on b
+    }).toThrow(/stale accessor view/)
+    expect(world.entity(b).read(Position).x).toBe(2) // b untouched
+  })
+
+  test('a held view throws after a swap-pop hands its row to another entity (no re-point needed)', () => {
+    const { world, Position } = setup()
+    const a = world.spawnWith([Position, { x: 1, y: 1 }])
+    const last = world.spawnWith([Position, { x: 9, y: 9 }])
+    const viewA = world.entity(a).read(Position)
+    world.despawn(a) // swap-pop: `last` moves into a's row; __eid still names a
+    void last
+    expect(() => viewA.x).toThrow(/stale accessor view/)
+  })
+
+  test('re-resolving the SAME entity keeps an older view of it valid (same row, same data)', () => {
+    const { world, Position } = setup()
+    const a = world.spawnWith([Position, { x: 5, y: 5 }])
+    const v1 = world.entity(a).read(Position)
+    const v2 = world.entity(a).read(Position)
+    expect(v1.x).toBe(5)
+    expect(v2.x).toBe(5)
+  })
+
+  test('views of DIFFERENT components on one entity coexist (distinct singletons)', () => {
+    const { world, Position, Velocity } = setup()
+    const a = world.spawnWith([Position, { x: 1, y: 2 }], [Velocity, { dx: 3, dy: 4 }])
+    const p = world.entity(a).read(Position)
+    const v = world.entity(a).read(Velocity)
+    expect(p.x).toBe(1)
+    expect(v.dx).toBe(3)
+    expect(p.y).toBe(2) // still valid after the Velocity resolve — different (archetype, component) singleton
+  })
+
+  test('observer-window (lenient) reads of a dying entity are exempt from the view guard', () => {
+    const { world, Position } = setup()
+    const onRemoveValues: number[] = []
+    world.observe(onRemove(Position), (e) => {
+      onRemoveValues.push((e.read(Position) as { x: number }).x)
+    })
+    const a = world.spawnWith([Position, { x: 7, y: 0 }])
+    const b = world.spawnWith([Position, { x: 8, y: 0 }])
+    void b
+    world.frameReset()
+    world.despawn(a)
+    world.observerDrain()
+    expect(onRemoveValues).toEqual([7])
   })
 })

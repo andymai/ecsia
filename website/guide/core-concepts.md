@@ -223,7 +223,11 @@ const result = { px, py, speed }
 Why pool at all? So that iterating a query allocates nothing — important when a loop
 runs sixty times a second over thousands of entities. And misuse fails loud: a stale
 read or write **throws** (`stale binding for entity … — re-resolve via world.entity(h)`)
-instead of silently reading another entity's data.
+instead of silently reading another entity's data. In development builds the field views
+that `read()`/`write()` return are guarded too: hold one across the next `world.entity()`
+resolve (or past the entity's despawn) and its next property access throws, rather than
+quietly showing you another entity's numbers. Production builds skip that per-access
+check for speed — so fix anything the dev guard flags before shipping.
 
 ## Where next
 

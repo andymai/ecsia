@@ -41,6 +41,20 @@ describe('snapshot/delta serializers — serial-phase guard', () => {
   })
 })
 
+describe('load — unknown mode is rejected loudly', () => {
+  it("an unrecognized mode string throws instead of silently merging", () => {
+    const P = defineComponent({ x: 'f32' }, { name: 'mode-p' })
+    const src = createWorld({ components: [P as ComponentDef<Schema>] })
+    src.spawnWith(P as ComponentDef<Schema>)
+    const bytes = createSnapshotSerializer(src).snapshotCopy()
+    const R = defineComponent({ x: 'f32' }, { name: 'mode-p' })
+    const dst = createWorld({ components: [R as ComponentDef<Schema>] })
+    expect(() => createSnapshotDeserializer(dst).load(bytes, 'overwrite' as never)).toThrow(
+      /unknown load mode 'overwrite'/,
+    )
+  })
+})
+
 describe('snapshot — includeRelations=false omits the relations section', () => {
   it('a relation-bearing world snapshotted with includeRelations:false drops pairs on load', () => {
     const P = defineComponent({ x: 'f32' }, { name: 'p' })
