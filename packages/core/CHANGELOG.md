@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.12](https://github.com/andymai/ecsia/compare/core-v0.7.11...core-v0.7.12) (2026-06-06)
+
+
+### Bug Fixes
+
+* held accessor views fail loud in dev — the docs' fail-loud claim is now true ([#53](https://github.com/andymai/ecsia/issues/53)) ([de3dac3](https://github.com/andymai/ecsia/commit/de3dac3f81dfd4ba19faff0a9c8f0248293bfefd))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.7.12
+
 ## [0.7.11](https://github.com/andymai/ecsia/compare/core-v0.7.10...core-v0.7.11) (2026-06-06)
 
 
