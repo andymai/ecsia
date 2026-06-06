@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.8.0](https://github.com/andymai/ecsia/compare/ecsia-v0.7.12...ecsia-v0.8.0) (2026-06-06)
+
+
+### Features
+
+* auto-dispatch — scheduler.update() drives the threaded loop through a scheduler-owned pool ([#55](https://github.com/andymai/ecsia/issues/55)) ([57eb853](https://github.com/andymai/ecsia/commit/57eb853796abec7a6266c6108eba01f982bebf7d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.8.0
+    * @ecsia/schema bumped to 0.8.0
+    * @ecsia/relations bumped to 0.8.0
+    * @ecsia/scheduler bumped to 0.8.0
+    * @ecsia/serialization bumped to 0.8.0
+
 ## [0.7.12](https://github.com/andymai/ecsia/compare/ecsia-v0.7.11...ecsia-v0.7.12) (2026-06-06)
 
 
