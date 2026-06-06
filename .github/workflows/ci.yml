@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Node >=20 for resizable SharedArrayBuffer + Atomics.waitAsync.
+        # Node >=22.13 (engines) for resizable SharedArrayBuffer + Atomics.waitAsync.
         node: [22, 24]
     steps:
       - uses: actions/checkout@v4

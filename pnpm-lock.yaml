@@ -101,6 +101,10 @@ importers:
       '@ecsia/schema':
         specifier: workspace:*
         version: link:../schema
+    devDependencies:
+      '@ecsia/relations':
+        specifier: workspace:*
+        version: link:../relations
 
   packages/ecsia:
     dependencies:
@@ -129,6 +133,12 @@ importers:
         specifier: workspace:*
         version: link:../schema
     devDependencies:
+      '@ecsia/relations':
+        specifier: workspace:*
+        version: link:../relations
+      '@ecsia/scheduler':
+        specifier: workspace:*
+        version: link:../scheduler
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.16
@@ -153,6 +163,10 @@ importers:
       '@ecsia/schema':
         specifier: workspace:*
         version: link:../schema
+    devDependencies:
+      '@ecsia/relations':
+        specifier: workspace:*
+        version: link:../relations
 
   packages/schema: {}
 
@@ -178,6 +192,9 @@ importers:
         specifier: workspace:*
         version: link:../schema
     devDependencies:
+      '@ecsia/scheduler':
+        specifier: workspace:*
+        version: link:../scheduler
       '@types/three':
         specifier: ^0.169.0
         version: 0.169.0

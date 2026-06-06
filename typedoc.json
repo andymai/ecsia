@@ -5,6 +5,7 @@
   "entryPointStrategy": "resolve",
   "entryPoints": [
     "packages/ecsia/src/index.ts",
+    "packages/react/src/index.ts",
     "packages/three/src/index.ts",
     "packages/devtools/src/index.ts"
   ],

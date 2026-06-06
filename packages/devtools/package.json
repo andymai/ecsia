@@ -49,5 +49,8 @@
     "@ecsia/core": "workspace:*",
     "@ecsia/schema": "workspace:*",
     "@ecsia/scheduler": "workspace:*"
+  },
+  "devDependencies": {
+    "@ecsia/relations": "workspace:*"
   }
 }

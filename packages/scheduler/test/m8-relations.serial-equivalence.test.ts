@@ -8,17 +8,18 @@
 // command-apply path (un-stubbed at ) routes to the same addPair/removePair createRelations installed
 // into world.__apply, so the multi-worker merge is serial-equivalent to a single-threaded apply.
 //
-// The relations runtime imports @ecsia/core only; this TEST may import @ecsia/scheduler (tests are not
-// source — the acyclic source boundary is unaffected).
+// This test lives in the SCHEDULER package (not relations) because it needs the command-buffer
+// internals from src/internal.ts, and internal.ts is importable only by its own package's tests —
+// relations is reached through its public entry as a declared devDependency.
 
 import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
 import { createWorld, handleIndex } from '@ecsia/core'
 import type { ComponentDef, ComponentId, EntityHandle, Schema, World } from '@ecsia/core'
 import type { RelationId } from '@ecsia/schema'
-import { flushAll, makeCommandBuffer, makeEncoder } from '../../scheduler/src/internal.js'
-import type { CommandBuffer, CommandEncoder, WorldApply } from '../../scheduler/src/internal.js'
-import { createRelations, Wildcard } from '../src/index.js'
+import { flushAll, makeCommandBuffer, makeEncoder } from '../src/internal.js'
+import type { CommandBuffer, CommandEncoder, WorldApply } from '../src/internal.js'
+import { createRelations, Wildcard } from '@ecsia/relations'
 
 type Rel = ReturnType<typeof createRelations>
 type RelationDef = ReturnType<Rel['defineRelation']>

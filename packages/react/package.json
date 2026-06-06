@@ -53,7 +53,9 @@
     "react": ">=18 <20"
   },
   "devDependencies": {
-    "react": "^19.0.0",
-    "@types/react": "^19.0.0"
+    "@ecsia/relations": "workspace:*",
+    "@ecsia/scheduler": "workspace:*",
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0"
   }
 }
