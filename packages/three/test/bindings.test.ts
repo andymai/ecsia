@@ -187,3 +187,55 @@ describe('@ecsia/three bindings', () => {
     for (const o of objs) expect(o.parent).toBeNull()
   })
 })
+
+describe('autoUnbindOn vs recycled indexes', () => {
+  test('a same-frame despawn + respawn + rebind at a recycled index keeps the NEW binding', () => {
+    const Position = mkPosition()
+    const world = createWorld({ components: [Position] })
+    const scene = new Scene()
+    const bindings = createThreeBindings(world, scene)
+    bindings.autoUnbindOn(Position)
+
+    const a = world.spawnWith(Position)
+    const objA = new Object3D()
+    bindings.bind(a, objA)
+
+    // Inside ONE frame: despawn a, spawn b (recycles a's index), bind b's object. At the frame-end
+    // drain, a's onRemove must not evict b's fresh binding.
+    let b: typeof a | undefined
+    const objB = new Object3D()
+    const sys = {
+      name: 'churn',
+      read: [],
+      write: [],
+      run({ world: w }: { world: ReturnType<typeof createWorld> }) {
+        if (b === undefined) {
+          w.despawn(a)
+          b = w.spawnWith(Position)
+          bindings.bind(b, objB)
+        }
+      },
+    }
+    createScheduler(world, [sys]).update()
+
+    expect(world.decodeHandle(b as NonNullable<typeof b>).index).toBe(world.decodeHandle(a).index)
+    expect(bindings.objectOf(b as NonNullable<typeof b>)).toBe(objB)
+    expect(objB.parent).toBe(scene)
+    expect(objA.parent).toBeNull() // the dead tenant's object was still detached
+  })
+
+  test('a disposed autoUnbindOn handle re-registers on the next call', () => {
+    const Position = mkPosition()
+    const world = createWorld({ components: [Position] })
+    const bindings = createThreeBindings(world)
+    const first = bindings.autoUnbindOn(Position)
+    first.dispose()
+    const second = bindings.autoUnbindOn(Position)
+    expect(second).not.toBe(first)
+
+    const h = world.spawnWith(Position)
+    bindings.bind(h, new Object3D())
+    despawnAndStep(world, h)
+    expect(bindings.has(h)).toBe(false) // the re-registered observer is live
+  })
+})
