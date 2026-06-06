@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.7.3](https://github.com/andymai/ecsia/compare/relations-v0.7.2...relations-v0.7.3) (2026-06-06)
+
+
+### Bug Fixes
+
+* depthOf returns stale depths for descendants after a re-target or detach ([#32](https://github.com/andymai/ecsia/issues/32)) ([ec9a91c](https://github.com/andymai/ecsia/commit/ec9a91cafe71d8b872f57b8997ccc2c3a2da52b6))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.7.3
+    * @ecsia/schema bumped to 0.7.3
+
 ## [0.7.2](https://github.com/andymai/ecsia/compare/relations-v0.7.1...relations-v0.7.2) (2026-06-06)
 
 
