@@ -57,6 +57,12 @@ export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
     if (world.phase !== 'serial') {
       throw new Error('load() must run while the world is in its serial phase (outside scheduler.update / worker waves)')
     }
+    // The type narrows mode for TS callers, but a JS caller passing e.g. 'overwrite' would fall
+    // through every `mode === 'replace'` branch and silently MERGE — destructive surprise on a
+    // load-a-save path. Fail loud instead.
+    if (mode !== 'replace' && mode !== 'merge') {
+      throw new Error(`serialization: unknown load mode '${mode as string}' — use 'replace' (default) or 'merge'`)
+    }
     const cur = new ReadCursor(bytes)
 
     // --- HEADER ---

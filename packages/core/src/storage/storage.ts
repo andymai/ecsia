@@ -10,6 +10,7 @@
 import type { ComponentDef, ComponentId, EntityHandle, Schema } from '@ecsia/schema'
 import { bindAccessorRow } from '../component/index.js'
 import type { AccessorWorld, ColumnSet, ComponentRuntime } from '../component/index.js'
+import { IS_DEV } from '../env.js'
 import type { Bitmask } from '../bitmask/index.js'
 import { ArchetypeStore, EMPTY_ARCHETYPE_ID } from './store.js'
 import type { RecordSurface, StorageDeps } from './store.js'
@@ -211,15 +212,15 @@ export class Storage {
 
   // --- AccessorResolver -------------------------------
 
-  resolveRead(handle: EntityHandle, archetypeId: number, row: number, def: unknown): unknown {
-    return this.#resolve(handle, archetypeId, row, def as ComponentDef<Schema>)
+  resolveRead(handle: EntityHandle, archetypeId: number, row: number, def: unknown, lenient?: boolean): unknown {
+    return this.#resolve(handle, archetypeId, row, def as ComponentDef<Schema>, lenient === true)
   }
 
-  resolveWrite(handle: EntityHandle, archetypeId: number, row: number, def: unknown): unknown {
-    return this.#resolve(handle, archetypeId, row, def as ComponentDef<Schema>)
+  resolveWrite(handle: EntityHandle, archetypeId: number, row: number, def: unknown, lenient?: boolean): unknown {
+    return this.#resolve(handle, archetypeId, row, def as ComponentDef<Schema>, lenient === true)
   }
 
-  #resolve(handle: EntityHandle, archetypeId: number, row: number, def: ComponentDef<Schema>): unknown {
+  #resolve(handle: EntityHandle, archetypeId: number, row: number, def: ComponentDef<Schema>, lenient: boolean): unknown {
     const id = this.#requireId(def)
     const arch = this.archetypes.byId[archetypeId] as Archetype | undefined
     if (arch === undefined) throw new Error(`storage.resolve: unknown archetype ${archetypeId}`)
@@ -238,7 +239,11 @@ export class Storage {
       }
       throw new Error(`storage.resolve: entity does not hold component '${def.name}'`)
     }
-    return bindAccessorRow(set, boundRow, handle)
+    const acc = bindAccessorRow(set, boundRow, handle)
+    // A lenient resolve (observer-window read of a dying/shuffled entity) opts out of the guard the
+    // same way it opts out of EntityRef's #assertFresh — its rows ARE expected to be re-tenanted.
+    if (!IS_DEV || lenient) return acc
+    return guardAccessorView(acc as object, handle as number, arch.cold ? null : arch, boundRow)
   }
 
   #requireId(def: ComponentDef<Schema>): ComponentId {
@@ -249,4 +254,40 @@ export class Storage {
       )
     return id
   }
+}
+
+// Dev-only stale-VIEW guard. The object read()/write() return is the pooled per-(archetype,
+// component) accessor SINGLETON — a held view silently re-points when (a) a later world.entity(...)
+// resolve re-pokes it at another entity, or (b) the entity dies/migrates and a swap-pop hands its
+// row to a new tenant WITHOUT re-poking (__eid still matches, the data underneath changed). The
+// EntityRef-level #assertFresh guard runs at resolve time and cannot see either later event, so in
+// dev each resolve returns a per-call membrane stamped with (handle, row) that re-validates on EVERY
+// property access. Production returns the bare singleton — zero allocation, zero indirection.
+//
+// Reflect uses `target` (not the proxy) as receiver so prototype getters/setters see the singleton
+// as `this` — the cached per-field VecViews stay bound to the singleton exactly as without the
+// guard. Known dev-guard limit: a held vec ELEMENT view (`const v = view.vel; ... v[0]`) re-reads
+// the singleton's live cursor and is not covered; the `view.vel` access itself is.
+function guardAccessorView(acc: object, expectedEid: number, arch: Archetype | null, row: number): object {
+  const a = acc as { __eid: unknown }
+  const fail = (prop: string | symbol): never => {
+    throw new Error(
+      `stale accessor view (.${String(prop)}) for entity ${expectedEid} — the pooled view was re-pointed by a ` +
+        `later world.entity(...) resolve, or the entity died/moved since. Extract the plain values you need ` +
+        `before the next resolve, or re-resolve via world.entity(h). (Dev-mode guard; production reads the ` +
+        `pooled singleton without this check.)`,
+    )
+  }
+  const fresh = (): boolean =>
+    (a.__eid as number) === expectedEid && (arch === null || arch.rows[row] === (expectedEid >>> 0))
+  return new Proxy(acc, {
+    get(target, prop) {
+      if (!fresh()) fail(prop)
+      return Reflect.get(target, prop, target)
+    },
+    set(target, prop, value) {
+      if (!fresh()) fail(prop)
+      return Reflect.set(target, prop, value, target)
+    },
+  })
 }

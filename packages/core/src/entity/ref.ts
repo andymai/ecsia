@@ -16,8 +16,10 @@ import type { ComponentDef, ReadOf, Schema, WriteOf } from '@ecsia/schema'
  * column set, binds against the entity's real archetype (the archetype-binding seam).
  */
 export interface AccessorResolver {
-  resolveRead(handle: EntityHandle, archetypeId: number, row: number, def: unknown): unknown
-  resolveWrite(handle: EntityHandle, archetypeId: number, row: number, def: unknown): unknown
+  /** `lenient` mirrors the ref's binding: a lenient resolve (observer-window read of a dying
+   * entity) opts out of the dev-mode stale-view guard the same way it opts out of #assertFresh. */
+  resolveRead(handle: EntityHandle, archetypeId: number, row: number, def: unknown, lenient?: boolean): unknown
+  resolveWrite(handle: EntityHandle, archetypeId: number, row: number, def: unknown, lenient?: boolean): unknown
 }
 
 /**
@@ -121,7 +123,7 @@ export class EntityRef {
   read<const C extends ComponentDef<Schema>>(def: C): ReadOf<C> {
     if (this.#resolver === null) throw new Error('EntityRef.read: no accessor resolver installed')
     this.#assertFresh('read')
-    return this.#resolver.resolveRead(this.__handle, this.__archetypeId, this.__row, def) as ReadOf<C>
+    return this.#resolver.resolveRead(this.__handle, this.__archetypeId, this.__row, def, this.__lenient) as ReadOf<C>
   }
 
   /**
@@ -133,6 +135,6 @@ export class EntityRef {
   write<const C extends ComponentDef<Schema>>(def: C): WriteOf<C> {
     if (this.#resolver === null) throw new Error('EntityRef.write: no accessor resolver installed')
     this.#assertFresh('write')
-    return this.#resolver.resolveWrite(this.__handle, this.__archetypeId, this.__row, def) as WriteOf<C>
+    return this.#resolver.resolveWrite(this.__handle, this.__archetypeId, this.__row, def, this.__lenient) as WriteOf<C>
   }
 }
