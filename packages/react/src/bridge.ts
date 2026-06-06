@@ -73,6 +73,9 @@ function membershipComponents(terms: readonly QueryTerm[]): readonly ComponentDe
       out.push(c)
       continue
     }
+    // The query-options term ({ matchPrefabs }) gates prefab visibility, not membership — it
+    // contributes no observable component and must not fall through to the throw below.
+    if (typeof term === 'object' && term !== null && 'matchPrefabs' in term) continue
     throw new Error(
       '@ecsia/react useQuery: unsupported query term — relation Pair(...) terms are deferred to v2; ' +
         'pass component defs or read/write/has/without/optional terms',

@@ -292,3 +292,12 @@ describe('useQuery term restrictions', () => {
     expect(screen.getByTestId(`row-${b}`)).toBeDefined()
   })
 })
+
+describe('query-options terms', () => {
+  test('queryStore accepts a { matchPrefabs } options term without throwing', () => {
+    const Health = mkHealth()
+    const { world } = makeKit([Health])
+    const query = world.query(Health, { matchPrefabs: true })
+    expect(() => bridgeFor(world).queryStore(query as unknown as QueryLike)).not.toThrow()
+  })
+})

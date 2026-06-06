@@ -102,10 +102,26 @@ export function createThreeBindings(world: WorldLike, scene?: Scene): ThreeBindi
       const existing = anchorObservers.get(id)
       if (existing !== undefined) return existing
       const sub = world.observe(onRemove(anchor), (e) => {
-        unbind(e.handle)
+        // Index slots recycle before the frame-end drain runs: a same-frame despawn+spawn can hand
+        // this index to a NEW entity that bound its own object — and the despawn event's handle
+        // carries the BUMPED generation, so it aliases the new tenant's handle exactly (handle
+        // equality cannot discriminate). The declarative rule instead: a binding survives iff its
+        // entity is alive AND still carries the anchor at drain time.
+        const entry = map.get(indexOf(e.handle))
+        if (entry === undefined) return
+        if (!world.isAlive(entry.handle) || !world.has(entry.handle, anchor)) unbind(entry.handle)
       })
-      anchorObservers.set(id, sub)
-      return sub
+      // Wrap dispose so a disposed handle is not cached forever — returning the dead handle on the
+      // next autoUnbindOn(anchor) would leave auto-unbind silently inert for that anchor.
+      const wrapped: ObserverHandle = {
+        ...sub,
+        dispose: () => {
+          anchorObservers.delete(id)
+          sub.dispose()
+        },
+      }
+      anchorObservers.set(id, wrapped)
+      return wrapped
     },
     sweep() {
       let dropped = 0

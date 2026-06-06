@@ -44,11 +44,19 @@ export function makeInstancedSyncSystem(opts: InstancedSyncOptions): SystemDefLi
   const readDefs: ComponentDef<Schema>[] = [position as unknown as ComponentDef<Schema>]
   if (rotation !== undefined) readDefs.push(rotation as unknown as ComponentDef<Schema>)
   if (scale !== undefined) readDefs.push(scale as unknown as ComponentDef<Schema>)
-  // `where` terms participate in matching, so their components belong in the declared read set —
-  // the scheduler's conflict detection sees what the query actually touches.
+  // `where` ACCESS terms (read/write/optional, or a bare def) belong in the declared read set so
+  // the scheduler's conflict planning sees what the query touches. Terms carry `.c`; has/without
+  // are filter-only and deliberately NOT declared — the scheduler's own access guard treats pure
+  // membership tests as non-access.
   for (const t of where) {
-    const def = (t as { def?: ComponentDef<Schema> }).def
-    if (def && !readDefs.includes(def)) readDefs.push(def)
+    const term = t as { __term?: string; c?: ComponentDef<Schema> }
+    const def =
+      term.__term === 'read' || term.__term === 'write' || term.__term === 'optional'
+        ? term.c
+        : term.__term === undefined && typeof t === 'object' && t !== null && 'id' in t
+          ? (t as unknown as ComponentDef<Schema>)
+          : undefined
+    if (def !== undefined && !readDefs.includes(def)) readDefs.push(def)
   }
 
   const m = new Matrix4()

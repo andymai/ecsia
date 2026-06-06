@@ -23,6 +23,7 @@ import { defineComponent } from '@ecsia/core'
 export interface WorldLike {
   query: WorldQuery
   isAlive(handle: EntityHandle): boolean
+  has(handle: EntityHandle, def: ComponentDef<Schema>): boolean
   // The bridge only reads `.index`; widen the return so both world impls (which also carry `generation`)
   // remain assignable to WorldLike.
   decodeHandle(handle: EntityHandle): { index: EntityIndex }

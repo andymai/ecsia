@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent } from '@ecsia/core'
+import { has, read } from '@ecsia/schema'
 import { createScheduler } from '@ecsia/scheduler'
 import { BufferGeometry, InstancedMesh, Matrix4, MeshBasicMaterial, Quaternion, Vector3 } from 'three'
 import { makeInstancedSyncSystem } from '../src/index.js'
@@ -197,5 +198,20 @@ describe('@ecsia/three makeInstancedSyncSystem', () => {
     // Slot 0 was rewritten from the compacted survivor (300), proving slots track iteration order.
     expect(translationAt(mesh, 0).x).toBe(300)
     void h2
+  })
+})
+
+describe('where-term read declarations', () => {
+  test('read()/bare-def where terms land in the declared read set; has/without stay filter-only', () => {
+    const Position = mkPosition()
+    const Extra = defineComponent({ v: 'f32' }, { name: 'extra' })
+    const Gate = defineComponent({ g: 'f32' }, { name: 'gate' })
+    const world = createWorld({ components: [Position, Extra, Gate] })
+    const mesh = mkMesh(4)
+
+    const sync = makeInstancedSyncSystem({ mesh, position: Position, where: [read(Extra), has(Gate)] })
+    expect(sync.read).toContain(Extra)        // access term: declared
+    expect(sync.read).not.toContain(Gate)     // filter term: deliberately NOT declared
+    expect(sync.read).toContain(Position)
   })
 })
