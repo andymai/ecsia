@@ -3,19 +3,91 @@
 ecsia is an entity component system (ECS): each thing in your world is an entity (just an
 id), its data lives in components (typed pieces of data attached to entities), and behavior
 lives in systems (functions that run over every entity with a given set of components). This
-page is about ecsia's defining feature: **`threaded: true` changes no system, query, or
-accessor code.** The same program runs single-threaded everywhere and across a pool of worker
-threads where the host allows it — and the parallel result is **bit-identical** to the serial
-one.
+page is about ecsia's defining feature: the same program runs single-threaded everywhere and
+across a pool of worker threads where the host allows it — and the parallel result is
+**bit-identical** to the serial one. Your queries, accessors, and single-threaded systems
+never change shape; going parallel is a scheduler option, not a rewrite.
 
 ```ts
 import { createWorld, defineComponent } from 'ecsia'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 
-// Opt in at world construction. Systems, queries, and accessors are untouched.
-const world = createWorld({ components: [Position], threaded: true })
+// Opt in at world construction: component columns get shared backings so
+// worker threads can read and write them directly.
+const world = createWorld({
+  components: [Position],
+  threaded: true,
+  scheduler: { workers: 4 },
+})
 ```
+
+## Running on workers
+
+Two things are yours to provide; ecsia automates the rest.
+
+**1. A worker kernel module.** A function can't be handed to another thread, so the body of
+each system you want running on workers lives in a small module that worker threads import.
+It exports `buildWorkerKernels()`, returning your kernels keyed by system name (plus the
+components they touch, keyed by component name — workers align ids through it):
+
+```js
+// kernels.js — imported by every worker thread.
+import { defineComponent } from 'ecsia'
+
+const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
+
+function moveKernel(view, indices, dt) {
+  const id = Position.id
+  for (let i = 0; i < indices.length; i++) {
+    const idx = indices[i]
+    view.writeField(idx, id, 0, view.readField(idx, id, 0) + dt) // x += dt
+  }
+}
+
+export function buildWorkerKernels() {
+  return {
+    kernels: new Map([['Move', moveKernel]]),
+    components: new Map([['position', Position]]),
+  }
+}
+```
+
+**2. The `threading` option.** Point the scheduler at that module and `await update()`. The
+scheduler creates and owns the worker pool — lazily, on the first update — derives the
+dispatch list from its own plan, and runs each round's worker-eligible systems on the pool.
+`dispose()` shuts the pool down.
+
+```ts
+import { createWorld, defineComponent, defineSystem, createScheduler } from 'ecsia'
+
+const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
+const world = createWorld({ components: [Position], threaded: true, scheduler: { workers: 4 } })
+
+// The system's declared reads/writes drive the schedule; its worker body is
+// the 'Move' kernel in kernels.js, matched by name.
+const Move = defineSystem({ name: 'Move', read: [], write: [Position], run() {} })
+
+const scheduler = createScheduler(world, [Move], {
+  threading: { kernelModule: new URL('./kernels.js', import.meta.url).href },
+})
+
+await scheduler.update(1 / 60) // worker rounds dispatch automatically
+await scheduler.dispose() // terminate the pool when you're done
+```
+
+When worker execution isn't available — the world wasn't created `threaded: true`, the
+environment has no `SharedArrayBuffer`, or the pool fails to start — `update()` warns once
+and runs the same frame single-threaded from then on. Because the parallel result is
+bit-identical to the serial one, the fallback changes your program's speed, never its
+output.
+
+::: tip Power users: bring your own pool
+`scheduler.updateThreaded(pool, dt)` still accepts a hand-built `WorkerPool` for full
+control over pool sizing, command-buffer capacity, and worker-entry overrides — pass it via
+`threading: { pool }` to keep the unified `update()` call, or drive `updateThreaded`
+directly. A pool you inject is yours to dispose.
+:::
 
 ## How the scheduler derives waves
 

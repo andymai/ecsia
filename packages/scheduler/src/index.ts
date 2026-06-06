@@ -19,7 +19,7 @@ export type { SystemDef, SystemContext, OrderingHint } from './planner/index.js'
 
 // --- executor: the opt-in frame scheduler ---
 export { createScheduler } from './executor/index.js'
-export type { SchedulerHandle, CreateSchedulerOptions, RoundDispatcher } from './executor/index.js'
+export type { SchedulerHandle, CreateSchedulerOptions, SchedulerThreadingOptions, RoundDispatcher } from './executor/index.js'
 
 // --- plan introspection: the immutable, frozen plan shape `SchedulerHandle.plan` carries.
 // Surfaced for @ecsia/devtools — the wave visualizer reads the plan to explain WHY the schedule
