@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.2](https://github.com/andymai/ecsia/compare/core-v0.7.1...core-v0.7.2) (2026-06-06)
+
+
+### Bug Fixes
+
+* storage and scheduler correctness — row-reuse defaults, maxEntities ceiling, empty spawnWith, worker reservation ordering ([#30](https://github.com/andymai/ecsia/issues/30)) ([5dfc142](https://github.com/andymai/ecsia/commit/5dfc1423c1cbb1148531e658c2ccdf60174fe25b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.7.2
+
 ## [0.7.1](https://github.com/andymai/ecsia/compare/core-v0.7.0...core-v0.7.1) (2026-06-06)
 
 

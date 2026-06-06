@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.7.2](https://github.com/andymai/ecsia/compare/ecsia-v0.7.1...ecsia-v0.7.2) (2026-06-06)
+
+
+### Bug Fixes
+
+* stop the umbrella leaking core's __ seams as public API ([#29](https://github.com/andymai/ecsia/issues/29)) ([fa9e467](https://github.com/andymai/ecsia/commit/fa9e467f3778f6b5a700e3eb0393c8f363f6fca0))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.7.2
+    * @ecsia/schema bumped to 0.7.2
+    * @ecsia/relations bumped to 0.7.2
+    * @ecsia/scheduler bumped to 0.7.2
+    * @ecsia/serialization bumped to 0.7.2
+
 ## [0.7.1](https://github.com/andymai/ecsia/compare/ecsia-v0.7.0...ecsia-v0.7.1) (2026-06-06)
 
 
