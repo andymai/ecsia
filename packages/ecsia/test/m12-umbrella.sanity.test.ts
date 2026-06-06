@@ -220,5 +220,14 @@ function _typeOnly(): void {
   const _oc: ObserverContext | null = null
   void [_rv, _wv, _has, _hw, _t, _q, _ctx, _sd, _wo, _eh, _er, _w, _rd, _shm, _ds, _oc]
   void (null as _W | _R | _S | null)
+
+  // Seam-omission guard: the public facade types must expose NO `__`-prefixed keys. The tuple wrapper
+  // defeats conditional-type distribution so an empty extraction resolves to `true` and any leaked seam
+  // (a non-empty union) resolves to `never` — i.e. a seam added to core without being omitted by the
+  // umbrella fails this file's compile instead of shipping as public API.
+  type NoSeams<T> = [Extract<keyof T, `__${string}`>] extends [never] ? true : never
+  const _worldSeamFree: NoSeams<World> = true
+  const _refSeamFree: NoSeams<EntityRef> = true
+  void [_worldSeamFree, _refSeamFree]
 }
 void _typeOnly

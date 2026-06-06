@@ -20,12 +20,17 @@
 import { createWorld as _createWorld } from '@ecsia/core'
 import type { World as _CoreWorld, EntityRef as _CoreEntityRef, WorldOptions as _WorldOptions, EntityHandle } from '@ecsia/core'
 
-/** The `__`-prefixed wiring seams + scheduler-only loop verbs that .. keep off the public surface. */
+/** The `__`-prefixed wiring seams + scheduler-only loop verbs that .. keep off the public surface.
+ * The `__` half is DERIVED from the core type (every `__`-prefixed key is a seam by convention), so a
+ * new seam added to core is omitted here automatically instead of leaking until someone updates a
+ * hand-list. The loop verbs can't be derived (no naming convention) — `keyof Pick` keeps that list
+ * honest: a renamed/removed verb fails to compile here instead of going silently stale.
+ * `frameReset` is deliberately NOT listed — single-threaded kernel loops need it public. */
 type WorldInternalSeam =
-  | '__setPhase' | '__spawnReserved' | '__apply' | '__installRelations' | '__exportShared'
-  | '__serialize' | '__mergeWorkerWrites' | '__topics'
-  | 'trackWrite' | 'advanceTick' | 'mergeCorrals' | 'maintainStructural'
-  | 'observerDrain' | 'flushLogs' | 'reserveEntityBlock' | 'returnReservedIds' | 'changedRows'
+  | Extract<keyof _CoreWorld, `__${string}`>
+  | keyof Pick<_CoreWorld,
+      | 'trackWrite' | 'advanceTick' | 'mergeCorrals' | 'maintainStructural'
+      | 'observerDrain' | 'flushLogs' | 'reserveEntityBlock' | 'returnReservedIds' | 'changedRows'>
 
 /** The public World facade: the cohesive user surface with every internal `__` seam + loop verb omitted (..). */
 export interface World extends Omit<_CoreWorld, WorldInternalSeam | 'entity'> {
@@ -33,8 +38,8 @@ export interface World extends Omit<_CoreWorld, WorldInternalSeam | 'entity'> {
   entity(handle: EntityHandle, opts?: { lenient?: boolean }): EntityRef
 }
 
-/** The public EntityRef view: typed read/write split + `handle`, with the `__bind`/resolver wiring seams omitted. */
-export interface EntityRef extends Omit<_CoreEntityRef, '__setResolver' | '__bind' | '__archetypeId' | '__row'> {}
+/** The public EntityRef view: typed read/write split + `handle`, with every `__` wiring seam omitted (derived, like WorldInternalSeam). */
+export interface EntityRef extends Omit<_CoreEntityRef, Extract<keyof _CoreEntityRef, `__${string}`>> {}
 
 export type { WorldPhase } from '@ecsia/core'
 export { ConfigError } from '@ecsia/core'
