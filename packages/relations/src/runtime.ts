@@ -105,8 +105,12 @@ interface RelationRuntime {
   readonly overflow: OverflowTable | null
   /** targetIndex → subject handles. */
   readonly backref: Map<number, Set<EntityHandle>>
-  /** Lazily-allocated depth cache, exclusive relations only. */
-  depth: { depth: Int32Array; dirty: Set<number> } | null
+  /** Lazily-allocated depth cache, exclusive relations only. Entries are valid only while their
+   * stamp matches `gen`; ANY structural change to the relation bumps `gen` (O(1) whole-cache
+   * invalidation). A per-subject dirty set is NOT enough: re-targeting or detaching a mid-chain
+   * subject changes the depth of its whole subtree, and descendants are not enumerable here
+   * without an eager reverse index. */
+  depth: { depth: Int32Array; stamp: Float64Array; gen: number } | null
 }
 
 interface RelationsApi {
@@ -660,17 +664,22 @@ export function createRelations(world: World): RelationsApi {
 
   // ---
 
-  function markDepthDirty(rt: RelationRuntime, sIdx: number): void {
-    if (rt.depth !== null) rt.depth.dirty.add(sIdx)
+  function markDepthDirty(rt: RelationRuntime, _sIdx: number): void {
+    if (rt.depth !== null) rt.depth.gen += 1
   }
 
   function depthOf(subject: EntityHandle, relation: RelationDef<Schema | void>): number {
     const rt = requireRuntime(relation)
     if (!rt.exclusive) throw new Error('depthOf: only valid for exclusive (single-parent) relations')
-    if (rt.depth === null) rt.depth = { depth: new Int32Array(host.maxEntities).fill(-1), dirty: new Set() }
+    if (rt.depth === null)
+      rt.depth = {
+        depth: new Int32Array(host.maxEntities).fill(-1),
+        stamp: new Float64Array(host.maxEntities),
+        gen: 1,
+      }
     const cache = rt.depth
     const idx = host.handleIndex(subject)
-    if (cache.depth[idx] !== -1 && !cache.dirty.has(idx)) return cache.depth[idx] as number
+    if (cache.depth[idx] !== -1 && cache.stamp[idx] === cache.gen) return cache.depth[idx] as number
     let d = 0
     let cur: EntityHandle | null = subject
     const visited: number[] = []
@@ -678,7 +687,7 @@ export function createRelations(world: World): RelationsApi {
       const parent = readExclusiveTarget(rt, cur)
       if (parent === null) break
       const pIdx = host.handleIndex(parent)
-      if ((cache.depth[pIdx] as number) !== -1 && !cache.dirty.has(pIdx)) {
+      if ((cache.depth[pIdx] as number) !== -1 && cache.stamp[pIdx] === cache.gen) {
         d += 1 + (cache.depth[pIdx] as number)
         cur = null
         break
@@ -691,11 +700,11 @@ export function createRelations(world: World): RelationsApi {
     let depthFromTop = d
     for (const v of visited) {
       cache.depth[v] = depthFromTop
-      cache.dirty.delete(v)
+      cache.stamp[v] = cache.gen
       depthFromTop -= 1
     }
     cache.depth[idx] = d
-    cache.dirty.delete(idx)
+    cache.stamp[idx] = cache.gen
     return d
   }
 
@@ -774,7 +783,7 @@ export function createRelations(world: World): RelationsApi {
       }
       relationPairCount.delete(dIdx)
       forwardIndex.get(rt.relationId as number)?.delete(dIdx)
-      if (rt.depth !== null) rt.depth.dirty.add(dIdx)
+      if (rt.depth !== null) rt.depth.gen += 1
     }
   }
 
