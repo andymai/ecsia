@@ -1,6 +1,6 @@
 {
   "name": "@ecsia/serialization",
-  "version": "0.7.8",
+  "version": "0.7.9",
   "description": "Save and load ecsia worlds: full snapshots, incremental deltas, and worker handoff.",
   "keywords": [
     "ecs",

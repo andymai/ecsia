@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.9](https://github.com/andymai/ecsia/compare/core-v0.7.8...core-v0.7.9) (2026-06-06)
+
+
+### Bug Fixes
+
+* a discarded undrained spill now surfaces as OVERFLOW_SENTINEL, never silent loss ([#47](https://github.com/andymai/ecsia/issues/47)) ([dd159da](https://github.com/andymai/ecsia/commit/dd159da0e2c8912de9dfc9ea66ebad158acd2643))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.7.9
+
 ## [0.7.8](https://github.com/andymai/ecsia/compare/core-v0.7.7...core-v0.7.8) (2026-06-06)
 
 
