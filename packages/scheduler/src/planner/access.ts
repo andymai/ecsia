@@ -7,6 +7,7 @@
 // registered `.id` already, so resolution here is a `.id` read — no registry handle required.
 
 import type { ComponentDef, ComponentId, Schema, SystemId } from '@ecsia/schema'
+import type { TopicDef } from '@ecsia/core'
 import { DEFAULT_MAX_SPAWNS_PER_WAVE } from './types.js'
 import type { SystemBox, SystemDef } from './types.js'
 
@@ -37,8 +38,14 @@ function resolveIds(defs: readonly ComponentDef<Schema>[] | undefined): Componen
   return [...seen].sort((a, b) => a - b) as unknown as ComponentId[]
 }
 
-/** A system is worker-ineligible if any declared component carries a non-shareable (object) field. */
+/**
+ * A system is worker-ineligible if any declared component carries a non-shareable (object) field,
+ * or if it consumes a topic: worker-side reader cursors are the deferred transport leg, so a
+ * consumer runs in a main-thread batch (the object-component precedent). Publishers stay eligible —
+ * worker publishes ride OP_PUBLISH on the command buffer.
+ */
 function computeWorkerEligible(def: SystemDef): boolean {
+  if (def.consume !== undefined && def.consume.length > 0) return false
   const all = [...(def.read ?? []), ...(def.write ?? [])]
   for (const c of all) {
     for (const f of c.fields) {
@@ -46,6 +53,12 @@ function computeWorkerEligible(def: SystemDef): boolean {
     }
   }
   return true
+}
+
+/** De-duped topic list in declaration order (object identity — topics are module-scope defs). */
+function resolveTopics(defs: readonly TopicDef<Schema>[] | undefined): readonly TopicDef<Schema>[] {
+  if (defs === undefined || defs.length === 0) return []
+  return [...new Set(defs)]
 }
 
 function packWords(ids: readonly ComponentId[], strideWords: number): Uint32Array {
@@ -76,6 +89,10 @@ export function lowerSystems(defs: readonly SystemDef[], strideWords: number): S
       writeIds,
       readWords: packWords(readIds, strideWords),
       writeWords: packWords(writeIds, strideWords),
+      // Topic access is carried as defs, NOT packed into the access words: topics derive DAG edges
+      // but are excluded from WAVE-CONFLICT (no physical race to exclude).
+      publishTopics: resolveTopics(def.publish),
+      consumeTopics: resolveTopics(def.consume),
       // `before`/`after` resolved to SystemIds in graph/edges.ts (needs the full id map).
       before: [],
       after: [],

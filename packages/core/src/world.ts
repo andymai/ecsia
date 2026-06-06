@@ -49,6 +49,8 @@ import type {
 import type { Column } from './memory/index.js'
 import type { InspectSurface, InspectArchetype, InspectQuery } from './inspect-surface.js'
 import type { ComponentRuntime } from './component/index.js'
+import { Topics } from './topics/index.js'
+import type { TopicDef, TopicEventInit } from './topics/index.js'
 import { IS_DEV } from './env.js'
 import { isSharedBacking } from './memory/buffers.js'
 
@@ -201,6 +203,13 @@ export interface World {
    * deterministically. Serial-phase only; called ONLY by the scheduler. Not for user code.
    */
   __mergeWorkerWrites(pairs: Int32Array | Uint32Array, count: number): void
+  /**
+   * Topic store seam. The scheduler registers `publish:`/`consume:`-declared topics, stages
+   * `ctx.publish` events, drives the per-wave canonical merge, and routes OP_PUBLISH records here.
+   * Serial / main-thread; not for user code — the public surfaces are `world.publish` and the
+   * system context's `publish`/`consume`.
+   */
+  readonly __topics: Topics
   /** Current frame tick. Advanced by reactivity at frame reset. */
   readonly tick: number
   /** Alias for `tick`. */
@@ -266,6 +275,15 @@ export interface World {
    * command buffer and apply at the next serial flush ( re-entrancy safety).
    */
   observe(term: ObserverTerm, handler: ObserverHandler): ObserverHandle
+
+  /**
+   * Publish one event from OUTSIDE systems (input handlers, network code) — main thread, serial
+   * phase, between frames. The event orders ahead of wave 0 of the next frame, in call order, and
+   * every system sees it next update. Inside a system body use the context's `publish` instead, so
+   * the event enters the canonical (frame, wave, SystemId, FIFO) order; calling this mid-update
+   * throws. Values are copied at call time; missing fields take their schema defaults.
+   */
+  publish<S extends Schema>(topic: TopicDef<S>, init?: TopicEventInit<S>): void
 
   /**
    * Did any component on `handle` change strictly after tick `since`?. Driven by
@@ -379,6 +397,18 @@ export function createWorld(options: WorldOptions = {}): World {
       fieldIndex += 1
     }
   }
+
+  // --- topics: typed event queues. Zero cost until a topic is registered (no rings, no merge
+  // work); topic ids are synthetic ComponentIds minted past the fixed stride, like relation pairs.
+  const topics = new Topics({
+    buffers,
+    allocId: () => registry.allocSyntheticId() as number,
+    phase: () => state.phase,
+    dev: IS_DEV,
+    warn: (message) => {
+      if (typeof console !== 'undefined') console.warn(`[ecsia] ${message}`)
+    },
+  })
 
   // --- bitmask + storage: the per-entity membership index and the
   // archetype tables. The bitmask stride = ceil(nextComponentId/32); both derive from the SAME
@@ -913,6 +943,7 @@ export function createWorld(options: WorldOptions = {}): World {
     __mergeWorkerWrites(pairs, count) {
       ;(reactivity as Reactivity).mergeWorkerWrites(pairs, count)
     },
+    __topics: topics,
     get tick() {
       return state.tick
     },
@@ -1014,6 +1045,12 @@ export function createWorld(options: WorldOptions = {}): World {
     observe(term, handler) {
       return (reactivity as Reactivity).observe(term, handler)
     },
+    publish(topic, init) {
+      if (state.phase !== 'serial') {
+        throw new Error(`world.publish('${topic.name}') requires world.phase === 'serial' (got '${state.phase}')`)
+      }
+      topics.publishOutside(topic as TopicDef<Schema>, init as Record<string, unknown> | undefined)
+    },
     changedSince(handle, since) {
       ;(reactivity as Reactivity).enableChangeVersion()
       return (reactivity as Reactivity).changedSince(handle, since)
@@ -1072,9 +1109,11 @@ export function createWorld(options: WorldOptions = {}): World {
     }) as unknown as WorldQuery,
     frameReset() {
       // Reactivity.frameReset advances the world tick + recycles the rings; then the query
-      // engine clears its per-frame added/removed delta lists.
+      // engine clears its per-frame added/removed delta lists; then topics drop two-frame-old
+      // events and fold any spill back into their rings (no-op when no topics are registered).
       ;(reactivity as Reactivity).frameReset()
       ;(engine as QueryEngine).frameReset()
+      topics.frameReset()
     },
   }
 

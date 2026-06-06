@@ -4,11 +4,11 @@
 // WITHOUT consuming a reserved handle. Also pins the relation-payload encode path (setRelation).
 
 import { describe, expect, test } from 'vitest'
-import { defineComponent } from '@ecsia/core'
+import { defineComponent, defineTopic } from '@ecsia/core'
 import { makeCommandBuffer, makeEncoder, buildFieldCodec, Op } from '../src/internal.js'
 import type { CommandBuffer, ComponentFieldCodec } from '../src/internal.js'
 import type { ComponentDef, ComponentId, RelationId, Schema } from '@ecsia/schema'
-import type { EntityHandle } from '@ecsia/core'
+import type { EntityHandle, TopicDef } from '@ecsia/core'
 
 const NO_ENTITY_BITS = 0xffffffff
 
@@ -168,5 +168,18 @@ describe('encode.ts: setRelation payload path (branch 115 — codec present and 
     enc.setRelation(3 as EntityHandle, 1 as RelationId, 4 as EntityHandle, { ignored: 1 })
     expect(cb.words[4]).toBe(0) // payloadWordCount = 0
     expect(cb.head).toBe(5)
+  })
+})
+
+describe('encode.ts: publish() drop path — topic not replicated to this worker', () => {
+  test('publish() with no topicInfoOf resolution warns naming the topic, emits no record', () => {
+    const cb = makeCommandBuffer(0, 64, false)
+    const warns: string[] = []
+    const { enc } = envOf(cb, warns) // envOf wires no topicInfoOf → resolution yields undefined
+    const T = defineTopic('enc_drop_topic', { n: 'i32' })
+    enc.publish(T as TopicDef<Schema>, { n: 1 })
+    expect(cb.head).toBe(0) // no OP_PUBLISH record
+    expect(cb.recordCount).toBe(0)
+    expect(warns.some((m) => /topic 'enc_drop_topic' is not registered with this worker.*publish dropped/.test(m))).toBe(true)
   })
 })

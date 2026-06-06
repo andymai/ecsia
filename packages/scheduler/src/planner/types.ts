@@ -4,7 +4,7 @@
 // pull in the scheduler layer); a relation-free kernel never imports it.
 
 import type { ComponentDef, ComponentId, Schema, SystemId, Tick } from '@ecsia/schema'
-import type { World } from '@ecsia/core'
+import type { TopicDef, TopicEvent, TopicEventInit, World } from '@ecsia/core'
 
 /** The context a system body receives each tick. */
 export interface SystemContext {
@@ -13,6 +13,21 @@ export interface SystemContext {
   readonly tick: Tick
   /** The same `query()` the world exposes, scoped (dev-mode access-guarded) for the wave. */
   readonly query: World['query']
+  /**
+   * Publish one event to a topic this system declared in `publish:` (an undeclared publish is a
+   * dev-mode error). Values are copied at call time; missing fields take their schema defaults.
+   * Consumers in later waves see the event this frame; everyone else sees it next frame — always in
+   * the canonical (frame, wave, SystemId, FIFO) order, byte-identical under any worker count.
+   */
+  publish<S extends Schema>(topic: TopicDef<S>, init?: TopicEventInit<S>): void
+  /**
+   * Iterate the events this system has not yet seen on a topic it declared in `consume:` (an
+   * undeclared consume is a dev-mode error). Each (system, topic) pair sees each event exactly
+   * once, on its own cursor — a second consumer of the same topic receives the same events, never
+   * steals them. The yielded view is pooled, like EntityRef: read fields inside the loop, never
+   * store the view itself.
+   */
+  consume<S extends Schema>(topic: TopicDef<S>): IterableIterator<TopicEvent<S>>
 }
 
 /**
@@ -31,6 +46,16 @@ export interface SystemDef {
   readonly read?: readonly ComponentDef<Schema>[]
   /** Declared write access — the SOLE source of write-intent. */
   readonly write?: readonly ComponentDef<Schema>[]
+  /**
+   * Topics this system publishes to via `ctx.publish`. Declared like read/write — declaration is
+   * the sole access source. Publishing derives an implicit publisher → consumer ordering edge (so
+   * same-frame delivery is the default), but does NOT serialize co-publishers: two systems
+   * publishing the same topic may still run concurrently (their event order is fixed by SystemId,
+   * not execution order).
+   */
+  readonly publish?: readonly TopicDef<Schema>[]
+  /** Topics this system consumes via `ctx.consume`. Declared like read/write. */
+  readonly consume?: readonly TopicDef<Schema>[]
   /** Explicit ordering: this runs BEFORE these (EdgeWeight.EXPLICIT = 5). */
   readonly before?: readonly SystemDef[]
   /** Explicit ordering: this runs AFTER these. */
@@ -63,6 +88,15 @@ export interface SystemBox {
   readonly readWords: Uint32Array
   readonly writeWords: Uint32Array
 
+  /**
+   * Declared topic access (de-duped, declaration order). Topics derive publisher → consumer DAG
+   * edges but are EXCLUDED from the WAVE-CONFLICT access words: publishing writes only worker-local
+   * staging and consuming reads a stream frozen for the wave, so there is no physical race to
+   * exclude — co-wave publishers parallelize.
+   */
+  readonly publishTopics: readonly TopicDef<Schema>[]
+  readonly consumeTopics: readonly TopicDef<Schema>[]
+
   /** Explicit ordering edges, resolved to SystemIds. */
   readonly before: readonly SystemId[]
   readonly after: readonly SystemId[]
@@ -72,8 +106,10 @@ export interface SystemBox {
 
   /**
    * Worker-eligibility: false if the system reads/writes any object<T> (restrictedToMainThread)
-   * component. Such a system is pinned to a main-thread batch; the
-   * object-field boundary is structural at schedule time, not a runtime throw.
+   * component, or consumes a topic (worker-side consume cursors are a deferred transport leg — the
+   * consumer runs in a main-thread batch; visibility/order semantics are unchanged). Such a system
+   * is pinned to a main-thread batch; the boundary is structural at schedule time, not a runtime
+   * throw.
    */
   readonly workerEligible: boolean
 }

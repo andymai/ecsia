@@ -1,6 +1,6 @@
 // Coverage: graph/edges.ts (offer self-edge guard, resolveOrdering unregistered throw, class-hint
 // resolution + missing-writer/reader continues, deny suppression) and graph/dag.ts (cycle reporting:
-// edgeCause empty fallback, name fallback, cause-less edge formatting).
+// edgeOf empty-cause fallback, name fallback, cause-less edge formatting).
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent } from '@ecsia/core'
@@ -144,7 +144,7 @@ describe('edges.ts: DENY suppresses the IMPLICIT edge (collectDenials + branch 1
   })
 })
 
-describe('dag.ts: cycle reporting — edgeCause/cause formatting (lines 39-40, branches 38/82/86)', () => {
+describe('dag.ts: cycle reporting — edgeOf/cause formatting (lines 39-40, branches 38/82/86)', () => {
   const two = (): SystemBox[] =>
     boxesOf([defineSystem({ name: 'P', run() {} }), defineSystem({ name: 'Q', run() {} })])
 
@@ -187,8 +187,8 @@ describe('dag.ts: cycle reporting — edgeCause/cause formatting (lines 39-40, b
     for (const line of arrowLines) expect(line).not.toMatch(/\(/)
   })
 
-  test('edgeCause loop skips a non-matching edge before returning the matching cause (branch 38)', () => {
-    // Cycle is 0→1→0; node 2 is a sink reachable from 0 (a non-cyclic noise edge). edgeCause(0,1)
+  test('edgeOf loop skips a non-matching edge before returning the matching cause (branch 38)', () => {
+    // Cycle is 0→1→0; node 2 is a sink reachable from 0 (a non-cyclic noise edge). edgeOf(0,1)
     // must iterate past the 0→2 entry (branch 38 false side) before matching 0→1.
     const boxes = boxesOf([
       defineSystem({ name: 'P', run() {} }),

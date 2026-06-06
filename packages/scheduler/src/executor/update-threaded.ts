@@ -28,11 +28,14 @@ export interface RoundDispatcher {
 
 function runMainThreadSystem(env: ExecutorEnv, batch: SystemBatch, dt: number): void {
   const sb = env.systems[batch.systemId as unknown as number]!
+  const topic = env.topicCtx[sb.id as unknown as number]!
   const ctx: SystemContext = {
     world: env.world,
     dt,
     tick: env.world.currentTick() as unknown as Tick,
     query: env.scopedQueries[sb.id as unknown as number]!,
+    publish: topic.publish,
+    consume: topic.consume,
   }
   sb.run(ctx)
 }
@@ -54,7 +57,11 @@ async function runWaveThreaded(env: ExecutorEnv, pool: RoundDispatcher, wave: Sc
       )
     }
   }
-  // ---- SERIAL SLOT (after the wave) ---- query maintenance + (per-system) observers.
+  // ---- SERIAL SLOT (after the wave) ---- canonical topic merge + query maintenance + observers.
+  // The topic merge runs ONCE PER WAVE (not per round): a per-round merge would expose round-packing
+  // order, which differs from SystemId order — the segment sort over the whole wave's staging is
+  // what makes the stream byte-identical to the single-thread executor's.
+  env.world.__topics.mergeStaged()
   env.world.maintainStructural()
   if (env.observerCadence === 'per-system') env.world.observerDrain()
 }
@@ -69,12 +76,14 @@ export async function runUpdateThreaded(env: ExecutorEnv, plan: SchedulePlan, po
   if (world.phase !== 'serial') {
     throw new Error(`scheduler.update entered with world.phase === '${world.phase}', expected 'serial'`)
   }
+  world.__topics.beginUpdate()
   world.frameReset()
   for (const wave of plan.waves) {
     await runWaveThreaded(env, pool, wave, dt)
   }
   if (env.observerCadence === 'frame-end') world.observerDrain()
   world.flushLogs()
+  world.__topics.endUpdate()
   if (world.phase !== 'serial') {
     throw new Error(`scheduler.update exited with world.phase === '${world.phase}', expected 'serial'`)
   }

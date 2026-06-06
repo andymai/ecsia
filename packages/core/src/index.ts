@@ -43,6 +43,9 @@ export {
 export { createStableIndex } from './util/stable-index.js'
 export type { StableIndex } from './util/stable-index.js'
 
+export { defineTopic } from './topics/index.js'
+export type { TopicDef, TopicEvent, TopicEventInit, TopicFieldValue } from './topics/index.js'
+
 export {
   ShapeKind,
   onAdd,
@@ -119,6 +122,10 @@ export type {
 
 export { NO_COMPONENT, FIRST_USER_COMPONENT_ID } from './ids.js'
 export type { WorldApplySurface, RelationsHost } from './world.js'
+// @ecsia/scheduler's topic seam: the store class behind `world.__topics`, plus the shared payload
+// codec the worker-side OP_PUBLISH encoder reuses (one codec ⇒ byte-identical streams).
+export { Topics, buildTopicCodec, TOPIC_HEADER_WORDS } from './topics/index.js'
+export type { TopicCodec, TopicFieldCodec } from './topics/index.js'
 export type {
   SerializationSurface,
   SerializeArchetype,

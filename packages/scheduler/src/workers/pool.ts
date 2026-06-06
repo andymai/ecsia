@@ -157,6 +157,11 @@ export class WorkerPool {
         buffers: manifest,
         indexBitsMask: cfg.world.handleLayout.indexMask,
         components,
+        // Topic ids are snapshotted ONCE here, like the component manifest: create the scheduler
+        // (which registers declared topics) BEFORE the pool, and recreate the pool after any
+        // re-plan that introduces new topics — a worker publish to an unaligned topic is dropped
+        // with a diagnostic, never silently misrouted.
+        topics: cfg.world.__topics.manifest(),
         commandSab: command.words.buffer as SharedArrayBuffer,
         reservationSab: reservation.sab,
         reservationCapacity: reservation.capacity,
@@ -358,6 +363,8 @@ export class WorkerPool {
       // fills in via createRelations(world). The scheduler does NOT import @ecsia/relations.
       addPair: (s, rid, t, payload) => apply.addPair?.(s, rid, t, payload),
       removePair: (s, rid, t) => apply.removePair?.(s, rid, t),
+      stagePublish: (topicId, systemId, words, at, fieldWords) =>
+        world.__topics.stageWords(topicId, systemId, words, at, fieldWords),
       returnUnused: (cb) => {
         const slot = this.#slots[cb.workerIndex]
         const block = slot?.command.lastReservation

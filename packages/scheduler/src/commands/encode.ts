@@ -9,7 +9,7 @@ import type { CommandBuffer } from './buffer.js'
 import type { ComponentFieldCodec } from './fields.js'
 import type { ComponentDef, ComponentId, RelationId, Schema } from '@ecsia/schema'
 import { NO_ENTITY } from '@ecsia/core'
-import type { EntityHandle } from '@ecsia/core'
+import type { EntityHandle, TopicCodec, TopicDef } from '@ecsia/core'
 
 /** Per-component encode metadata the worker resolves from its replicated registry. */
 export interface ComponentEncodeInfo {
@@ -26,6 +26,13 @@ export interface CommandEncoder {
   setPayload(h: EntityHandle, def: ComponentDef<Schema>, values: Record<string, unknown>): void
   setRelation(subject: EntityHandle, relationId: RelationId, target: EntityHandle, payload?: Record<string, unknown>): void
   unsetRelation(subject: EntityHandle, relationId: RelationId, target: EntityHandle): void
+  /**
+   * Emit OP_PUBLISH: one event for `def`, payload encoded to field words at call time. Not
+   * entity-targeted — the apply path routes it to the topic staging, never through
+   * validateSubject. The record carries the publishing SystemId so the serial-slot merge can
+   * canonicalize the stream independent of worker assignment.
+   */
+  publish(def: TopicDef<Schema>, init?: Record<string, unknown>): void
 }
 
 export interface EncoderEnv {
@@ -34,6 +41,10 @@ export interface EncoderEnv {
   infoOf(def: ComponentDef<Schema>): ComponentEncodeInfo
   /** Field codec for a relation payload schema (or undefined for a tag relation). */
   relationCodec(relationId: RelationId): ComponentFieldCodec | undefined
+  /** Resolve a topic def → its world-aligned id + payload codec; undefined when not replicated. */
+  topicInfoOf?(def: TopicDef<Schema>): { id: number; codec: TopicCodec } | undefined
+  /** The SystemId of the system currently encoding (stamped into OP_PUBLISH records). */
+  publisherSystemId?(): number
   /** Dev diagnostic sink (e.g. reservation exhaustion). */
   warn(message: string): void
 }
@@ -118,6 +129,24 @@ export function makeEncoder(env: EncoderEnv): CommandEncoder {
     cb.recordCount += 1
   }
 
+  function publish(def: TopicDef<Schema>, init?: Record<string, unknown>): void {
+    const info = env.topicInfoOf?.(def)
+    if (info === undefined) {
+      env.warn(`command-buffer: topic '${def.name}' is not registered with this worker; publish dropped`)
+      return
+    }
+    const f = info.codec.fieldWords
+    if (!ensureWords(cb, 4 + f)) return onOverflow()
+    const w = cb.head
+    cb.words[w] = Op.PUBLISH
+    cb.words[w + 1] = info.id >>> 0
+    cb.words[w + 2] = (env.publisherSystemId?.() ?? 0) >>> 0
+    cb.words[w + 3] = f
+    info.codec.encode(init, cb.words, w + 4)
+    cb.head += 4 + f
+    cb.recordCount += 1
+  }
+
   function unsetRelation(subject: EntityHandle, relationId: RelationId, target: EntityHandle): void {
     if (!ensureWords(cb, 4)) return onOverflow()
     const w = cb.head
@@ -137,5 +166,6 @@ export function makeEncoder(env: EncoderEnv): CommandEncoder {
     setPayload: (h, def, values) => fieldRecord(Op.SET_PAYLOAD, h, def, values),
     setRelation,
     unsetRelation,
+    publish,
   }
 }

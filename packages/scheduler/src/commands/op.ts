@@ -15,6 +15,7 @@ export const enum Op {
   ADD_PAIR = 4, // OP_ADD_PAIR eid relationId targetEid payloadWordCount [payload words...]
   REMOVE_PAIR = 5, // OP_REMOVE_PAIR eid relationId targetEid
   SET_PAYLOAD = 6, // OP_SET_PAYLOAD eid componentId fieldWordCount [field words...]
+  PUBLISH = 7, // OP_PUBLISH topicId publisherSystemId fieldWordCount [field words...]
 }
 
 /**
@@ -34,6 +35,7 @@ export function recordLen(words: Uint32Array, at: number): number {
       return 4
     case Op.ADD:
     case Op.SET_PAYLOAD:
+    case Op.PUBLISH:
       return 4 + (words[at + 3] as number) // 4 + fieldWordCount
     case Op.ADD_PAIR:
       return 5 + (words[at + 4] as number) // 5 + payloadWordCount

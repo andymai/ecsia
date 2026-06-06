@@ -23,13 +23,19 @@ import type { WorkerReservationSab } from './reservation.js'
 import type { WorkerBootstrap, ColumnsAddedMessage } from './manifest.js'
 import type { WorkerSystemKernel } from './worker-system.js'
 import type { ComponentDef, ComponentId, Schema } from '@ecsia/schema'
-import { NO_ENTITY } from '@ecsia/core'
+import { NO_ENTITY, buildTopicCodec } from '@ecsia/core'
+import type { TopicCodec, TopicDef } from '@ecsia/core'
 import type { WaveCounter } from '../executor/seams.js'
 
 const NO_ENTITY_BITS = (NO_ENTITY as unknown as number) >>> 0
 
 interface KernelModule {
-  buildWorkerKernels(): { kernels: Map<string, WorkerSystemKernel>; components: Map<string, ComponentDef<Schema>> }
+  buildWorkerKernels(): {
+    kernels: Map<string, WorkerSystemKernel>
+    components: Map<string, ComponentDef<Schema>>
+    /** Worker-side defineTopic defs, aligned to the main thread's topic ids by name. */
+    topics?: Map<string, TopicDef<Schema>>
+  }
 }
 
 const WAKE = 0
@@ -39,7 +45,7 @@ const WORK_INDICES_BYTE_OFFSET = 12
 async function main(): Promise<void> {
   const boot = workerData as WorkerBootstrap
   const mod = (await import(boot.kernelModule)) as unknown as KernelModule
-  const { kernels, components: defByName } = mod.buildWorkerKernels()
+  const { kernels, components: defByName, topics: topicByName } = mod.buildWorkerKernels()
   // The SystemId→name mapping is the POOL's registration order (the bootstrap), NOT the kernel
   // module's own order — so the worker runs the system the pool dispatched, by name.
   const names = boot.systemNames
@@ -50,6 +56,11 @@ async function main(): Promise<void> {
   for (const c of boot.components) {
     const def = defByName.get(c.name) as unknown as { id: number } | undefined
     if (def !== undefined) def.id = c.id
+  }
+  // Topic ids align the same way components do: the manifest carries the authoritative dense ids.
+  for (const t of boot.topics ?? []) {
+    const def = topicByName?.get(t.name) as unknown as { id: number } | undefined
+    if (def !== undefined) def.id = t.id
   }
 
   const reservation: WorkerReservationSab = {
@@ -82,11 +93,28 @@ async function main(): Promise<void> {
     return c
   }
 
+  // The publishing SystemId rides every OP_PUBLISH record so the main thread's serial-slot merge
+  // can canonicalize the stream independent of which worker carried the bytes. Set per dispatch.
+  let currentSystemId = 0
+  const topicCodecCache = new Map<number, TopicCodec>()
   const encoder = makeEncoder({
     cb,
     infoOf(def) {
       const id = (def as unknown as { id: number }).id as unknown as ComponentId
       return { id, codec: codecOf(def) }
+    },
+    topicInfoOf(def) {
+      const id = (def as unknown as { id: number }).id
+      if (id < 0) return undefined
+      let codec = topicCodecCache.get(id)
+      if (codec === undefined) {
+        codec = buildTopicCodec(def.fields)
+        topicCodecCache.set(id, codec)
+      }
+      return { id, codec }
+    },
+    publisherSystemId() {
+      return currentSystemId
     },
     relationCodec() {
       // Relation payload schemas are not yet replicated into the worker
@@ -180,6 +208,7 @@ async function main(): Promise<void> {
     const systemId = Atomics.load(work, 0)
     const count = Atomics.load(work, 1)
     const dt = workF32[2]!
+    currentSystemId = systemId
     cb.head = 0
     cb.recordCount = 0
     cb.overflowed = false

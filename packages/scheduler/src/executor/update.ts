@@ -12,7 +12,8 @@ export function runUpdate(env: ExecutorEnv, plan: SchedulePlan, dt: number): voi
     throw new Error(`scheduler.update entered with world.phase === '${world.phase}', expected 'serial'`)
   }
   // ---- 1. frame start ----
-  world.frameReset() // advance currentTick; reset transient query lists
+  world.__topics.beginUpdate() // world.publish is now illegal until the update ends
+  world.frameReset() // advance currentTick; reset transient query lists; drop two-frame-old events
   // ---- 2..4. run every wave, flushing structural + reactivity between waves ----
   for (const wave of plan.waves) {
     runWave(env, wave, dt)
@@ -20,6 +21,7 @@ export function runUpdate(env: ExecutorEnv, plan: SchedulePlan, dt: number): voi
   // ---- 5. end-of-frame reactivity ----
   if (env.observerCadence === 'frame-end') world.observerDrain()
   world.flushLogs() // drain spill, schedule ring resize
+  world.__topics.endUpdate() // events appended from here on are stamped for the upcoming frame
   if (world.phase !== 'serial') {
     throw new Error(`scheduler.update exited with world.phase === '${world.phase}', expected 'serial'`)
   }

@@ -2,7 +2,8 @@
 // set `A → B` ("A must run before B") from four sources: EXPLICIT before/after (5), DENY suppression
 // (4, removes IMPLICIT only), CLASS_HINT coarse helpers (3), and the auto IMPLICIT conflict edges (1).
 
-import type { ComponentId, SystemId } from '@ecsia/schema'
+import type { ComponentId, Schema, SystemId } from '@ecsia/schema'
+import type { TopicDef } from '@ecsia/core'
 import type { AccessMaps } from '../planner/index.js'
 import type { OrderingHint, SystemBox, SystemDef } from '../planner/index.js'
 import { EdgeWeight } from './weights.js'
@@ -14,6 +15,9 @@ export interface Edge {
   readonly weight: EdgeWeight
   /** Human-readable cause used in cycle reporting. */
   readonly cause: string
+  /** Set when a topic publisher → consumer derivation contributed — the cycle reporter uses it
+   *  to suggest the topic-specific break (consumer.after vs inAnyOrderWith). */
+  readonly topic?: true
 }
 
 function key(from: number, to: number): number {
@@ -40,7 +44,8 @@ function offer(b: EdgeBuilders, edge: Edge): void {
   if (prev === undefined || edge.weight > prev.weight) {
     b.best.set(k, edge)
   } else if (edge.weight === prev.weight && edge.cause !== prev.cause) {
-    b.best.set(k, { ...prev, cause: `${prev.cause}; ${edge.cause}` })
+    const merged: Edge = { ...prev, cause: `${prev.cause}; ${edge.cause}` }
+    b.best.set(k, edge.topic === true ? { ...merged, topic: true } : merged)
   }
 }
 
@@ -197,6 +202,51 @@ function applyExplicit(systems: readonly SystemBox[], b: EdgeBuilders): void {
   }
 }
 
+/**
+ * Topic edges: publishing derives an IMPLICIT publisher → consumer edge per shared topic, so a
+ * consumer lands in a later wave and same-frame delivery is the default (without the edge, a
+ * publish creates a hidden ordering dependency the user discovers as a mysterious one-frame lag).
+ * The direction is publisher → consumer (NOT registration order — the topic behaves like a written
+ * component with the consumer as reader); DENY suppresses it like any implicit edge. Co-publishers
+ * and co-consumers of one topic get NO edge between each other — their relative event order is
+ * fixed by the SystemId canonicalization, not by execution order.
+ */
+function deriveTopicEdges(systems: readonly SystemBox[], denied: Set<number>, b: EdgeBuilders): void {
+  const publishers = new Map<TopicDef<Schema>, SystemId[]>()
+  const consumers = new Map<TopicDef<Schema>, SystemId[]>()
+  for (const sb of systems) {
+    for (const t of sb.publishTopics) {
+      const list = publishers.get(t) ?? []
+      list.push(sb.id)
+      publishers.set(t, list)
+    }
+    for (const t of sb.consumeTopics) {
+      const list = consumers.get(t) ?? []
+      list.push(sb.id)
+      consumers.set(t, list)
+    }
+  }
+  for (const [topic, pubs] of publishers) {
+    const cons = consumers.get(topic)
+    if (cons === undefined) continue
+    for (const p of pubs) {
+      for (const c of cons) {
+        if (p === c) continue
+        const pn = p as unknown as number
+        const cn = c as unknown as number
+        if (denied.has(denyKey(pn, cn))) continue
+        offer(b, {
+          from: p,
+          to: c,
+          weight: EdgeWeight.IMPLICIT,
+          cause: `${nameOf(systems, p)} publishes topic '${topic.name}' consumed by ${nameOf(systems, c)}`,
+          topic: true,
+        })
+      }
+    }
+  }
+}
+
 /** Build the resolved max-weight edge set (DENY-suppressed IMPLICIT removed by construction). */
 export function buildEdges(
   systems: readonly SystemBox[],
@@ -209,5 +259,14 @@ export function buildEdges(
   applyExplicit(systems, b)
   applyClassHints(systems, access, b)
   deriveImplicit(systems, access, denied, b)
+  deriveTopicEdges(systems, denied, b)
+  // Opposite-direction resolution: a STRICTLY stronger declaration overrides a weaker inferred
+  // edge pointing the other way (e.g. an explicit `consumer before publisher` beats the implicit
+  // publisher → consumer topic edge — the user opted into next-frame delivery). Equal weights keep
+  // both edges, and the cycle detector reports the contradiction with its inAnyOrderWith suggestion.
+  for (const [k, edge] of [...b.best]) {
+    const reverse = b.best.get(key(edge.to as unknown as number, edge.from as unknown as number))
+    if (reverse !== undefined && reverse.weight > edge.weight) b.best.delete(k)
+  }
   return [...b.best.values()]
 }

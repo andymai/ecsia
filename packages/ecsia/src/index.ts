@@ -23,7 +23,7 @@ import type { World as _CoreWorld, EntityRef as _CoreEntityRef, WorldOptions as 
 /** The `__`-prefixed wiring seams + scheduler-only loop verbs that .. keep off the public surface. */
 type WorldInternalSeam =
   | '__setPhase' | '__spawnReserved' | '__apply' | '__installRelations' | '__exportShared'
-  | '__serialize' | '__mergeWorkerWrites'
+  | '__serialize' | '__mergeWorkerWrites' | '__topics'
   | 'trackWrite' | 'advanceTick' | 'mergeCorrals' | 'maintainStructural'
   | 'observerDrain' | 'flushLogs' | 'reserveEntityBlock' | 'returnReservedIds' | 'changedRows'
 
@@ -64,6 +64,11 @@ export type {
 // (defineRelation is reached via createRelations(world).defineRelation because the relations runtime
 // mints world-scoped synthetic ids — see the )
 export { defineComponent, defineTag } from '@ecsia/core'
+// Topics — typed inter-system event queues. defineTopic is a module-scope definition like
+// defineComponent; systems declare interest via the publish:/consume: keys on defineSystem, and
+// code outside systems publishes between frames via world.publish.
+export { defineTopic } from '@ecsia/core'
+export type { TopicDef, TopicEvent, TopicEventInit, TopicFieldValue } from '@ecsia/core'
 export { defineSystem, inAnyOrderWith, beforeWritersOf, afterReadersOf } from '@ecsia/scheduler'
 // NOTE (design latitude): the relations runtime binds
 // `defineRelation` to a world via `createRelations(world).defineRelation(...)` — there is no

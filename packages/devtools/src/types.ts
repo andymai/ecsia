@@ -86,6 +86,9 @@ export interface SystemExplain {
   readonly name: string
   readonly reads: readonly string[]
   readonly writes: readonly string[]
+  /** Topic names this system publishes / consumes — the cause of a topic-derived wave separation. */
+  readonly publishes: readonly string[]
+  readonly consumes: readonly string[]
   readonly workerEligible: boolean
 }
 
@@ -115,7 +118,14 @@ export interface ConflictExplain {
 /** A system pinned to the main thread, with the reason it cannot run on a worker (waves ). */
 export interface PinExplain {
   readonly system: string
-  readonly reason: 'rich-fields' | 'main-thread'
+  /**
+   * 'rich-fields' = reads/writes an object<T>/'string' component (structural, permanent);
+   * 'topic-consumer' = consumes a topic (worker-side consume is the deferred transport leg);
+   * 'main-thread' = worker-eligible but placed on the main thread by the plan.
+   * A system with BOTH ineligibility causes reports 'rich-fields' — the data constraint is
+   * permanent, while the consume pin lifts when worker-side consume ships.
+   */
+  readonly reason: 'rich-fields' | 'topic-consumer' | 'main-thread'
 }
 
 /** The whole-plan explanation — the WHY of the schedule, plain + serializable (waves ). */

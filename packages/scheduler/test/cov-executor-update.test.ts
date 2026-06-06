@@ -15,6 +15,7 @@ interface FakeWorld {
   maintainStructural: ReturnType<typeof vi.fn>
   mergeCorrals: ReturnType<typeof vi.fn>
   currentTick: ReturnType<typeof vi.fn>
+  __topics: { beginUpdate: ReturnType<typeof vi.fn>; endUpdate: ReturnType<typeof vi.fn>; mergeStaged: ReturnType<typeof vi.fn> }
 }
 
 function fakeWorld(overrides: Partial<{ phase: string; onFlushLogs: () => void }> = {}): FakeWorld {
@@ -26,6 +27,7 @@ function fakeWorld(overrides: Partial<{ phase: string; onFlushLogs: () => void }
     maintainStructural: vi.fn(),
     mergeCorrals: vi.fn(),
     currentTick: vi.fn(() => 0),
+    __topics: { beginUpdate: vi.fn(), endUpdate: vi.fn(), mergeStaged: vi.fn() },
   }
 }
 
@@ -37,6 +39,7 @@ function envOf(world: FakeWorld, cadence: 'frame-end' | 'per-system', systems: S
     observerCadence: cadence,
     systems,
     scopedQueries: systems.map(() => vi.fn() as unknown as ExecutorEnv['scopedQueries'][number]),
+    topicCtx: systems.map(() => ({ publish: vi.fn(), consume: vi.fn() }) as unknown as ExecutorEnv['topicCtx'][number]),
   }
 }
 
