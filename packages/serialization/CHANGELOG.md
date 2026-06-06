@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.7.10](https://github.com/andymai/ecsia/compare/serialization-v0.7.9...serialization-v0.7.10) (2026-06-06)
+
+
+### Bug Fixes
+
+* a rich field reset to its default now reaches delta receivers (FORMAT_VERSION 4) ([#49](https://github.com/andymai/ecsia/issues/49)) ([e1a97f7](https://github.com/andymai/ecsia/commit/e1a97f7f25a1791d7b63f55cbe84ccf835ef4021))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.7.10
+    * @ecsia/schema bumped to 0.7.10
+  * devDependencies
+    * @ecsia/relations bumped to 0.7.10
+
 ## [0.7.9](https://github.com/andymai/ecsia/compare/serialization-v0.7.8...serialization-v0.7.9) (2026-06-06)
 
 

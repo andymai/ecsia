@@ -1,6 +1,6 @@
 {
   "name": "@ecsia/scheduler",
-  "version": "0.7.9",
+  "version": "0.7.10",
   "description": "System scheduler for ecsia: declare what each system reads and writes, and non-conflicting systems run in parallel across worker threads.",
   "keywords": [
     "ecs",
