@@ -90,7 +90,7 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
   // The serializer-OWNED epsilon shadow (RF-SHADOW-FREE): per (archetypeId, columnIndex) a parallel
   // Float64Array of the last-EMITTED numeric values, sized lazily as archetypes are encountered. Only
   // allocated when epsilon is set; core never sees it.
-  const shadow = new Map<number, Map<number, Float64Array>>()
+  const shadow = new Map<number, ArchShadow>()
   // Constructing a delta serializer registers the changeVersion stamping consumer:
   // touching changedSince once turns on stamping so subsequent writes stamp the per-row version.
   world.changedSince(0 as EntityHandle, 0)
@@ -282,6 +282,10 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
     for (const a of s.archetypes()) {
       const archShadow = shadow.get(a.id)
       if (archShadow === undefined) continue
+      // Snap tenants alongside values: a refresh means "the receiver knows the CURRENT state", and
+      // that state belongs to the rows' current occupants.
+      growTenants(archShadow, a.count)
+      for (let r = 0; r < a.count; r++) archShadow.tenants[r] = a.rows[r] as number
       let flatIndex = 0
       for (const comp of a.components) {
         for (let i = 0; i < comp.columns.length; i++) {
@@ -290,7 +294,7 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
             flatIndex += 1
             continue
           }
-          const cells = archShadow.get(flatIndex)
+          const cells = archShadow.cols.get(flatIndex)
           if (cells !== undefined) {
             const view = col.view as unknown as ArrayLike<number>
             const lanes = Math.min(cells.length, a.count * col.layout.stride)
@@ -325,24 +329,45 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
 // seen before has no shadow entry → its lanes differ from 0; to avoid spuriously emitting the initial
 // value, a fresh shadow cell is seeded to the current value and the row is kept (the first observation is
 // always emitted, matching "the receiver must learn the value at least once").
+interface ArchShadow {
+  /** Shadow cell owner per row, as the FULL entity handle; NO_TENANT where never seeded. Cells are
+   * row-positional, but rows are not stable identities — swap-pop, migration, and despawn/respawn
+   * all hand a row to a new entity whose values must not be epsilon-compared against the previous
+   * tenant's emissions (divergence would be unbounded, not <= epsilon). A tenant mismatch makes the
+   * row FRESH: emitted and reseeded. */
+  tenants: Uint32Array
+  cols: Map<number, Float64Array>
+}
+
+const NO_TENANT = 0xffff_ffff
+
+function growTenants(archShadow: ArchShadow, count: number): void {
+  if (archShadow.tenants.length >= count) return
+  const grown = new Uint32Array(count).fill(NO_TENANT)
+  grown.set(archShadow.tenants)
+  archShadow.tenants = grown
+}
+
 function filterByEpsilon(
   a: {
     id: number
     count: number
+    rows: ArrayLike<number>
     components: readonly {
       columns: readonly ({ view: ArrayLike<number>; layout: { stride: number; element: ElementKind } } | undefined)[]
       fields: readonly { persist: boolean }[]
     }[]
   },
   rows: readonly number[],
-  shadow: Map<number, Map<number, Float64Array>>,
+  shadow: Map<number, ArchShadow>,
   epsilon: number,
 ): number[] {
   let archShadow = shadow.get(a.id)
   if (archShadow === undefined) {
-    archShadow = new Map()
+    archShadow = { tenants: new Uint32Array(a.count).fill(NO_TENANT), cols: new Map() }
     shadow.set(a.id, archShadow)
   }
+  growTenants(archShadow, a.count)
   // Enumerate the archetype's PERSISTED numeric columns in a stable (component, column) order,
   // assigning each a flat shadow column index. Non-persisted columns are excluded from the compare
   // (they never reach the wire, so a transient-field change must not defeat the epsilon drop) but
@@ -365,13 +390,13 @@ function filterByEpsilon(
         continue
       }
       const stride = col.layout.stride
-      let cells = archShadow.get(flatIndex)
+      let cells = archShadow.cols.get(flatIndex)
       const fresh = cells === undefined || cells.length < a.count * stride
       if (fresh) {
         const grown = new Float64Array(a.count * stride)
         if (cells !== undefined) grown.set(cells)
         cells = grown
-        archShadow.set(flatIndex, cells)
+        archShadow.cols.set(flatIndex, cells)
       }
       cols.push({ key: flatIndex, view: col.view, stride, fresh, cells: cells as Float64Array })
       flatIndex += 1
@@ -381,21 +406,26 @@ function filterByEpsilon(
   // Track which shadow cells were "seen" this emit for a fresh column, so a fresh column always emits the
   // row's initial value (otherwise a brand-new column's first values would be silently dropped).
   for (const r of rows) {
-    let exceeds = false
-    for (const c of cols) {
-      const base = r * c.stride
-      for (let lane = 0; lane < c.stride; lane++) {
-        const cur = c.view[base + lane] as number
-        const prev = c.cells[base + lane] as number
-        if (c.fresh || Math.abs(cur - prev) > epsilon) {
-          exceeds = true
-          break
+    const occupant = a.rows[r] as number
+    const tenantChanged = archShadow.tenants[r] !== occupant
+    let exceeds = tenantChanged
+    if (!exceeds) {
+      for (const c of cols) {
+        const base = r * c.stride
+        for (let lane = 0; lane < c.stride; lane++) {
+          const cur = c.view[base + lane] as number
+          const prev = c.cells[base + lane] as number
+          if (c.fresh || Math.abs(cur - prev) > epsilon) {
+            exceeds = true
+            break
+          }
         }
+        if (exceeds) break
       }
-      if (exceeds) break
     }
     if (exceeds) {
       kept.push(r)
+      archShadow.tenants[r] = occupant
       for (const c of cols) {
         const base = r * c.stride
         for (let lane = 0; lane < c.stride; lane++) c.cells[base + lane] = c.view[base + lane] as number
