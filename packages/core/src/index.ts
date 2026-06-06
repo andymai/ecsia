@@ -85,6 +85,7 @@ export type {
   FieldToken,
   FieldSpec,
   FieldValue,
+  FieldDefault,
   Schema,
   ComponentDef,
   ComponentOptions,

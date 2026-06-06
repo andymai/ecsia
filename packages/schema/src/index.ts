@@ -83,12 +83,19 @@ export const staticString = <const C extends readonly string[]>(...choices: C): 
 })
 export const object = <T>(): ObjectToken<T> => ({ kind: 'object' })
 
+/** The shape a user-declared default takes for token `F`. Vec defaults are PLAIN ARRAYS — one
+ * value per lane — not the VecView accessor shape reads/writes use: a default is an input value,
+ * and the descriptor runtime reads it by lane index. */
+export type FieldDefault<F extends BaseFieldToken> = F extends VecToken<infer E, number>
+  ? readonly ScalarValue<E>[]
+  : FieldValue<F>
+
 // Wrap any token with per-field options. Additive: bare tokens still work unwrapped;
 // `field(token, { default })` carries the default through to the FieldDescriptor, and
 // `field(token, { persist: false })` marks the field serialization-transient.
 export const field = <const F extends BaseFieldToken>(
   token: F,
-  opts: { default?: FieldValue<F>; persist?: boolean },
+  opts: { default?: FieldDefault<F>; persist?: boolean },
 ): FieldSpec<F> => ({
   __fieldSpec: true,
   token,

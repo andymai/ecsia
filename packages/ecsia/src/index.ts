@@ -108,6 +108,7 @@ export type {
   FieldToken,
   FieldSpec,
   FieldValue,
+  FieldDefault,
   Schema,
 } from '@ecsia/core'
 
