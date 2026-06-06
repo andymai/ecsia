@@ -19,8 +19,8 @@ hero:
 features:
   - title: Fast iteration, fully typed
     details: Each component field is stored in its own contiguous array, so loops over thousands of entities walk straight through memory. On top sits a typed API — e.position.x is a number, no casts, no Proxy.
-  - title: Multithreading is one flag
-    details: Set threaded:true and nothing else changes. Each system declares what it reads and writes; ecsia runs the systems that can't interfere with each other on worker threads — and the result is byte-for-byte identical to running on one thread.
+  - title: Multithreading without rewrites
+    details: Each system declares what it reads and writes; set threaded:true, point the scheduler at your worker kernels, and await update() — ecsia runs the systems that can't interfere with each other on worker threads, byte-for-byte identical to running on one thread.
   - title: Entities can link to each other
     details: "Parent/child trees, ownership, targeting — links are stored as plain numbers next to your component data, so they're fast to query, survive saving and loading, and work across threads. Cleanup can cascade: despawn a parent and its children go too."
   - title: One import, pay for what you use
@@ -85,15 +85,24 @@ const scheduler = createScheduler(world, [Movement])
 scheduler.update(dt) // run one frame
 ```
 
-Go parallel with the **same** user code — `threaded: true` changes where systems run,
-not how you write them:
+Go parallel without changing your queries or accessors — `threaded: true` gives the
+columns shared backings, and the scheduler dispatches worker-eligible systems to a pool
+it creates and owns:
 
 ```ts
-import { createWorld, defineComponent } from 'ecsia'
+import { createWorld, defineComponent, defineSystem, createScheduler } from 'ecsia'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
+const world = createWorld({ components: [Position], threaded: true, scheduler: { workers: 4 } })
 
-const world = createWorld({ components: [Position], threaded: true })
+const Move = defineSystem({ name: 'Move', read: [], write: [Position], run() {} })
+const scheduler = createScheduler(world, [Move], {
+  // Worker threads import their system bodies (kernels) from this module —
+  // see the Multithreading guide for the 10-line kernels.js.
+  threading: { kernelModule: new URL('./kernels.js', import.meta.url).href },
+})
+
+await scheduler.update(1 / 60) // worker rounds dispatch automatically; identical output guaranteed
 ```
 
 Keep going: [Getting started →](/guide/getting-started)

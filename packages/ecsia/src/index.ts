@@ -140,7 +140,7 @@ export const createStableIndex: <C extends _ComponentDef<_Schema>, F extends key
 // ---------------------------------------------------------------------------
 import { createScheduler as _mkSched } from '@ecsia/scheduler'
 import type { SchedulerHandle as _SchedulerHandle, CreateSchedulerOptions as _CreateSchedulerOptions, SystemDef as _SystemDef } from '@ecsia/scheduler'
-export type { SchedulerHandle, CreateSchedulerOptions, SystemDef, SystemContext, OrderingHint } from '@ecsia/scheduler'
+export type { SchedulerHandle, CreateSchedulerOptions, SchedulerThreadingOptions, SystemDef, SystemContext, OrderingHint } from '@ecsia/scheduler'
 
 /** Build the wave scheduler over a world's systems. Accepts the public World facade. */
 export const createScheduler: (

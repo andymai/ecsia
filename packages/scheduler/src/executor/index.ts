@@ -1,5 +1,5 @@
 export { createScheduler, buildSchedulePlan } from './scheduler.js'
-export type { SchedulerHandle, CreateSchedulerOptions } from './scheduler.js'
+export type { SchedulerHandle, CreateSchedulerOptions, SchedulerThreadingOptions } from './scheduler.js'
 export { runUpdate } from './update.js'
 export { runUpdateThreaded } from './update-threaded.js'
 export type { RoundDispatcher } from './update-threaded.js'
