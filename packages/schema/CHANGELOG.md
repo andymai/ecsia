@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.5](https://github.com/andymai/ecsia/compare/schema-v0.7.4...schema-v0.7.5) (2026-06-06)
+
+
+### Bug Fixes
+
+* guard one-word log packing against componentId overflow; type vec defaults as arrays ([#38](https://github.com/andymai/ecsia/issues/38)) ([6acdefe](https://github.com/andymai/ecsia/commit/6acdefe99bc5d237edd7228a5bac4f762c4a386d))
+
 ## [0.7.4](https://github.com/andymai/ecsia/compare/schema-v0.7.3...schema-v0.7.4) (2026-06-06)
 
 
