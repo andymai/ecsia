@@ -388,21 +388,22 @@ export class ArchetypeStore {
     if (def === undefined) return
     const rt = def as ComponentRuntime<Schema>
     let layoutIndex = 0
-    let fieldIndex = 0
     for (const f of rt.fields) {
-      if (f.ctor === null) {
-        fieldIndex += 1
-        continue
-      }
+      if (f.ctor === null) continue
       const col = cs.columns[layoutIndex] as Column
-      if (f.needsExplicitInit) {
+      const base = row * col.layout.stride
+      // Every field re-defaults UNCONDITIONALLY (archetype-storage.md §5.7): zero-init only covers
+      // never-used rows — removeRow swap-pop and the cold free list hand out rows still holding the
+      // previous tenant's bytes. Array defaults (vecs) encode per lane; the single-value fillOnInit
+      // would coerce the whole array (NaN) and cannot represent non-uniform lanes.
+      const d = f.default
+      if (Array.isArray(d)) {
+        for (let a = 0; a < col.layout.stride; a++) col.view[base + a] = f.encode(d[a])
+      } else {
         const fill = col.layout.fillOnInit
-        const base = row * col.layout.stride
         for (let a = 0; a < col.layout.stride; a++) col.view[base + a] = fill
       }
-      // else: the column's zero-init already holds the intrinsic default.
       layoutIndex += 1
-      fieldIndex += 1
     }
   }
 
@@ -458,6 +459,10 @@ export class ArchetypeStore {
     const ids: number[] = []
     for (const d of defs) ids.push((d as ComponentRuntime<Schema>).id as number)
     const toArch = this.getOrCreateArchetype(canonicalize(ids))
+    // Zero specs (or all-duplicate ids resolving to the empty signature) would self-migrate
+    // empty→empty: allocRow appends a DUPLICATE row for the handle, then removeRow + commitRecord
+    // strand the record outside the live range — the guard every sibling entry point already has.
+    if (toArch === this.emptyArchetype) return this.#deps.record.rowOf(this.#deps.handleIndex(handle))
     return this.migrate(handle, this.emptyArchetype, toArch)
   }
 

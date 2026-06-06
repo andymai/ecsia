@@ -272,17 +272,16 @@ describe('generationBits === 0 rejected when threaded === true', () => {
 })
 
 describe('capacity & growth (I3 / I9)', () => {
-  test('spawning past the initial maxEntities grows the arrays; handles stay alive and resolvable', () => {
-    // Initial addressable length is 4; growth doubles up to the index space.
+  test('every handle up to maxEntities is alive and resolvable; the cap binds the mint ceiling', () => {
+    // maxEntities sizes every fixed flat structure (bitmask words, query sparse sets, reactivity
+    // rings), so it is the HARD mint ceiling (world.md §6.2) — minting past it would silently
+    // corrupt membership (OOB bitmask writes are no-ops), the critical bug.
     const w = createWorld({ maxEntities: 4 })
     const handles: EntityHandle[] = []
-    for (let i = 0; i < 9; i++) handles.push(w.spawn())
-    // Every handle — including those minted past the initial 4 — must be alive (NOT silently
-    // out-of-bounds / reported dead, the critical bug).
+    for (let i = 0; i < 4; i++) handles.push(w.spawn())
     for (const h of handles) expect(w.isAlive(h)).toBe(true)
-    expect(w.handleStats().aliveCount).toBe(9)
-    expect(w.handleStats().minted).toBe(9)
-    // resolveLocation is correct after growth (every spawn lands in the empty archetype).
+    expect(w.handleStats().aliveCount).toBe(4)
+    expect(w.handleStats().minted).toBe(4)
     for (const h of handles) {
       const ref = w.entity(h)
       expect(ref.__archetypeId).toBe(0)
@@ -290,22 +289,22 @@ describe('capacity & growth (I3 / I9)', () => {
     }
   })
 
-  test('the 5th and 6th spawn of a maxEntities:4 world are alive (regression: silent OOB)', () => {
+  test('the spawn past maxEntities throws CapacityExceeded loudly (regression: silent OOB)', () => {
     const w = createWorld({ maxEntities: 4 })
-    const fifth = (() => {
-      let h = w.spawn()
-      for (let i = 1; i < 5; i++) h = w.spawn()
-      return h
-    })()
-    const sixth = w.spawn()
-    expect(w.isAlive(fifth)).toBe(true)
-    expect(w.isAlive(sixth)).toBe(true)
+    for (let i = 0; i < 4; i++) w.spawn()
+    expect(() => w.spawn()).toThrow(/exhausted/)
+    // Free a slot and the next spawn succeeds again — the cap gates SIMULTANEOUS liveness.
+    const w2 = createWorld({ maxEntities: 4 })
+    const first = w2.spawn()
+    for (let i = 0; i < 3; i++) w2.spawn()
+    w2.despawn(first)
+    expect(w2.isAlive(w2.spawn())).toBe(true)
   })
 
   test('CapacityExceeded throws at the real index-space ceiling, not silently', () => {
     // generationBits 30 → indexBits 2 → maxIndex 3, capacity 4 (the whole index space).
-    // Single-threaded: ceiling = maxIndex + 1 = 4. The 5th distinct mint must throw.
-    const w = createWorld({ generationBits: 30, maxEntities: 2 })
+    // Single-threaded: ceiling = min(maxEntities, maxIndex + 1) = 4. The 5th distinct mint must throw.
+    const w = createWorld({ generationBits: 30, maxEntities: 4 })
     const live = [w.spawn(), w.spawn(), w.spawn(), w.spawn()]
     for (const h of live) expect(w.isAlive(h)).toBe(true)
     expect(() => w.spawn()).toThrow(/exhausted/)
@@ -314,8 +313,8 @@ describe('capacity & growth (I3 / I9)', () => {
   test('threaded worlds reserve maxIndex for the NO_ENTITY sentinel', () => {
     // crossOriginIsolated is false in the test env, so threaded arrays are plain ArrayBuffers,
     // but the mint ceiling is still maxIndex (not maxIndex + 1): the sentinel slot is unusable.
-    // gen 30 → maxIndex 3; threaded ceiling = 3, so at most 3 distinct mints.
-    const w = createWorld({ generationBits: 30, maxEntities: 2, threaded: true })
+    // gen 30 → maxIndex 3; threaded ceiling = min(maxEntities, maxIndex) = 3, so at most 3 mints.
+    const w = createWorld({ generationBits: 30, maxEntities: 4, threaded: true })
     const a = w.spawn()
     const b = w.spawn()
     const c = w.spawn()

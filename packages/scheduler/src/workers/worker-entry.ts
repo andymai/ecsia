@@ -14,7 +14,7 @@
 // The worker NEVER mutates shared structure mid-wave and NEVER reads the bitmask.
 
 import { parentPort, workerData } from 'node:worker_threads'
-import { makeEncoder, buildFieldCodec } from '../commands/index.js'
+import { makeEncoder, buildFieldCodec, ensureWords } from '../commands/index.js'
 import type { CommandBuffer, ComponentFieldCodec } from '../commands/index.js'
 import { buildWorkerWorldView, makeWriteCorralWriter } from './world-view.js'
 import { completeWave, setWaveError } from './wave-sync.js'
@@ -133,6 +133,17 @@ async function main(): Promise<void> {
   // spurious OP_CREATE 0xffffffff that the apply path would try to spawn → record-table corruption).
   const baseCreate = encoder.create
   ;(encoder as { create: typeof baseCreate }).create = (): ReturnType<typeof baseCreate> => {
+    // Capacity check BEFORE the Atomics take, mirroring the base encoder's ordering contract: a full
+    // buffer must not burn a reservation slot. takeReserved's decrement is what consumedCount counts,
+    // so a slot consumed with no OP_CREATE emitted is a handle minted alive that nothing ever places
+    // or reclaims — a permanent leak, one per capped create per overflow wave.
+    if (!ensureWords(cb, 2)) {
+      if (!cb.overflowWarned) {
+        cb.overflowWarned = true
+        parentPort?.postMessage({ kind: 'diagnostic', message: 'command-buffer: fixed (SAB) buffer full; record dropped (raise commandWords)' })
+      }
+      return NO_ENTITY
+    }
     const h = takeReserved(reservation)
     if ((h as unknown as number) >>> 0 === NO_ENTITY_BITS) {
       parentPort?.postMessage({ kind: 'diagnostic', message: 'command-buffer: reservation exhausted; raise maxSpawnsPerWave (spawn capped)' })

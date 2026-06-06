@@ -82,8 +82,13 @@ export class SparseSetU32 {
   #ensureCapacity(need: number): void {
     if (need <= this.#capacity) return
     let next = this.#capacity
-    while (next < need) next = Math.min(this.#maxEntities, next * GROWTH)
-    if (next < need) next = need
+    while (next < need && next < this.#maxEntities) next = Math.min(this.#maxEntities, next * GROWTH)
+    // Unreachable while the entity allocator enforces maxEntities as its mint ceiling; a loud throw
+    // beats the silent alternative (the old clamp loop span forever once next hit maxEntities).
+    if (next < need)
+      throw new Error(
+        `query sparse-set: entity index ${need - 1} exceeds maxEntities (${this.#maxEntities}) — the world's entity allocator should have thrown CapacityExceeded before this point`,
+      )
     // Both regions length-track on the primary path; re-publish the view for the fallback path too.
     growRegion(this.#buffers, this.#denseRegion, next)
     growRegion(this.#buffers, this.#sparseRegion, next)
