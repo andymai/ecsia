@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.0](https://github.com/andymai/ecsia/compare/core-v0.4.0...core-v0.5.0) (2026-06-06)
+
+
+### Features
+
+* prefab templates and IsA inheritance on integer pairs ([#20](https://github.com/andymai/ecsia/issues/20)) ([de8de13](https://github.com/andymai/ecsia/commit/de8de13360e8397507b2e74a7ab0019dc9e947e2))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.5.0
+
 ## [0.4.0](https://github.com/andymai/ecsia/compare/core-v0.3.0...core-v0.4.0) (2026-06-06)
 
 
