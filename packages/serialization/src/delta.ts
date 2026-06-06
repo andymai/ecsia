@@ -68,6 +68,14 @@ export interface DeltaSerializer {
   delta(): Uint8Array
   deltaCopy(): Uint8Array
   readonly sinceTick: number
+  /**
+   * Snap the epsilon shadow to the CURRENT column values (no-op when `epsilon` is unset). The
+   * shadow normally holds last-EMITTED values, so a receiver rebased onto an exact full snapshot
+   * would otherwise be epsilon-compared against stale emissions — letting it drift up to
+   * 2·epsilon before a held-back row re-crosses tolerance. Call at the same serial flush a
+   * rebasing snapshot is taken.
+   */
+  refreshEpsilonShadow(): void
 }
 
 // MAGIC u32, VERSION u16, ENDIAN u8, flags u8, schemaHash u32 (v3), baselineTick u32,
@@ -264,6 +272,34 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
     baseline = target
   }
 
+  // Only EXISTING shadow cells are snapped: a column with no cells yet is FRESH, and fresh
+  // semantics (the first candidate emission always emits) must survive the refresh — seeding it
+  // here would silently suppress that first observation for delta-chained receivers.
+  function refreshEpsilonShadow(): void {
+    if (epsilon === undefined) return
+    for (const a of s.archetypes()) {
+      const archShadow = shadow.get(a.id)
+      if (archShadow === undefined) continue
+      let flatIndex = 0
+      for (const comp of a.components) {
+        for (let i = 0; i < comp.columns.length; i++) {
+          const col = comp.columns[i]
+          if (col === undefined || comp.fields[i]?.persist === false) {
+            flatIndex += 1
+            continue
+          }
+          const cells = archShadow.get(flatIndex)
+          if (cells !== undefined) {
+            const view = col.view as unknown as ArrayLike<number>
+            const lanes = Math.min(cells.length, a.count * col.layout.stride)
+            for (let lane = 0; lane < lanes; lane++) cells[lane] = view[lane] as number
+          }
+          flatIndex += 1
+        }
+      }
+    }
+  }
+
   return {
     delta(): Uint8Array {
       write()
@@ -276,6 +312,7 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
     get sinceTick(): number {
       return baseline
     },
+    refreshEpsilonShadow,
   }
 }
 

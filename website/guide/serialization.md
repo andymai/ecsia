@@ -101,6 +101,75 @@ const ser = createDeltaSerializer(world, since, { epsilon: 0.001 })
 const patch = ser.deltaCopy()
 ```
 
+## Replication
+
+Snapshots and deltas are the payloads; **replication** is the recipe that keeps a second
+world in sync over a network. `createReplicationStream(world)` wraps both serializers into
+one broadcast stream for an **ordered-reliable** transport (a WebSocket, a WebTransport
+reliable stream, a `MessageChannel`): `baseline()` is full state for a joining client,
+`tick()` is the next delta. On the other end, `createReplicationReceiver(world)` applies each
+message and enforces the rules a hand-rolled loop tends to get wrong:
+
+- **Every message carries the `schemaHash`** and the receiver throws on a mismatch — a
+  client built from different component definitions fails loudly, never half-applies.
+- **Deltas must chain.** Each delta names the tick it starts from; the receiver applies it
+  only if that matches the tick it last applied. A lost or reordered message breaks the
+  chain, and `apply` answers `needBaseline: true` — ask the server for a fresh `baseline()`
+  and the stream resumes. An unappliable message is refused whole; the one exception is a
+  payload whose bytes are corrupt and throw *mid*-apply, which leaves partially-applied state:
+  the receiver then answers `needBaseline` for every delta until a baseline rebases it.
+- **A producer-side history gap resyncs itself.** The structural journal that feeds deltas
+  is a bounded ring; if churn overflows it, `tick()` notices the window can't be covered and
+  returns a full baseline instead of a silently incomplete delta.
+- **The receiver owns the remap.** The producer-to-local entity table grows as deltas create
+  entities, for the lifetime of the stream — you never thread it by hand.
+
+The mirror world must be **dedicated** to the stream: every baseline (a join, a resync, a
+journal-gap degrade) rebases via a replace-load that clears all entities in the receiver
+world, so receiver-local entities do not survive. Keep non-replicated state elsewhere.
+
+```ts
+import {
+  createWorld, defineComponent,
+  createReplicationStream, createReplicationReceiver,
+  encodeReplicationMessage, decodeReplicationMessage,
+} from 'ecsia'
+
+const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
+declare function broadcast(bytes: Uint8Array): void
+declare function sendToJoiner(bytes: Uint8Array): void
+declare function requestBaseline(): void
+
+// Server — every call at a serial flush point (after systems have run):
+const server = createWorld({ components: [Position], maxEntities: 1 << 16 })
+const stream = createReplicationStream(server, { epsilon: 0.001 })
+
+// Each tick: broadcast the delta. When a client joins, send it a baseline at the SAME
+// flush as a tick() emission — that's what lets its deltas chain with no window skipped.
+broadcast(encodeReplicationMessage(stream.tick()))
+sendToJoiner(encodeReplicationMessage(stream.baseline()))
+
+// Client:
+const mirror = createWorld({ components: [Position], maxEntities: 1 << 16 })
+const receiver = createReplicationReceiver(mirror)
+function onMessage(bytes: Uint8Array): void {
+  const result = receiver.apply(decodeReplicationMessage(bytes))
+  if (result.needBaseline) requestBaseline() // the chain broke — resync in-band
+}
+```
+
+`encodeReplicationMessage` / `decodeReplicationMessage` pack a message into a single
+`Uint8Array` (a 24-byte header plus the payload) for binary transports; over a
+`MessageChannel` or worker port you can post the message object directly — it structured-clones.
+See [`examples/replication.ts`](https://github.com/andymai/ecsia/blob/main/examples/replication.ts)
+for a full run: a mid-stream join, spawn/despawn churn, and a dropped message resyncing.
+
+Two honest limits. **One server, many mirrors:** deltas describe the whole world, and
+applying one *journals* the structural changes it makes — so two worlds streaming at each
+other re-broadcast each other's entities as their own and spawn duplicates. For peer-to-peer,
+elect one peer as the server and send inputs upstream. **Per-client filtering** (interest
+management) is not built in: every client receives the whole world.
+
 ## Skipping transient fields
 
 Some component data has no business in a save file: derived values, per-frame caches, debug

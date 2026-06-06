@@ -166,19 +166,29 @@ import {
   createDeltaSerializer as _mkDelta,
   applyDelta as _applyDelta,
   bootstrapForWorker as _bootstrap,
+  createReplicationStream as _mkRepStream,
+  createReplicationReceiver as _mkRepReceiver,
 } from '@ecsia/serialization'
-export { attachWorld } from '@ecsia/serialization'
+export { attachWorld, encodeReplicationMessage, decodeReplicationMessage } from '@ecsia/serialization'
 import type {
   SnapshotSerializer as _SnapshotSerializer,
   SnapshotDeserializer as _SnapshotDeserializer,
   DeltaSerializer as _DeltaSerializer,
   WorldBootstrap as _WorldBootstrap,
+  ReplicationStream as _ReplicationStream,
+  ReplicationStreamOptions as _ReplicationStreamOptions,
+  ReplicationReceiver as _ReplicationReceiver,
 } from '@ecsia/serialization'
 export type {
   SnapshotSerializer,
   SnapshotDeserializer,
   DeltaSerializer,
   WorldBootstrap,
+  ReplicationMessage,
+  ReplicationStream,
+  ReplicationStreamOptions,
+  ReplicationReceiver,
+  ReplicationApplyResult,
 } from '@ecsia/serialization'
 
 export const createSnapshotSerializer: (world: World) => _SnapshotSerializer = ((world: World) =>
@@ -201,6 +211,15 @@ export const applyDelta: (
 ) => number
 export const bootstrapForWorker: (world: World) => _WorldBootstrap = ((world: World) =>
   _bootstrap(world as unknown as _CoreWorld)) as (world: World) => _WorldBootstrap
+export const createReplicationStream: (world: World, opts?: _ReplicationStreamOptions) => _ReplicationStream = ((
+  world: World,
+  opts?: _ReplicationStreamOptions,
+) => _mkRepStream(world as unknown as _CoreWorld, opts)) as (
+  world: World,
+  opts?: _ReplicationStreamOptions,
+) => _ReplicationStream
+export const createReplicationReceiver: (world: World) => _ReplicationReceiver = ((world: World) =>
+  _mkRepReceiver(world as unknown as _CoreWorld)) as (world: World) => _ReplicationReceiver
 
 // ---------------------------------------------------------------------------
 // Branded types + inference helpers / escape hatch
