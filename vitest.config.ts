@@ -12,6 +12,7 @@ const alias = {
   '@ecsia/serialization': pkg('serialization'),
   'ecsia': pkg('ecsia'),
   '@ecsia/three': pkg('three'),
+  '@ecsia/react': pkg('react'),
   '@ecsia/devtools': pkg('devtools'),
 }
 
@@ -23,6 +24,18 @@ export default defineConfig({
           name: 'unit',
           include: ['packages/*/test/**/*.test.ts', 'packages/*/src/**/*.test.ts'],
           environment: 'node',
+          alias,
+        },
+      },
+      {
+        // @ecsia/react needs a DOM: jsdom environment + @testing-library/react. Tests are .tsx
+        // (the unit project's *.test.ts glob never matches them).
+        esbuild: { jsx: 'automatic' },
+        test: {
+          name: 'react',
+          include: ['packages/react/test/**/*.test.tsx'],
+          environment: 'jsdom',
+          setupFiles: ['packages/react/test/setup.ts'],
           alias,
         },
       },
