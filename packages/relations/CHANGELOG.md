@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.0](https://github.com/andymai/ecsia/compare/relations-v0.3.0...relations-v0.4.0) (2026-06-06)
+
+
+### Miscellaneous
+
+* **relations:** Synchronize ecsia versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.4.0
+    * @ecsia/schema bumped to 0.4.0
+
 ## [0.3.0](https://github.com/andymai/ecsia/compare/relations-v0.2.0...relations-v0.3.0) (2026-06-05)
 
 
