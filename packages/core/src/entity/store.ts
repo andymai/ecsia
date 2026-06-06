@@ -59,8 +59,14 @@ export class EntityStore {
     this.#addressable = config.maxEntities
 
     // The index space is [0, maxIndex]; when threaded, maxIndex is reserved for the NO_ENTITY
-    // sentinel so a minted+wrapped handle can never alias 0xffffffff.
-    this.#ceiling = config.shared ? config.layout.maxIndex : config.layout.maxIndex + 1
+    // sentinel so a minted+wrapped handle can never alias 0xffffffff. maxEntities also binds the
+    // ceiling: every fixed-size region (bitmask, query sparse sets, reactivity rings) is sized by it,
+    // so minting past it corrupts silently — the allocator must throw CapacityExceeded instead
+    // (world.md §6.2, entity-model.md §3.4).
+    this.#ceiling = Math.min(
+      config.maxEntities,
+      config.shared ? config.layout.maxIndex : config.layout.maxIndex + 1,
+    )
 
     const opts = { shared: config.shared, maxLength: config.layout.capacity }
     this.#regions = {
