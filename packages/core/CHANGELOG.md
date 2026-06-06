@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.1](https://github.com/andymai/ecsia/compare/core-v0.7.0...core-v0.7.1) (2026-06-06)
+
+
+### Bug Fixes
+
+* generation-correct rich reads in observer windows ([#27](https://github.com/andymai/ecsia/issues/27)) ([ce8ae17](https://github.com/andymai/ecsia/commit/ce8ae170ab9ebaafc65830fdf9867e855c361c42))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.7.1
+
 ## [0.7.0](https://github.com/andymai/ecsia/compare/core-v0.6.0...core-v0.7.0) (2026-06-06)
 
 
