@@ -7,6 +7,11 @@
 // structural, the same way changeVersion follows an entity across relocations. The generation stamp
 // closes RF-HYGIENE: a recycled index never leaks the prior tenant's value (a stale slot reads the
 // field default). Main-thread-only by construction (rich components are restrictedToMainThread).
+//
+// Residual boundary (the generation guard covers RICH storage only): a dead tenant's observer-window
+// ref reading a NUMERIC component it never held, and a numeric read at an index re-minted within the
+// same window, both resolve by INDEX through the live records — they alias the newest tenant. Closing
+// either requires generation-aware numeric storage; this is a pre-existing limit, not a window bug.
 
 const FIELD_BITS = 8 // up to 256 fields per component; schema arity is far below.
 
@@ -31,12 +36,13 @@ interface SidecarColumn {
 /** A deferred-clear entry for the observer window. */
 interface PendingClear {
   /** The dying tenant's generation. The stash serves ONLY reads carrying this generation, so a
-   * same-window re-mint of the index never sees the dead tenant's value (RF-HYGIENE). */
+   * same-window re-mint of the index never sees the dead tenant's value (RF-HYGIENE). A rich-free
+   * deferred despawn stashes a gen-ONLY entry (empty values) so its events still bind to it. */
   readonly gen: number
   /** key → the dying entity's last value, readable during observerDrain. */
   readonly values: Map<SidecarKey, unknown>
   /** How many despawns of this index preceded this tenant's within the window — pairs the tenant
-   * with its Destroy entry in the drain even when stashless (rich-free) despawns interleave. */
+   * with its Destroy entry in the drain even when stashless (observer-free) despawns interleave. */
   readonly despawnsBefore: number
   /** Set when the drain passes this tenant's Destroy entry. A Create drained at the index BEFORE the
    * Destroy is the tenant's own mint (spawned in the same window); only a Create drained AFTER it is
@@ -142,6 +148,9 @@ export class SidecarStore {
    * (matched by despawn ordinal — stashless despawns at the index consume ordinals too), mark the
    * stash so the NEXT Create at the index supersedes it. */
   noteDestroyDrained(index: number): void {
+    // Mutations stage during a drain, so an empty #pending stays empty for the whole window — the
+    // ordinal this would record could never be consulted before flushPending clears it anyway.
+    if (this.#pending.size === 0) return
     const n = (this.#destroysDrained.get(index) ?? 0) + 1
     this.#destroysDrained.set(index, n)
     const head = this.#pending.get(index)?.[0]
@@ -156,6 +165,8 @@ export class SidecarStore {
    * mint) leaves the entry in place.
    */
   supersedePending(index: number): void {
+    // Same staging argument as noteDestroyDrained: empty stays empty mid-drain — skip the lookup.
+    if (this.#pending.size === 0) return
     const list = this.#pending.get(index)
     if (list === undefined || list.length === 0) return
     if (!(list[0] as PendingClear).destroyDrained) return
@@ -164,22 +175,28 @@ export class SidecarStore {
   }
 
   /**
-   * Despawn handler. When no rich-carrying held component has a
-   * remove-observer, clear data[index] eagerly so the JS reference is released for GC. When one does,
-   * DEFER: stash the dying values so an onRemove handler can read them during the drain (RF-REMOVE-READ),
-   * then flush at the post-observer point (flushPending).
+   * Despawn handler. When no held component has a remove-observer, clear
+   * data[index] eagerly so the JS reference is released for GC. When one does, DEFER: stash the
+   * dying values (gen-only when the tenant held no rich field) so an onRemove handler can read them
+   * during the drain (RF-REMOVE-READ), then flush at the post-observer point (flushPending).
    *
-   * Called for EVERY despawn (the per-index despawn ordinal must count stashless despawns too —
+   * Called for EVERY despawn (the per-index despawn ordinal must count every deferred despawn —
    * noteDestroyDrained pairs drain-side Destroy entries by it). `gen` is the dying handle's
    * generation (stamped into the stash so observer-window reads can be keyed to the dead tenant).
    * `richKeysOnEntity` are the sidecar keys the entity actually held (its signature's rich fields);
    * only those are stashed/cleared. `defer` is true iff any held component has a remove-observer.
    */
   onDespawn(index: number, gen: number, richKeysOnEntity: readonly SidecarKey[], defer: boolean): void {
+    // No rich columns in this world (the column set is fixed at createWorld): no stash can ever
+    // exist, so neither the despawn ordinal nor a pending entry would ever be consulted — skip.
+    if (this.#cols.size === 0) return
     const despawnsBefore = this.#despawnSeq.get(index) ?? 0
     this.#despawnSeq.set(index, despawnsBefore + 1)
-    if (richKeysOnEntity.length === 0) return
     if (defer) {
+      // EVERY deferred despawn stashes — a rich-free tenant gets a gen-only entry (empty values).
+      // The entry's generation is what binds the tenant's drained events to its OWN dead handle
+      // (eventRefOf), so attribution is uniform: a rich read through a rich-free tenant's ref hits
+      // the generation guard and returns the default, never a same-window successor's stash.
       const values = new Map<SidecarKey, unknown>()
       for (const key of richKeysOnEntity) {
         const col = this.#cols.get(key)

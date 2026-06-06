@@ -37,9 +37,7 @@ export interface ReactivityDeps {
   idOf(def: ComponentDef<Schema>): ComponentId
   /** Does `index` currently hold ALL of `componentIds`? */
   holdsAll(index: number, componentIds: readonly ComponentId[]): boolean
-  /** The pooled EntityRef bound to the current (index, generation) for `index` (observer dispatch). */
-  refOf(index: number): EntityRef
-  /** The pooled EntityRef for a structural (add/remove) event at `index` — the stashed dying handle
+  /** The pooled EntityRef an observer event at `index` dispatches with — the stashed dying handle
    * while a rich pending-clear window covers the index, else the current handle (see
    * ObserverDeps.eventRefOf). */
   eventRefOf(index: number): EntityRef
@@ -129,7 +127,6 @@ export class Reactivity {
     const obsDeps: ObserverDeps = {
       idOf: deps.idOf,
       holdsAll: deps.holdsAll,
-      refOf: deps.refOf,
       eventRefOf: deps.eventRefOf,
       tick: deps.tick,
     }
@@ -552,6 +549,27 @@ export class Reactivity {
       const { index, componentId } = this.#unpackWrite(source, base)
       this.#observers.dispatchChange(index, componentId)
     }, writeHeadSnapshot)
+  }
+
+  /**
+   * Drop the rest of the in-flight observer window after a handler threw mid-drain. The consume
+   * advances a pointer only AFTER its loop completes, so a throw leaves the cursor at the window's
+   * start — but the sidecar's pending stashes and despawn ordinals are flushed in the caller's
+   * finally regardless. Replaying the window's remainder next drain would then pair its Destroy
+   * entries against the NEXT window's stashes (misattribution). The window is already lost (its
+   * handlers partially ran); fast-forwarding both consumers to head keeps counters and cursors
+   * consistent with the flushed sidecar state.
+   */
+  abandonObserverWindow(): void {
+    this.#syncPointer(this.#shapeLog, this.#observerShapePtr)
+    this.#syncPointer(this.#writeLog, this.#observerWritePtr)
+  }
+
+  #syncPointer(log: LogRing, ptr: LogPointer): void {
+    const head = log.makePointer()
+    ptr.cursor = head.cursor
+    ptr.generation = head.generation
+    ptr.spillCursor = head.spillCursor
   }
 
   /** _LOGS: drain/merge spill (consumers already drained it), schedule next-frame resize. */

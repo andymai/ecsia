@@ -478,6 +478,102 @@ describe('RF-REMOVE-READ × RF-HYGIENE — same-window respawn at a recycled ind
 })
 
 // ===========================================================================
+// RF-REMOVE-READ — observer-window attribution edges: onChange on a dying tenant, a rich-free
+// deferred despawn between two rich tenants, and a handler exception mid-drain. Each leg pins the
+// event ref to the tenant whose lifetime the drain cursor is inside, never a successor's.
+// ===========================================================================
+describe('RF-REMOVE-READ — window attribution: onChange, rich-free tenants, thrown handlers', () => {
+  test('onChange on a same-window despawn: the rich read sees the final write, numeric unchanged', () => {
+    const Doc = defineComponent({ title: 'string', hp: 'i32' }, { name: 'DocOCDying' })
+    const world = createWorld({ components: asComps(Doc) })
+    let seenTitle: string | null = null
+    let seenHp = -1
+    // The remove-observer opens the defer window (the stash + deferred row reclaim); the change
+    // event then dispatches with the dying tenant's ref, so BOTH reads resolve the dead tenant.
+    world.observe(onRemove(Doc), () => {})
+    world.observe(onChange(Doc), (ref) => {
+      const v = ref.read(Doc) as { title: string; hp: number }
+      seenTitle = v.title
+      seenHp = v.hp
+    })
+    const e = world.spawnWith(Doc)
+    world.frameReset()
+    world.observerDrain()
+
+    wr(world, e, Doc).title = 'final-write'
+    wr(world, e, Doc).hp = 7
+    world.despawn(e)
+    world.observerDrain()
+    expect(seenTitle).toBe('final-write')
+    expect(seenHp).toBe(7)
+  })
+
+  test('a rich-free deferred despawn binds its events to its OWN dead generation, not a successor stash', () => {
+    // t1 holds only Num: deferred (onRemove(Num) is registered) but rich-free. Its onRemove ref must
+    // carry t1's generation — a rich read of Doc through it returns the gen-guarded DEFAULT (t1 never
+    // held the field), never t2's stashed value or t3's live value.
+    const Num = defineComponent({ v: 'i32' }, { name: 'NumGenBind' })
+    const Doc = defineComponent({ title: 'string' }, { name: 'DocGenBind' })
+    const world = createWorld({ components: asComps(Num, Doc) })
+    let t1DocRead: string | null = null
+    world.observe(onRemove(Num), (ref) => {
+      t1DocRead = (ref.read(Doc) as { title: string }).title
+    })
+    const removed: string[] = []
+    world.observe(onRemove(Doc), (ref) => {
+      removed.push((ref.read(Doc) as { title: string }).title)
+    })
+
+    const t1 = world.spawnWith([Num, { v: 1 }])
+    world.frameReset()
+    world.observerDrain()
+
+    world.despawn(t1)
+    const t2 = world.spawnWith([Doc, { title: 'rich-2' }])
+    expect(world.decodeHandle(t2).index).toBe(world.decodeHandle(t1).index)
+    world.despawn(t2)
+    const t3 = world.spawnWith([Doc, { title: 'rich-3' }])
+    expect(world.decodeHandle(t3).index).toBe(world.decodeHandle(t1).index)
+    world.observerDrain()
+
+    expect(t1DocRead).toBe('')
+    expect(removed).toEqual(['rich-2'])
+  })
+
+  test('a handler exception abandons the window: the next despawn/respawn cycle attributes cleanly', () => {
+    const Doc = defineComponent({ title: 'string' }, { name: 'DocThrow' })
+    const world = createWorld({ components: asComps(Doc) })
+    const removed: string[] = []
+    let shouldThrow = true
+    world.observe(onRemove(Doc), (ref) => {
+      const title = (ref.read(Doc) as { title: string }).title
+      if (shouldThrow) {
+        shouldThrow = false
+        throw new Error('handler boom')
+      }
+      removed.push(title)
+    })
+
+    const v1 = world.spawnWith([Doc, { title: 'tenant-1' }])
+    world.frameReset()
+    world.observerDrain()
+
+    world.despawn(v1)
+    const v2 = world.spawnWith([Doc, { title: 'tenant-2' }])
+    expect(world.decodeHandle(v2).index).toBe(world.decodeHandle(v1).index)
+    expect(() => world.observerDrain()).toThrow('handler boom')
+
+    // The thrown window is lost; the NEXT window must attribute on its own. Replaying the lost
+    // window's Destroy here would supersede v2's stash early and v2's onRemove would read v3's value.
+    world.despawn(v2)
+    const v3 = world.spawnWith([Doc, { title: 'tenant-3' }])
+    expect(world.decodeHandle(v3).index).toBe(world.decodeHandle(v1).index)
+    world.observerDrain()
+    expect(removed).toEqual(['tenant-2'])
+  })
+})
+
+// ===========================================================================
 // createStableIndex — add/remove/despawn maintenance, lookup correctness, duplicate-id policy
 // (T-STABLE-INDEX). The util is observer-driven, so ids resolve at the drain.
 // ===========================================================================

@@ -52,12 +52,12 @@ export interface ObserverDeps {
   idOf(def: ComponentDef<Schema>): ComponentId
   /** Does `index` currently hold ALL of `componentIds`? (multi-component add satisfaction). */
   holdsAll(index: number, componentIds: readonly ComponentId[]): boolean
-  /** The pooled EntityRef bound to the current (index, generation) for `index` (change dispatch). */
-  refOf(index: number): EntityRef
-  /** The pooled EntityRef a structural (add/remove) event for `index` dispatches with — bound to the
-   * tenant whose lifetime the drain cursor is inside. While a rich pending-clear window covers the
-   * index that is the stashed DYING handle (the handler reads the dead tenant's values, not a
-   * same-window re-mint's); otherwise the current handle, like refOf. */
+  /** The pooled EntityRef an event for `index` dispatches with — bound to the tenant whose lifetime
+   * the drain cursor is inside. While a rich pending-clear window covers the index that is the
+   * stashed DYING handle (the handler reads the dead tenant's values, not a same-window re-mint's);
+   * otherwise the current handle. Change events route here too: the change drain runs AFTER the
+   * structural drain, so a pending window still open at that point covers an index that stayed dead
+   * through the whole drain — its last-write events belong to the dead tenant. */
   eventRefOf(index: number): EntityRef
   /** The current frame tick. */
   tick(): number
@@ -144,7 +144,7 @@ export class ObserverRegistry {
     for (const obs of bucket) {
       if (obs.dedup.has(index)) continue
       obs.dedup.add(index)
-      const ref = this.#deps.refOf(index)
+      const ref = this.#deps.eventRefOf(index)
       obs.handler(ref, { kind: 'change', component: componentId as ComponentId, tick })
     }
   }
@@ -159,7 +159,7 @@ export class ObserverRegistry {
         for (const obs of bucket) {
           if (obs.dedup.has(index)) continue
           obs.dedup.add(index)
-          const ref = this.#deps.refOf(index)
+          const ref = this.#deps.eventRefOf(index)
           obs.handler(ref, { kind: 'change', component: componentId as ComponentId, tick })
         }
       }
