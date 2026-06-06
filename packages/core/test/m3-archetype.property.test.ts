@@ -71,7 +71,6 @@ function makeHarness(componentCount: number, maxHotArchetypes = 1 << 20): Harnes
   const bitmask = new Bitmask(buffers, registry.nextComponentId, 1 << 16, () => phase)
   const store = new ArchetypeStore({
     buffers,
-    accessorWorld: { tracking: { active: true }, trackWrite: () => {}, handleIndex: (h) => (h as number) & 0xffff, sidecarRead: () => undefined, sidecarWrite: () => {}, generationOf: () => 0 },
     bitmask,
     record,
     maxHotArchetypes,
@@ -81,6 +80,14 @@ function makeHarness(componentCount: number, maxHotArchetypes = 1 << 20): Harnes
     tick: () => 0,
     defOf: (c) => registry.defOf(c),
     handleIndex,
+    accessorWorld: {
+      trackWrite: () => {},
+      handleIndex: (h) => h as unknown as number,
+      tracking: { active: false },
+      sidecarRead: () => undefined,
+      sidecarWrite: () => {},
+      handleGeneration: () => 0,
+    },
   })
 
   return {

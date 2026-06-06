@@ -40,7 +40,7 @@ function makeReactivity(opts?: Partial<ReactivityDeps>): Harness {
     },
     idOf: (def): ComponentId => (def as unknown as { id: number }).id as ComponentId,
     holdsAll: (index, ids): boolean => members.has(index) && ids.length > 0,
-    refOf: (index): EntityRef => {
+    eventRefOf: (index): EntityRef => {
       let r = refs.get(index)
       if (r === undefined) {
         r = { index } as unknown as EntityRef
@@ -48,7 +48,6 @@ function makeReactivity(opts?: Partial<ReactivityDeps>): Harness {
       }
       return r
     },
-    eventRefOf: (index): EntityRef => deps.refOf(index),
     onDestroyDrained: (): void => {},
     onCreateDrained: (): void => {},
     resolveHandle: (index): number => 0xabc0000 + index,

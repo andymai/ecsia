@@ -39,7 +39,6 @@ function makeStore(componentCount: number, maxHotArchetypes = 1 << 20): Store {
   const bitmask = new Bitmask(buffers, registry.nextComponentId, 1 << 16, () => 'serial')
   const store = new ArchetypeStore({
     buffers,
-    accessorWorld: { tracking: { active: true }, trackWrite: () => {}, handleIndex: (h) => (h as number) & 0xffff, sidecarRead: () => undefined, sidecarWrite: () => {}, generationOf: () => 0 },
     bitmask,
     record,
     maxHotArchetypes,
@@ -49,6 +48,14 @@ function makeStore(componentCount: number, maxHotArchetypes = 1 << 20): Store {
     tick: () => 0,
     defOf: (c) => registry.defOf(c),
     handleIndex: (h) => h & 0xffff,
+    accessorWorld: {
+      trackWrite: () => {},
+      handleIndex: (h) => h as unknown as number,
+      tracking: { active: false },
+      sidecarRead: () => undefined,
+      sidecarWrite: () => {},
+      handleGeneration: () => 0,
+    },
   })
   return { store, recordArch, recordRow, registry, cold: store.cold }
 }

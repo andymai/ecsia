@@ -17,9 +17,9 @@ function stubWorld(): AccessorWorld {
     tracking: { active: true },
     trackWrite: () => {},
     handleIndex: (h) => h as number,
+    handleGeneration: () => 0,
     sidecarRead: () => undefined,
     sidecarWrite: () => {},
-    generationOf: () => 0,
   }
 }
 
@@ -144,9 +144,9 @@ describe('makeAccessorFactory — guards + vec setter + whole-instance rebind (a
       tracking: { active: true },
       trackWrite: (i) => calls.push(i),
       handleIndex: (h) => h as number,
+      handleGeneration: () => 0,
       sidecarRead: () => undefined,
       sidecarWrite: () => {},
-      generationOf: () => 0,
     }
     const Vel = defineComponent({ v: vec('f32', 3) }, { name: 'c17' }) as ComponentDef<Schema>
     new ComponentRegistry().register([Vel])
