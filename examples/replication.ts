@@ -15,6 +15,7 @@
 
 import {
   createWorld,
+  createStableIndex,
   defineComponent,
   defineSystem,
   createScheduler,
@@ -134,6 +135,14 @@ export async function main(opts: ReplicationOptions = {}): Promise<ReplicationRe
   const client = createWorld({ components: Object.values(C), maxEntities: 1 << 12 })
   const clientRel = createRelations(client)
   const ChildOfClient = clientRel.defineRelation(null, { exclusive: true })
+  // The client-side uid → entity lookup. Replicated handles are client-local mints, so identity
+  // crosses the wire as the Identity uid and counterparts are found by that stable id. The index is
+  // observer-maintained, so it follows every apply — including the receiver's replace-loads, which
+  // free and re-mint every entity index (each baseline and resync below is one). Observers fire at
+  // the scheduler's serial drain, so the mirroring client runs a system-less scheduler as its frame
+  // clock.
+  const clientByUid = createStableIndex(client, C.Identity, 'uid')
+  const clientScheduler = createScheduler(client, [])
 
   // --- the wire: a MessageChannel carrying encoded bytes --------------------------------------
   // This example runs under Node, so the ports speak Node's event style — .on('message', data).
@@ -196,8 +205,12 @@ export async function main(opts: ReplicationOptions = {}): Promise<ReplicationRe
       channel.port1.postMessage(encodeReplicationMessage(stream.baseline()))
     }
     await pump()
+    // The client's frame boundary: the deferred observers drain here, so the stable index ingests
+    // this tick's onAdd/onRemove events.
+    clientScheduler.update(dt)
   }
   await pump()
+  clientScheduler.update(dt)
 
   // --- convergence: every server entity has a byte-equal client counterpart, found by uid -----
   type Mirrored = { uid: string; x: number; y: number; dx: number; dy: number }
@@ -210,16 +223,6 @@ export async function main(opts: ReplicationOptions = {}): Promise<ReplicationRe
   }
   const serverEntities = collect(server, S)
   const clientEntities = collect(client, C)
-  // The client-side uid → handle lookup. Replicated handles are client-local mints, so identity
-  // crosses the wire as the Identity uid, and counterparts are found by that stable id.
-  // WORKAROUND: a hand-rolled query map instead of createStableIndex, deliberately —
-  // createStableIndex is currently unsafe across load(…, 'replace') / recycled entity indices:
-  // SidecarStore.readForObserver returns the pending-clear stash keyed by index only, so onAdd
-  // observers read PRE-load rich values after a second replace-load (every resync baseline here),
-  // permanently corrupting the index (core bug, tracked). Don't "clean this up" back to
-  // createStableIndex until that is fixed.
-  const clientByUid = new Map<string, EntityHandle>()
-  for (const e of client.query(read(C.Identity))) clientByUid.set(e.identity.uid, e.handle)
 
   let maxFieldDelta = 0
   for (const se of serverEntities) {

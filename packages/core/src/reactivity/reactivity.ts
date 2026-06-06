@@ -37,8 +37,17 @@ export interface ReactivityDeps {
   idOf(def: ComponentDef<Schema>): ComponentId
   /** Does `index` currently hold ALL of `componentIds`? */
   holdsAll(index: number, componentIds: readonly ComponentId[]): boolean
-  /** The pooled EntityRef bound to the current (index, generation) for `index` (observer dispatch). */
-  refOf(index: number): EntityRef
+  /** The pooled EntityRef an observer event at `index` dispatches with — the stashed dying handle
+   * while a rich pending-clear window covers the index, else the current handle (see
+   * ObserverDeps.eventRefOf). */
+  eventRefOf(index: number): EntityRef
+  /** A Destroy entry for `index` was drained — pairs the oldest rich pending-clear stash with its
+   * dead tenant so a LATER Create can be recognized as a re-mint (see onCreateDrained). */
+  onDestroyDrained(index: number): void
+  /** A Create entry for `index` was drained AFTER a Destroy: the index was re-minted inside this
+   * observer window, so the oldest pending-clear tenant's remove events are all behind the drain
+   * cursor (log order) and its stash window closes. */
+  onCreateDrained(index: number): void
   /** index → its current FULL (generational) handle — for the structural journal's portable handles. */
   resolveHandle(index: number): number
   /** The accessor's shared write-path fast-out cell. Reactivity flips `.active` whenever a write consumer
@@ -118,7 +127,7 @@ export class Reactivity {
     const obsDeps: ObserverDeps = {
       idOf: deps.idOf,
       holdsAll: deps.holdsAll,
-      refOf: deps.refOf,
+      eventRefOf: deps.eventRefOf,
       tick: deps.tick,
     }
     this.#observers = new ObserverRegistry(obsDeps)
@@ -513,6 +522,15 @@ export class Reactivity {
     this.#shapeLog.consume(this.#observerShapePtr, (source, base) => {
       if (source.length === 1 && source[0] === OVERFLOW_SENTINEL) return
       const { index, componentId, kind } = this.#unpackShape(source, base)
+      // A Create that follows a Destroy at the same index marks a re-mint: every remove/destroy
+      // event of the tenant that died before it has already dispatched, so the sidecar's pending
+      // window advances past it. The Destroy hook is what tells a re-mint Create apart from the
+      // dying tenant's own same-window mint.
+      if (kind === ShapeKind.Create) {
+        this.#deps.onCreateDrained(index)
+        return
+      }
+      if (kind === ShapeKind.Destroy) this.#deps.onDestroyDrained(index)
       const okind =
         kind === ShapeKind.Add || kind === ShapeKind.AddPair
           ? 'add'
@@ -531,6 +549,27 @@ export class Reactivity {
       const { index, componentId } = this.#unpackWrite(source, base)
       this.#observers.dispatchChange(index, componentId)
     }, writeHeadSnapshot)
+  }
+
+  /**
+   * Drop the rest of the in-flight observer window after a handler threw mid-drain. The consume
+   * advances a pointer only AFTER its loop completes, so a throw leaves the cursor at the window's
+   * start — but the sidecar's pending stashes and despawn ordinals are flushed in the caller's
+   * finally regardless. Replaying the window's remainder next drain would then pair its Destroy
+   * entries against the NEXT window's stashes (misattribution). The window is already lost (its
+   * handlers partially ran); fast-forwarding both consumers to head keeps counters and cursors
+   * consistent with the flushed sidecar state.
+   */
+  abandonObserverWindow(): void {
+    this.#syncPointer(this.#shapeLog, this.#observerShapePtr)
+    this.#syncPointer(this.#writeLog, this.#observerWritePtr)
+  }
+
+  #syncPointer(log: LogRing, ptr: LogPointer): void {
+    const head = log.makePointer()
+    ptr.cursor = head.cursor
+    ptr.generation = head.generation
+    ptr.spillCursor = head.spillCursor
   }
 
   /** _LOGS: drain/merge spill (consumers already drained it), schedule next-frame resize. */

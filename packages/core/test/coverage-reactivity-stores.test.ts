@@ -91,7 +91,7 @@ function makeRegistry(): { reg: ObserverRegistry; refs: Map<number, EntityRef>; 
       if (set === undefined) return false
       return componentIds.every((c) => set.has(c as number))
     },
-    refOf: ref,
+    eventRefOf: ref,
     tick: (): number => 42,
   })
   return { reg, refs, held }

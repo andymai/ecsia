@@ -6,7 +6,9 @@ import { ConfigError, resolveOptions } from './config.js'
 import type { ResolvedWorldOptions, WorldOptions } from './config.js'
 import {
   EntityStore,
+  handleGeneration,
   handleIndex,
+  makeHandle,
   makeHandleLayout,
   reserveEntityBlock,
   returnReservedIds,
@@ -406,8 +408,11 @@ export function createWorld(options: WorldOptions = {}): World {
   // getters/setters can delegate through the seam. Main-thread-only; never shared with workers.
   const sidecar = new SidecarStore()
   // During an observer drain the rich getter must read the DYING entity's value (RF-REMOVE-READ); the
-  // sidecar disambiguates via its pending-clear table, so route reads through readForObserver while a
-  // pending window is open and through the generation-guarded read otherwise.
+  // sidecar disambiguates via its generation-stamped pending-clear table, so route reads through
+  // readForObserver while a pending window is open and through the generation-guarded read otherwise.
+  // Reads/writes are keyed by the BOUND handle's generation (not the index's live generation) so a
+  // remove-event ref bound to the dying handle reaches its own tenant's stash while a same-window
+  // re-mint at the index reads/writes its own slot.
   const accessorWorld: AccessorWorld = {
     trackWrite,
     tracking,
@@ -415,7 +420,7 @@ export function createWorld(options: WorldOptions = {}): World {
     sidecarRead: (key, index, gen) =>
       sidecar.hasPending() ? sidecar.readForObserver(key, index, gen) : sidecar.read(key, index, gen),
     sidecarWrite: (key, index, gen, value) => sidecar.write(key, index, gen, value),
-    generationOf: (index) => entities.decodeHandle(entities.handleOfIndex(index)).generation as number,
+    handleGeneration: (handle) => handleGeneration(handle, handleLayout) as number,
   }
 
   // --- registry: mint dense user ids, wire accessor factories ---
@@ -566,7 +571,9 @@ export function createWorld(options: WorldOptions = {}): World {
       }
       if (reactivity?.hasRemoveObserver(c as number) === true) defer = true
     }
-    if (richKeys.length > 0) sidecar.onDespawn(index, richKeys, defer)
+    // Unconditional (even with no rich keys): the sidecar's per-index despawn ordinal must count
+    // EVERY despawn so drain-side Destroy entries pair with the right stashed tenant.
+    sidecar.onDespawn(index, handleGeneration(handle, handleLayout) as number, richKeys, defer)
   }
 
   entities.setAccessorResolver(storage)
@@ -609,7 +616,20 @@ export function createWorld(options: WorldOptions = {}): World {
       for (const c of componentIds) if (!bitmask.bitmaskHas(index, c)) return false
       return true
     },
-    refOf: (index) => entities.entity(entities.handleOfIndex(index), { lenient: true }),
+    // Observer events bind to the handle of the tenant the drain cursor is inside: the stashed
+    // DYING handle while the sidecar's pending-clear window covers the index — the rich getter then
+    // passes that tenant's generation and reaches its stash even when the index was re-minted in the
+    // same window. Without a stash (no deferred despawn this window, or a component remove on a live
+    // entity) the current handle preserves the existing behavior. The hasPending() gate is safe
+    // because mutations stage during a drain: with zero stashes at drain entry none can appear
+    // mid-drain, so pendingGenerationOf would return undefined for every index anyway.
+    eventRefOf: (index) => {
+      const gen = sidecar.hasPending() ? sidecar.pendingGenerationOf(index) : undefined
+      const handle = gen === undefined ? entities.handleOfIndex(index) : makeHandle(index, gen, handleLayout)
+      return entities.entity(handle, { lenient: true })
+    },
+    onDestroyDrained: (index) => sidecar.noteDestroyDrained(index),
+    onCreateDrained: (index) => sidecar.supersedePending(index),
     resolveHandle: (index) => entities.handleOfIndex(index) as number,
     tracking,
   })
@@ -1190,6 +1210,7 @@ export function createWorld(options: WorldOptions = {}): World {
       // re-entrancy guard: a drain must never re-enter itself (the flush below can trigger query
       // maintenance / structural ops that must not recursively re-drain). If already draining, return.
       if (!observerCommands.enterDrain()) return
+      let drained = false
       try {
         // "applied at the NEXT serial flush": apply the ops staged by the PREVIOUS drain's
         // observers before reading this drain's frozen log snapshot. For 'frame-end' cadence this is the
@@ -1204,8 +1225,14 @@ export function createWorld(options: WorldOptions = {}): World {
         } finally {
           observerCommands.endDeferring()
         }
+        drained = true
       } finally {
         observerCommands.exitDrain()
+        // A handler exception leaves the observer cursors at the window's start while flushPending
+        // below clears the stashes and despawn ordinals they pair with — replaying the remainder
+        // next drain would misattribute its Destroy entries to the NEXT window's tenants. The window
+        // is already lost (its handlers partially ran), so drop its remainder.
+        if (!drained) (reactivity as Reactivity).abandonObserverWindow()
         // Flush the deferred rich-field clears now that onRemove handlers have run
         // — the same post-observer point storage's deferred row reclaim ceases to be readable. After this
         // the dying entity's rich values are gone (RF-REMOVE-READ window closes); a recycled index reads

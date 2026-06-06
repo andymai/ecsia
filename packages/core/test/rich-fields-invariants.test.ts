@@ -16,6 +16,7 @@ import {
   field,
   read,
   write,
+  onAdd,
   onChange,
   onRemove,
   createStableIndex,
@@ -315,6 +316,260 @@ describe('RF-REMOVE-READ — onRemove reads the dying value; gone next frame', (
     const b = world.spawn()
     world.add(b, Label)
     expect(rd(world, b, Label).text).toBe('')
+  })
+})
+
+// ===========================================================================
+// RF-REMOVE-READ × RF-HYGIENE — a despawn + SAME-WINDOW respawn at the recycled index. The
+// pending-clear stash must serve the dying tenant's value ONLY to the dying generation's reads:
+// the new tenant's onAdd reads its OWN value (or the default), and the dead tenant's onRemove
+// still reads the OLD value — both directions, in one drain.
+// ===========================================================================
+describe('RF-REMOVE-READ × RF-HYGIENE — same-window respawn at a recycled index', () => {
+  test('onAdd reads the NEW tenant value; onRemove reads the OLD tenant value (same drain)', () => {
+    const Doc = defineComponent({ title: 'string' }, { name: 'DocRecycle' })
+    const world = createWorld({ components: asComps(Doc) })
+    let removedSaw: string | null = null
+    let addedSaw: string | null = null
+    world.observe(onRemove(Doc), (ref) => {
+      removedSaw = (ref.read(Doc) as { title: string }).title
+    })
+    world.observe(onAdd(Doc), (ref) => {
+      addedSaw = (ref.read(Doc) as { title: string }).title
+    })
+
+    const a = world.spawnWith([Doc, { title: 'old-tenant' }])
+    world.frameReset()
+    world.observerDrain() // settle a's add event
+    addedSaw = null
+
+    world.despawn(a)
+    const b = world.spawnWith([Doc, { title: 'new-tenant' }])
+    // The free list is LIFO: b reuses a's index inside the same observer window.
+    expect(world.decodeHandle(b).index).toBe(world.decodeHandle(a).index)
+    world.observerDrain()
+
+    expect(removedSaw).toBe('old-tenant')
+    expect(addedSaw).toBe('new-tenant')
+  })
+
+  test('respawn WITHOUT a write: onAdd reads the default, never the dead tenant value', () => {
+    const Doc = defineComponent({ title: 'string' }, { name: 'DocRecycleDef' })
+    const world = createWorld({ components: asComps(Doc) })
+    let removedSaw: string | null = null
+    let addedSaw: string | null = null
+    world.observe(onRemove(Doc), (ref) => {
+      removedSaw = (ref.read(Doc) as { title: string }).title
+    })
+    world.observe(onAdd(Doc), (ref) => {
+      addedSaw = (ref.read(Doc) as { title: string }).title
+    })
+
+    const a = world.spawnWith([Doc, { title: 'old-tenant' }])
+    world.frameReset()
+    world.observerDrain()
+    addedSaw = null
+
+    world.despawn(a)
+    const b = world.spawnWith(Doc)
+    expect(world.decodeHandle(b).index).toBe(world.decodeHandle(a).index)
+    world.observerDrain()
+
+    expect(removedSaw).toBe('old-tenant')
+    expect(addedSaw).toBe('')
+  })
+
+  test('TWO despawn/respawn cycles of one index in one window: each event reads its own tenant', () => {
+    const Doc = defineComponent({ title: 'string' }, { name: 'DocRecycle2x' })
+    const world = createWorld({ components: asComps(Doc) })
+    const removed: string[] = []
+    const added: string[] = []
+    world.observe(onRemove(Doc), (ref) => {
+      removed.push((ref.read(Doc) as { title: string }).title)
+    })
+    world.observe(onAdd(Doc), (ref) => {
+      added.push((ref.read(Doc) as { title: string }).title)
+    })
+
+    const a = world.spawnWith([Doc, { title: 'tenant-1' }])
+    world.frameReset()
+    world.observerDrain()
+    added.length = 0
+
+    world.despawn(a)
+    const b = world.spawnWith([Doc, { title: 'tenant-2' }])
+    world.despawn(b)
+    const c = world.spawnWith([Doc, { title: 'tenant-3' }])
+    expect(world.decodeHandle(c).index).toBe(world.decodeHandle(a).index)
+    world.observerDrain()
+
+    expect(removed).toEqual(['tenant-1', 'tenant-2'])
+    expect(added).toEqual(['tenant-2', 'tenant-3'])
+  })
+
+  test('a rich-free despawn before a rich despawn at the same index does not skew the window', () => {
+    // The first tenant holds no rich fields (no stash) but still emits a Destroy entry; the pairing
+    // of drain-side Destroys with stashed tenants must count it, or the second tenant's stash is
+    // superseded one re-mint early and its events read the THIRD tenant's value.
+    const Num = defineComponent({ v: 'i32' }, { name: 'NumMixed' })
+    const Doc = defineComponent({ title: 'string' }, { name: 'DocMixed' })
+    const world = createWorld({ components: asComps(Num, Doc) })
+    const removed: string[] = []
+    const added: string[] = []
+    world.observe(onRemove(Num), () => {})
+    world.observe(onRemove(Doc), (ref) => {
+      removed.push((ref.read(Doc) as { title: string }).title)
+    })
+    world.observe(onAdd(Doc), (ref) => {
+      added.push((ref.read(Doc) as { title: string }).title)
+    })
+
+    const t1 = world.spawnWith([Num, { v: 1 }])
+    world.frameReset()
+    world.observerDrain()
+
+    world.despawn(t1)
+    const t2 = world.spawnWith([Doc, { title: 'rich-2' }])
+    expect(world.decodeHandle(t2).index).toBe(world.decodeHandle(t1).index)
+    world.despawn(t2)
+    const t3 = world.spawnWith([Doc, { title: 'rich-3' }])
+    expect(world.decodeHandle(t3).index).toBe(world.decodeHandle(t1).index)
+    world.observerDrain()
+
+    expect(removed).toEqual(['rich-2'])
+    expect(added).toEqual(['rich-2', 'rich-3'])
+  })
+
+  test('replace-load shape (despawn ALL + respawn all in one window): no cross-tenant reads', () => {
+    // The core mechanics of load(bytes, 'replace'): every index is freed then re-minted before the
+    // next drain. LIFO recycling re-mints the indices in REVERSE order, so respawning the same uids
+    // in the same order swaps the uid↔index assignment — an onAdd read served from the dead
+    // tenant's stash would record the OTHER entity's uid against this handle.
+    const Id = defineComponent({ uid: 'string' }, { name: 'IdReplace' })
+    const world = createWorld({ components: asComps(Id) })
+    const removed: string[] = []
+    const seenAtAdd = new Map<string, EntityHandle>()
+    world.observe(onRemove(Id), (ref) => {
+      removed.push((ref.read(Id) as { uid: string }).uid)
+    })
+    world.observe(onAdd(Id), (ref) => {
+      seenAtAdd.set((ref.read(Id) as { uid: string }).uid, ref.handle)
+    })
+
+    const a = world.spawnWith([Id, { uid: 'u0' }])
+    const b = world.spawnWith([Id, { uid: 'u1' }])
+    world.frameReset()
+    world.observerDrain()
+    seenAtAdd.clear()
+
+    world.despawn(a)
+    world.despawn(b)
+    world.spawnWith([Id, { uid: 'u0' }])
+    world.spawnWith([Id, { uid: 'u1' }])
+    world.observerDrain()
+
+    expect(removed.sort()).toEqual(['u0', 'u1'])
+    for (const uid of ['u0', 'u1']) {
+      const h = seenAtAdd.get(uid)
+      expect(h).toBeDefined()
+      expect((world.entity(h as EntityHandle).read(Id) as { uid: string }).uid).toBe(uid)
+    }
+  })
+})
+
+// ===========================================================================
+// RF-REMOVE-READ — observer-window attribution edges: onChange on a dying tenant, a rich-free
+// deferred despawn between two rich tenants, and a handler exception mid-drain. Each leg pins the
+// event ref to the tenant whose lifetime the drain cursor is inside, never a successor's.
+// ===========================================================================
+describe('RF-REMOVE-READ — window attribution: onChange, rich-free tenants, thrown handlers', () => {
+  test('onChange on a same-window despawn: the rich read sees the final write, numeric unchanged', () => {
+    const Doc = defineComponent({ title: 'string', hp: 'i32' }, { name: 'DocOCDying' })
+    const world = createWorld({ components: asComps(Doc) })
+    let seenTitle: string | null = null
+    let seenHp = -1
+    // The remove-observer opens the defer window (the stash + deferred row reclaim); the change
+    // event then dispatches with the dying tenant's ref, so BOTH reads resolve the dead tenant.
+    world.observe(onRemove(Doc), () => {})
+    world.observe(onChange(Doc), (ref) => {
+      const v = ref.read(Doc) as { title: string; hp: number }
+      seenTitle = v.title
+      seenHp = v.hp
+    })
+    const e = world.spawnWith(Doc)
+    world.frameReset()
+    world.observerDrain()
+
+    wr(world, e, Doc).title = 'final-write'
+    wr(world, e, Doc).hp = 7
+    world.despawn(e)
+    world.observerDrain()
+    expect(seenTitle).toBe('final-write')
+    expect(seenHp).toBe(7)
+  })
+
+  test('a rich-free deferred despawn binds its events to its OWN dead generation, not a successor stash', () => {
+    // t1 holds only Num: deferred (onRemove(Num) is registered) but rich-free. Its onRemove ref must
+    // carry t1's generation — a rich read of Doc through it returns the gen-guarded DEFAULT (t1 never
+    // held the field), never t2's stashed value or t3's live value.
+    const Num = defineComponent({ v: 'i32' }, { name: 'NumGenBind' })
+    const Doc = defineComponent({ title: 'string' }, { name: 'DocGenBind' })
+    const world = createWorld({ components: asComps(Num, Doc) })
+    let t1DocRead: string | null = null
+    world.observe(onRemove(Num), (ref) => {
+      t1DocRead = (ref.read(Doc) as { title: string }).title
+    })
+    const removed: string[] = []
+    world.observe(onRemove(Doc), (ref) => {
+      removed.push((ref.read(Doc) as { title: string }).title)
+    })
+
+    const t1 = world.spawnWith([Num, { v: 1 }])
+    world.frameReset()
+    world.observerDrain()
+
+    world.despawn(t1)
+    const t2 = world.spawnWith([Doc, { title: 'rich-2' }])
+    expect(world.decodeHandle(t2).index).toBe(world.decodeHandle(t1).index)
+    world.despawn(t2)
+    const t3 = world.spawnWith([Doc, { title: 'rich-3' }])
+    expect(world.decodeHandle(t3).index).toBe(world.decodeHandle(t1).index)
+    world.observerDrain()
+
+    expect(t1DocRead).toBe('')
+    expect(removed).toEqual(['rich-2'])
+  })
+
+  test('a handler exception abandons the window: the next despawn/respawn cycle attributes cleanly', () => {
+    const Doc = defineComponent({ title: 'string' }, { name: 'DocThrow' })
+    const world = createWorld({ components: asComps(Doc) })
+    const removed: string[] = []
+    let shouldThrow = true
+    world.observe(onRemove(Doc), (ref) => {
+      const title = (ref.read(Doc) as { title: string }).title
+      if (shouldThrow) {
+        shouldThrow = false
+        throw new Error('handler boom')
+      }
+      removed.push(title)
+    })
+
+    const v1 = world.spawnWith([Doc, { title: 'tenant-1' }])
+    world.frameReset()
+    world.observerDrain()
+
+    world.despawn(v1)
+    const v2 = world.spawnWith([Doc, { title: 'tenant-2' }])
+    expect(world.decodeHandle(v2).index).toBe(world.decodeHandle(v1).index)
+    expect(() => world.observerDrain()).toThrow('handler boom')
+
+    // The thrown window is lost; the NEXT window must attribute on its own. Replaying the lost
+    // window's Destroy here would supersede v2's stash early and v2's onRemove would read v3's value.
+    world.despawn(v2)
+    const v3 = world.spawnWith([Doc, { title: 'tenant-3' }])
+    expect(world.decodeHandle(v3).index).toBe(world.decodeHandle(v1).index)
+    world.observerDrain()
+    expect(removed).toEqual(['tenant-2'])
   })
 })
 
