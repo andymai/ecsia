@@ -1,10 +1,10 @@
 {
-  "packages/ecsia": "0.3.0",
-  "packages/core": "0.3.0",
-  "packages/devtools": "0.3.0",
-  "packages/relations": "0.3.0",
-  "packages/scheduler": "0.3.0",
-  "packages/schema": "0.3.0",
-  "packages/serialization": "0.3.0",
-  "packages/three": "0.3.0"
+  "packages/ecsia": "0.4.0",
+  "packages/core": "0.4.0",
+  "packages/devtools": "0.4.0",
+  "packages/relations": "0.4.0",
+  "packages/scheduler": "0.4.0",
+  "packages/schema": "0.4.0",
+  "packages/serialization": "0.4.0",
+  "packages/three": "0.4.0"
 }

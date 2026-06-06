@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.0](https://github.com/andymai/ecsia/compare/scheduler-v0.3.0...scheduler-v0.4.0) (2026-06-06)
+
+
+### Features
+
+* topics — typed inter-system events, byte-identical under any worker count ([#18](https://github.com/andymai/ecsia/issues/18)) ([0702984](https://github.com/andymai/ecsia/commit/0702984e30cffbbc6cc85ad79eab9159fe3a721f))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.4.0
+    * @ecsia/schema bumped to 0.4.0
+
 ## [0.3.0](https://github.com/andymai/ecsia/compare/scheduler-v0.2.0...scheduler-v0.3.0) (2026-06-05)
 
 
