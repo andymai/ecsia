@@ -196,6 +196,10 @@ export function applyStructuralOps(world: World, bytes: Uint8Array, remap: Map<E
         // Apply the destroy on the receiver via the remap (the producer handle → local handle).
         const local = remap.get(old as EntityHandle)
         if (local !== undefined) s.despawn(local)
+        // Prune the entry: a stream-lifetime remap that never forgets destroyed entities grows
+        // without bound under entity churn. A reused producer u32 handle is re-`set` on its
+        // EntityCreate, so dropping the dead pair is safe.
+        remap.delete(old as EntityHandle)
         break
       }
       case DeltaOp.ComponentAdd: {

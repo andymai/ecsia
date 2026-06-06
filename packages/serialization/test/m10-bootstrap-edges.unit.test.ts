@@ -58,7 +58,7 @@ describe('attachWorld — gating', () => {
       buffers: { columns: [], regions: [] } as never,
       registry: {
         schemaHash: 0xdeadbeef, // wrong: real hash of [comp 'p' field 'x'/'f32'] differs
-        components: [{ name: 'p', id: 0, fieldCount: 1, storage: 'packed', fields: [{ name: 'x', token: 'f32' }] }],
+        components: [{ name: 'p', id: 0, fieldCount: 1, storage: 'packed', fields: [{ name: 'x', token: 'f32', persist: true }] }],
         relations: [],
         numComponentTypes: 1,
       },

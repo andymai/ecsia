@@ -26,8 +26,10 @@ export interface SerializedRegistry {
     readonly id: number
     readonly fieldCount: number
     readonly storage: StorageStrategy
-    /** Field (name, token) in declaration order — lets attachWorld recompute schemaHash from the manifest. */
-    readonly fields: ReadonlyArray<{ readonly name: string; readonly token: string }>
+    /** Field (name, token, persist) in declaration order — lets attachWorld recompute schemaHash from
+     * the manifest. `persist` participates: core folds '!persist' per non-persisted field, so a
+     * manifest without it could never reproduce the producer's hash. */
+    readonly fields: ReadonlyArray<{ readonly name: string; readonly token: string; readonly persist: boolean }>
   }>
   readonly relations: ReadonlyArray<{ readonly name: string; readonly id: number; readonly exclusive: boolean; readonly hasPayload: boolean; readonly presenceId: number }>
   readonly numComponentTypes: number
@@ -73,6 +75,7 @@ export function bootstrapForWorker(world: World): WorldBootstrap {
       const fields = (s.fieldsOf(c.id) ?? []).map((f) => ({
         name: f.name,
         token: typeof f.token === 'string' ? f.token : JSON.stringify(f.token),
+        persist: f.persist,
       }))
       return { name: c.name, id: c.id as number, fieldCount: c.fieldCount, storage: c.storage, fields }
     }),
@@ -150,8 +153,13 @@ function computeRegistryHash(registry: SerializedRegistry): number {
     for (const f of c.fields) {
       fnv(f.name)
       fnv(f.token)
+      // Mirrors core: the persisted-field subset is part of the wire contract, hashed only when false.
+      if (!f.persist) fnv('!persist')
     }
   }
+  // Mirrors core's prefabs fold. A prefabs world registers the 'ecsia:Prefab' built-in, so its
+  // presence in the manifest is the same signal core's resolved.prefabs flag encodes.
+  if (registry.components.some((c) => c.name === 'ecsia:Prefab')) fnv('!prefabs')
   for (const r of registry.relations) fnv(r.name)
   return h >>> 0
 }
