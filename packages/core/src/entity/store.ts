@@ -29,6 +29,10 @@ export interface HandleStats {
   readonly aliveCount: number
   readonly minted: number
   readonly capacity: number
+  /** Monotonic lifetime spawn total (worker reservations included); aliveCount === spawned - despawned. */
+  readonly spawned: number
+  /** Monotonic lifetime despawn total (unused-reservation releases included). */
+  readonly despawned: number
   readonly wrapTimeFormula: string
 }
 
@@ -224,6 +228,8 @@ export class EntityStore {
       aliveCount: this.#index.aliveCount,
       minted: this.#index.denseLen,
       capacity: this.#maxEntities,
+      spawned: this.#index.totalSpawned,
+      despawned: this.#index.totalDespawned,
       wrapTimeFormula: `2^${this.layout.generationBits} / recycleRate`,
     }
   }

@@ -34,6 +34,11 @@ export interface EntityIndexArrays {
 interface Cursors {
   aliveCount: number
   denseLen: number
+  /** Monotonic lifetime totals — every alloc/free passes through this allocator (including
+   * worker reservations and unused-reservation releases), so these are the authoritative
+   * entity-lifecycle counts; aliveCount === spawned - despawned at all times. */
+  spawned: number
+  despawned: number
 }
 
 /** Tuning for the mint-time bounds: how many indices are addressable now vs. ever allowed. */
@@ -52,7 +57,7 @@ export interface EntityIndexBounds {
 export class EntityIndex {
   readonly #layout: HandleLayout
   #arrays: EntityIndexArrays
-  readonly #cursors: Cursors = { aliveCount: 0, denseLen: 0 }
+  readonly #cursors: Cursors = { aliveCount: 0, denseLen: 0, spawned: 0, despawned: 0 }
   /** Set once on the first generation wrap of any slot, for the dev-mode warning. */
   #wrapped = false
   #addressable: number
@@ -86,6 +91,14 @@ export class EntityIndex {
     return this.#cursors.denseLen
   }
 
+  get totalSpawned(): number {
+    return this.#cursors.spawned
+  }
+
+  get totalDespawned(): number {
+    return this.#cursors.despawned
+  }
+
   get wrapped(): boolean {
     return this.#wrapped
   }
@@ -100,6 +113,7 @@ export class EntityIndex {
         const index = handleIndex(handle, this.#layout)
         sparse[index] = pos
         c.aliveCount += 1
+        c.spawned += 1
         return handle
       }
     }
@@ -124,6 +138,7 @@ export class EntityIndex {
     sparse[index] = index
     c.denseLen += 1
     c.aliveCount += 1
+    c.spawned += 1
     return handle
   }
 
@@ -149,6 +164,7 @@ export class EntityIndex {
     sparse[index] = lastAlive
 
     c.aliveCount = lastAlive
+    c.despawned += 1
   }
 
   /** The full (generational) handle currently occupying `index`, or NO_ENTITY-equivalent if dead. */

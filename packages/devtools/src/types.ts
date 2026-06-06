@@ -65,11 +65,12 @@ export interface WorldReport {
 export interface FrameDelta {
   /** 0-based frame index since watch start. */
   readonly frame: number
-  /** Entities spawned since the previous sample (aliveCount rise + churn). */
+  /** Entities spawned since the previous sample — real lifecycle (handleStats totals diff), not
+   * component churn: add() on a living entity contributes 0; a bare spawn() contributes 1. */
   readonly spawned: number
-  /** Entities despawned since the previous sample. */
+  /** Entities despawned since the previous sample (same lifecycle source). */
   readonly despawned: number
-  /** Net alive change (spawned − despawned). */
+  /** Net alive change; always equals spawned − despawned. */
   readonly aliveDelta: number
   /** Archetypes created since the previous sample (archetype churn). */
   readonly archetypesCreated: number
