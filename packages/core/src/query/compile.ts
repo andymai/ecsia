@@ -83,9 +83,16 @@ export interface CompileContext {
    * unsatisfiable, the behavior).: this NEVER mints — it only looks up already-minted ids.
    */
   resolvePair?(relationId: number, target: number | symbol): ResolvedPair
+  /**
+   * The `Prefab` tag's id when the world was created with `prefabs: true`; undefined otherwise.
+   * When set, compilation injects this bit into `notWords` (default prefab exclusion) unless the
+   * query mentions Prefab in any term or passes `{ matchPrefabs: true }`. Zero per-row cost — one
+   * more bit in a mask that is already ANDed.
+   */
+  readonly prefabId?: ComponentId
 }
 
-type TermKind = 'component' | 'without' | 'optional' | 'pairWildcard' | 'pairSpecific'
+type TermKind = 'component' | 'without' | 'optional' | 'pairWildcard' | 'pairSpecific' | 'options'
 
 interface Classified {
   readonly kind: TermKind
@@ -106,7 +113,19 @@ function isPairDef(t: QueryTerm): t is QueryTerm & PairLike {
   return typeof t === 'object' && t !== null && 'relation' in t && 'target' in t
 }
 
+function isQueryOptions(t: QueryTerm): t is QueryTerm & { matchPrefabs: boolean } {
+  return (
+    typeof t === 'object' &&
+    t !== null &&
+    'matchPrefabs' in t &&
+    !('relation' in t) &&
+    !('__term' in t) &&
+    !('fields' in t)
+  )
+}
+
 function classifyTerm(t: QueryTerm): Classified {
+  if (isQueryOptions(t)) return { kind: 'options', def: null, pair: null, role: 'none' }
   if (isPairDef(t)) {
     const pair = t as unknown as PairLike
     const isWildcard = typeof pair.target === 'symbol'
@@ -156,10 +175,15 @@ function pairHashId(pair: PairLike): string {
   return 'p' + pair.relation.id + '.' + (pair.target as number)
 }
 
-function canonicalHash(terms: readonly QueryTerm[], ctx: CompileContext): string {
+function canonicalHash(terms: readonly QueryTerm[], ctx: CompileContext, excludePrefabs: boolean): string {
   const parts: string[] = []
+  // The injected Prefab exclusion is part of the matching constraint, so it must be part of the
+  // hash: query(A) and query(A, { matchPrefabs: true }) are distinct cache entries. An explicit
+  // without(Prefab) hashes to the same part — same constraint, same LiveQuery.
+  if (excludePrefabs) parts.push('N:' + (ctx.prefabId as number))
   for (const t of terms) {
     const cl = classifyTerm(t)
+    if (cl.kind === 'options') continue
     let cid: number | string
     if (cl.pair !== null) cid = pairHashId(cl.pair)
     else cid = ctx.idOf(cl.def as ComponentDef<Schema>) as number
@@ -198,13 +222,21 @@ export function compileQuery(terms: readonly QueryTerm[], ctx: CompileContext): 
   const rowFilters: RowFilterTerm[] = []
   const referenced = new Set<number>()
   let unsatisfiable = false
+  const prefabId = ctx.prefabId as number | undefined
+  let matchPrefabs = false
+  let mentionsPrefab = false
 
   for (const t of terms) {
     const cl = classifyTerm(t)
     switch (cl.kind) {
+      case 'options': {
+        if ((t as { matchPrefabs: boolean }).matchPrefabs) matchPrefabs = true
+        break
+      }
       case 'component': {
         const def = cl.def as ComponentDef<Schema>
         const cid = ctx.idOf(def) as number
+        if (cid === prefabId) mentionsPrefab = true
         referenced.add(cid)
         addWithBit(withWords, residualWith, cid, ctx.fixedBitCount)
         if (cl.role === 'read' || cl.role === 'write' || cl.role === 'bare') {
@@ -218,6 +250,7 @@ export function compileQuery(terms: readonly QueryTerm[], ctx: CompileContext): 
       }
       case 'without': {
         const cid = ctx.idOf(cl.def as ComponentDef<Schema>) as number
+        if (cid === prefabId) mentionsPrefab = true
         referenced.add(cid)
         addNotBit(notWords, residualWith, cid, ctx.fixedBitCount)
         break
@@ -225,6 +258,7 @@ export function compileQuery(terms: readonly QueryTerm[], ctx: CompileContext): 
       case 'optional': {
         const def = cl.def as ComponentDef<Schema>
         const cid = ctx.idOf(def) as number
+        if (cid === prefabId) mentionsPrefab = true
         referenced.add(cid)
         optionalIds.push(cid as ComponentId)
         valueTerms.push({ componentId: cid as ComponentId, role: 'optional', key: keyOf(def) })
@@ -249,6 +283,15 @@ export function compileQuery(terms: readonly QueryTerm[], ctx: CompileContext): 
     }
   }
 
+  // Default prefab exclusion: a gameplay query must never iterate a prefab TEMPLATE. Skipped when
+  // the query names Prefab itself (With/Without/optional/read) or opts in via matchPrefabs. The bit
+  // joins referencedIds so adding/removing the Prefab tag re-tests the entity incrementally.
+  const excludePrefabs = prefabId !== undefined && !matchPrefabs && !mentionsPrefab
+  if (excludePrefabs) {
+    referenced.add(prefabId)
+    addNotBit(notWords, residualWith, prefabId, ctx.fixedBitCount)
+  }
+
   return Object.freeze({
     withWords,
     notWords,
@@ -257,7 +300,7 @@ export function compileQuery(terms: readonly QueryTerm[], ctx: CompileContext): 
     valueTerms,
     referencedIds: [...referenced] as ComponentId[],
     rowFilters,
-    hash: canonicalHash(terms, ctx),
+    hash: canonicalHash(terms, ctx, excludePrefabs),
     unsatisfiable,
   })
 }

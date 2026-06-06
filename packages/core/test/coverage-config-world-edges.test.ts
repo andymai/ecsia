@@ -42,6 +42,19 @@ describe('config — option-validation throws (config.ts )', () => {
     expect(resolveOptions({ scheduler: { workers: 4 } }).scheduler.workers).toBe(4)
     expect(resolveOptions({ scheduler: { workers: 'no-sab' } }).scheduler.workers).toBe('no-sab')
   })
+
+  test('reactivity.logEntryWords: 1 contradicts relations / prefabs (pair entries need two words)', () => {
+    expect(() => resolveOptions({ reactivity: { logEntryWords: 1 }, relations: [{}] })).toThrow(/logEntryWords/)
+    expect(() => resolveOptions({ reactivity: { logEntryWords: 1 }, prefabs: true })).toThrow(ConfigError)
+    // The compatible explicit forms survive.
+    expect(resolveOptions({ reactivity: { logEntryWords: 2 }, prefabs: true }).reactivity.logEntryWords).toBe(2)
+    expect(resolveOptions({ reactivity: { logEntryWords: 1 } }).reactivity.logEntryWords).toBe(1)
+  })
+
+  test('user component names must not squat on the reserved "ecsia:" namespace (dev)', () => {
+    const Bad = defineComponent({ hp: 'i32' }, { name: 'ecsia:Sneaky' })
+    expect(() => createWorld({ components: [Bad] as readonly ComponentDef<Schema>[] })).toThrow(/reserved "ecsia:" prefix/)
+  })
 })
 
 describe('world — construction diagnostics + __serialize / __apply surfaces', () => {

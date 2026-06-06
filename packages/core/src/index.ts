@@ -95,6 +95,7 @@ export type {
   SchemaOf,
   // query DSL types
   QueryTerm,
+  QueryOptionsTerm,
   QueryElement,
   Query,
   QueryChunk,

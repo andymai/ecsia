@@ -8,4 +8,4 @@
 // overflowKey64) are an internal encoding detail consumed only by ./runtime.js — they are NOT part of
 // the published surface and are reached relatively.
 export { createRelations, Wildcard } from './runtime.js'
-export type { PairAccessor, StorageKind } from './runtime.js'
+export type { DefinePrefabOptions, PairAccessor, StorageKind } from './runtime.js'

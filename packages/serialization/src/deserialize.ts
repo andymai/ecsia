@@ -7,7 +7,7 @@
 
 import type { ComponentId, EntityHandle, RelationId } from '@ecsia/schema'
 import type { World } from '@ecsia/core'
-import { encodeEid } from '@ecsia/core'
+import { IS_DEV, encodeEid } from '@ecsia/core'
 import { ReadCursor } from './cursor.js'
 import {
   FLAG_HAS_RELATIONS,
@@ -257,7 +257,14 @@ export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
         const subject = remap.get(subjectH as EntityHandle)
         if (subject === undefined) continue
         const target = targetH === NO_ENTITY_U32 ? null : remap.get(targetH as EntityHandle) ?? null
-        if (targetH !== NO_ENTITY_U32 && target === null) continue // dangling target → drop
+        if (targetH !== NO_ENTITY_U32 && target === null) {
+          // Dangling target (e.g. a merge-mode sub-scene whose pairs reference an entity not in the
+          // snapshot): the pair is skipped — subject data is intact, only this edge is lost.
+          if (IS_DEV) {
+            console.warn('[ecsia] deserialize: a relation pair references an entity not in the snapshot — pair skipped')
+          }
+          continue
+        }
         relProvider.addPair(subject, localRel, target, payload)
       }
     }
