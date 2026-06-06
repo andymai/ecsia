@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0](https://github.com/andymai/ecsia/compare/serialization-v0.4.0...serialization-v0.5.0) (2026-06-06)
+
+
+### Features
+
+* prefab templates and IsA inheritance on integer pairs ([#20](https://github.com/andymai/ecsia/issues/20)) ([de8de13](https://github.com/andymai/ecsia/commit/de8de13360e8397507b2e74a7ab0019dc9e947e2))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.5.0
+    * @ecsia/schema bumped to 0.5.0
+  * devDependencies
+    * @ecsia/relations bumped to 0.5.0
+
 ## [0.4.0](https://github.com/andymai/ecsia/compare/serialization-v0.3.0...serialization-v0.4.0) (2026-06-06)
 
 
