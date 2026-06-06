@@ -439,20 +439,40 @@ export class Reactivity {
       this.#structuralJournal.resetAll()
     }
     this.#spilledThisFrame = false
-    this.#writeLog.frameReset(this.#minWriteCursor())
-    this.#shapeLog.frameReset(this.#minShapeCursor())
-    // When the ring recycled to slot 0 (all consumers caught up), rewind every caught-up
-    // consumer's cursor to 0 too, so it scans the new frame's entries from the head. A still-lagging
-    // consumer (cursor below the now-zero head is impossible) keeps its cursor.
-    this.#rewindCaughtUp(this.#writeLog.header[0] as number, [this.#observerWritePtr, ...this.#changedPointers])
-    this.#rewindCaughtUp(this.#shapeLog.header[0] as number, [this.#observerShapePtr, this.#maintainShapePtr])
+    this.#resetLog(this.#writeLog, [this.#observerWritePtr, ...this.#changedPointers])
+    this.#resetLog(this.#shapeLog, [this.#observerShapePtr, this.#maintainShapePtr])
   }
 
-  #rewindCaughtUp(head: number, pointers: readonly LogPointer[]): void {
-    if (head !== 0) return // ring was not recycled (a lagging consumer pinned it)
+  /** Recycle one log at the frame boundary, then realign its consumers. The reset discards the
+   * spill, bumping the generation when any consumer had not drained it (LogRing.frameReset) — a
+   * lagging consumer keeps its now-stale generation so its next consume takes the conservative
+   * OVERFLOW_SENTINEL path. Fully-drained consumers absorb the bump (generation re-synced, spill
+   * cursor rewound) so only laggards pay the sentinel; when the ring recycled to slot 0 their ring
+   * cursors rewind too, so they scan the new frame's entries from the head. */
+  #resetLog(log: LogRing, pointers: readonly LogPointer[]): void {
+    const header = log.header
+    const spillCount = header[2] as number
+    const genBefore = header[1] as number
+    let minCursor = header[0] as number
+    let minSpill = spillCount
+    // Consumers (e.g. changed-flavor pointers) are drained lazily; a lagging ring cursor pins the
+    // ring so the recycle never overruns an unread consumer. In the common case every consumer
+    // drains within the frame, so the mins equal head/spillCount and the ring recycles cleanly.
     for (const ptr of pointers) {
-      ptr.cursor = 0
-      ptr.spillCursor = 0
+      if (ptr.cursor < minCursor) minCursor = ptr.cursor
+      if (ptr.spillCursor < minSpill) minSpill = ptr.spillCursor
+    }
+    log.frameReset(minCursor, minSpill)
+    const genAfter = header[1] as number
+    const recycled = (header[0] as number) === 0
+    for (const ptr of pointers) {
+      // generation === genBefore excludes a consumer with a sentinel already pending from an
+      // EARLIER reset — re-syncing it here would erase that sentinel before it ever drained.
+      if (ptr.generation === genBefore && ptr.spillCursor >= spillCount) {
+        ptr.generation = genAfter
+        ptr.spillCursor = 0
+        if (recycled) ptr.cursor = 0
+      }
     }
   }
 
@@ -496,7 +516,9 @@ export class Reactivity {
   maintainStructural(): void {
     const hook = this.#maintainHook
     if (hook === null) {
-      this.#maintainShapePtr.cursor = this.#shapeLogHead()
+      // Full sync (not just cursor): a stale spillCursor would mark this pointer as a spill
+      // laggard at frameReset and force a spurious generation bump.
+      this.#syncPointer(this.#shapeLog, this.#maintainShapePtr)
       return
     }
     this.#shapeLog.consume(this.#maintainShapePtr, (source, base) => {
@@ -509,8 +531,10 @@ export class Reactivity {
   /** _DRAIN: fire deferred observers from the saved shape/write pointers. */
   observerDrain(): void {
     if (!this.#observers.hasObservers) {
-      this.#observerShapePtr.cursor = this.#shapeLogHead()
-      this.#observerWritePtr.cursor = this.#writeLogHead()
+      // Full sync (not just cursor): a stale spillCursor would mark these pointers as spill
+      // laggards at frameReset and force a spurious generation bump.
+      this.#syncPointer(this.#shapeLog, this.#observerShapePtr)
+      this.#syncPointer(this.#writeLog, this.#observerWritePtr)
       return
     }
     this.#observers.resetChangeDedup()
@@ -588,27 +612,8 @@ export class Reactivity {
 
   // --- internals -------------------------------------------------------------
 
-  #shapeLogHead(): number {
-    return this.#shapeLog.header[0] as number
-  }
   #writeLogHead(): number {
     return this.#writeLog.header[0] as number
-  }
-
-  #minWriteCursor(): number {
-    let min = this.#writeLog.header[0] as number
-    if (this.#observerWritePtr.cursor < min) min = this.#observerWritePtr.cursor
-    // changed-flavor pointers are drained lazily; they pin the ring until read so the recycle never
-    // overruns an unread consumer ("ring is not recycled past a lagging pointer"). In the common
-    // case every system reads its filter within the frame, so they equal head and the ring recycles.
-    for (const ptr of this.#changedPointers) if (ptr.cursor < min) min = ptr.cursor
-    return min
-  }
-  #minShapeCursor(): number {
-    let min = this.#shapeLog.header[0] as number
-    if (this.#observerShapePtr.cursor < min) min = this.#observerShapePtr.cursor
-    if (this.#maintainShapePtr.cursor < min) min = this.#maintainShapePtr.cursor
-    return min
   }
 }
 

@@ -208,15 +208,22 @@ export class LogRing {
 
   /**
    * / `minConsumerCursor` is the smallest cursor over all consumers
-   * (so the ring is not recycled past a lagging pointer). Applies a pending resize first.
+   * (so the ring is not recycled past a lagging pointer); `minSpillCursor` is the smallest
+   * spillCursor. Applies a pending resize first.
    */
-  frameReset(minConsumerCursor: number): void {
+  frameReset(minConsumerCursor: number, minSpillCursor?: number): void {
     const h = this.header
     if (this.#resize.pendingResize > 0) {
       this.#applyResize(this.#resize.pendingResize)
       this.#resize.pendingResize = 0
     }
-    // Spill is drained by every consumer (CONSUME ) before reset; clear it now.
+    // The spill cannot be pinned the way the ring is (it is cleared every frame), so discarding
+    // words a consumer never drained must bump the generation: that consumer's next consume then
+    // takes the conservative OVERFLOW_SENTINEL path instead of silently missing the lost entries.
+    // Callers re-sync fully-drained consumers' generations so only laggards pay the sentinel.
+    if (minSpillCursor !== undefined && minSpillCursor < (h[H_SPILL_COUNT] as number)) {
+      h[H_GENERATION] = (h[H_GENERATION] as number) + 1
+    }
     this.spill.length = 0
     h[H_SPILL_COUNT] = 0
     h[H_PEAK] = 0
