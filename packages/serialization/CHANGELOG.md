@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.7.7](https://github.com/andymai/ecsia/compare/serialization-v0.7.6...serialization-v0.7.7) (2026-06-06)
+
+
+### Bug Fixes
+
+* serialization wire/bootstrap bugs — registry hash coverage, string limits, remap pruning ([#42](https://github.com/andymai/ecsia/issues/42)) ([fa5cf03](https://github.com/andymai/ecsia/commit/fa5cf03321573d1a121b8f2be93872a6a3f47478))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.7.7
+    * @ecsia/schema bumped to 0.7.7
+  * devDependencies
+    * @ecsia/relations bumped to 0.7.7
+
 ## [0.7.6](https://github.com/andymai/ecsia/compare/serialization-v0.7.5...serialization-v0.7.6) (2026-06-06)
 
 
