@@ -4,7 +4,7 @@
 // down-converting a current snapshot of a rich-FREE world (the v1 wire is the v2+ wire minus the
 // 4-byte richSectionOffset header word, with the two section offsets shifted down by 4 and the
 // FLAG_HAS_RICH bit absent — which a rich-free world already satisfies; the snapshot layout is
-// unchanged between v2 and v3, which only changed the DELTA header).
+// unchanged since v2 — v3 changed only the DELTA header, v4 only the DELTA rich row flag).
 
 import { describe, it, expect } from 'vitest'
 import { createWorld, defineComponent } from '@ecsia/core'
@@ -38,8 +38,8 @@ describe('RICH — version gating', () => {
     const src = createWorld({ components: asComps(P) })
     src.spawnWith(P)
     const bytes = createSnapshotSerializer(src).snapshotCopy()
-    expect(new DataView(bytes.buffer, bytes.byteOffset).getUint16(4, true)).toBe(3)
-    expect(SERIALIZATION_FORMAT_VERSION).toBe(3)
+    expect(new DataView(bytes.buffer, bytes.byteOffset).getUint16(4, true)).toBe(4)
+    expect(SERIALIZATION_FORMAT_VERSION).toBe(4)
     expect(MIN_SUPPORTED_VERSION).toBe(1)
   })
 

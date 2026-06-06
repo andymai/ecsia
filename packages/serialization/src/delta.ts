@@ -21,6 +21,9 @@ import {
   FLAG_IS_DELTA,
   FLAG_HAS_RICH,
   FLAG_HAS_STRUCTURAL,
+  RICH_ROW_KEEP,
+  RICH_ROW_RESET,
+  RICH_ROW_VALUE,
   SERIALIZATION_FORMAT_VERSION,
   SNAPSHOT_MAGIC,
   assertPlatformLittleEndian,
@@ -54,7 +57,7 @@ export interface DeltaOptions {
 }
 
 /**
- * A reusable since-T delta serializer (v2 wire). Changed rich fields ride SECTION R, selected by the SAME
+ * A reusable since-T delta serializer (v4 wire). Changed rich fields ride SECTION R, selected by the SAME
  * whole-entity changeVersion stamp as the numeric value section — including a row
  * changed ONLY in a rich field. `epsilon` (opt-in) drops sub-tolerance NUMERIC rows; rich values are
  * never epsilon-filtered.
@@ -108,10 +111,11 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
     const target = world.currentTick()
     cur.reset()
 
-    // --- HEADER (32 bytes in v3; section offsets + flags back-patched) ---
+    // --- HEADER (32 bytes since v3; section offsets + flags back-patched) ---
     // v2 grew the header with a back-patched `richSectionOffset` word so applyDelta can seek
     // SECTION R directly; v3 adds the schemaHash word (byte 8, mirroring the snapshot header) so
-    // applyDelta carries the same fail-loud schema gate as snapshot load.
+    // applyDelta carries the same fail-loud schema gate as snapshot load. v4 changes no header
+    // bytes — it widens SECTION R's per-row flag to the three RICH_ROW_* states.
     cur.u32(SNAPSHOT_MAGIC)
     cur.u16(SERIALIZATION_FORMAT_VERSION)
     cur.u8(1) // ENDIAN
@@ -197,9 +201,12 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
     // --- SECTION R: CHANGED RICH VALUES (after SECTION V) — version-gated, FLAG_HAS_RICH ---
     // Rides the SAME changeVersion selection as SECTION V (the unfiltered set — epsilon never applies to
     // rich values). Per archetype, emit the changed rows' rich values per (component, field), with a
-    // present/absent flag per row (the changeVersion stamp is whole-entity, so a row changed only in its
-    // numeric field carries present=0 for an unchanged rich field — the SAME over-send the numeric delta
-    // already does). Sparse: an archetype with no rich fields, or no changed rows, contributes 0.
+    // three-state flag per row (v4): RICH_ROW_VALUE carries the slot's value (an over-send when only the
+    // row's numeric field changed — the stamp is whole-entity — same as the numeric section's over-send);
+    // RICH_ROW_RESET re-defaults the receiver slot (a producer slot reading as the default MUST propagate,
+    // else a mirror that once saw a value keeps it forever); RICH_ROW_KEEP carries no information and is
+    // reserved for the onUnserializable skip policy, which must never clobber the receiver. Sparse: an
+    // archetype with no rich fields, or no changed rows, contributes 0.
     const richFields = s.richFields()
     let richWrote = false
     if (richFields.length > 0) {
@@ -241,24 +248,28 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
           cur.u8(richKindOrdinal(rf.kind))
           for (const r of rows) {
             const handle = a.rows[r] as number as EntityHandle
+            // A never-written slot AND a slot reset via `field = undefined` both read as the default
+            // on the producer — encode the STATE (reset), not the change, so a stale receiver value
+            // converges. Receiver-idempotent, same philosophy as SECTION V's over-send.
             if (!s.richIsPresent(handle, rf.componentId as ComponentId, rf.fieldIndex)) {
-              cur.u8(0) // absent/default this row
+              cur.u8(RICH_ROW_RESET)
               continue
             }
             const value = s.richValueOf(handle, rf.componentId as ComponentId, rf.fieldIndex)
-            const json =
-              value === undefined
-                ? undefined
-                : encodeRichValue(
-                    value,
-                    { componentId: rf.componentId as ComponentId, fieldIndex: rf.fieldIndex, fieldName: rf.name, handle, value },
-                    opts.onUnserializable,
-                  )
-            if (json === undefined) {
-              cur.u8(0)
+            if (value === undefined) {
+              cur.u8(RICH_ROW_RESET) // present but reads as an undefined default — reset semantics
               continue
             }
-            cur.u8(1)
+            const json = encodeRichValue(
+              value,
+              { componentId: rf.componentId as ComponentId, fieldIndex: rf.fieldIndex, fieldName: rf.name, handle, value },
+              opts.onUnserializable,
+            )
+            if (json === undefined) {
+              cur.u8(RICH_ROW_KEEP) // skip policy: the producer HAS a value we can't encode — never clobber
+              continue
+            }
+            cur.u8(RICH_ROW_VALUE)
             writeJsonBytes(cur, json)
           }
         }
@@ -458,8 +469,9 @@ export function applyDelta(world: World, bytes: Uint8Array, remap: ReadonlyMap<E
   const cur = new ReadCursor(bytes)
   const magic = cur.u32()
   if (magic !== SNAPSHOT_MAGIC) throw new Error('serialization: bad magic (not an ecsia delta)')
-  // The v3 delta header layout (schemaHash word at byte 8) is a hard wire break from pre-v3 deltas —
-  // reject them loudly rather than misparse the tick/offset words.
+  // Pre-v4 deltas are rejected loudly: v3 changed the header layout (schemaHash word at byte 8 —
+  // misparsing tick/offset words), and v4 changed SECTION R's row-flag semantics (a v3 stream
+  // encodes a rich reset as "unchanged", which would silently keep stale values).
   const version = cur.u16()
   if (version < DELTA_MIN_SUPPORTED_VERSION || version > SERIALIZATION_FORMAT_VERSION) {
     throw new Error(
@@ -543,8 +555,19 @@ export function applyDelta(world: World, bytes: Uint8Array, remap: ReadonlyMap<E
         const fieldIndex = cur.u16()
         cur.u8() // kind ordinal — receiver re-derives from its own descriptor
         for (let r = 0; r < rowCount; r++) {
-          const present = cur.u8()
-          if (present === 0) continue // unchanged/default this row — receiver keeps its current value
+          const state = cur.u8()
+          if (state === RICH_ROW_KEEP) continue // no information — receiver keeps its current value
+          if (state === RICH_ROW_RESET) {
+            const local = work.get(handles[r] as number as EntityHandle)
+            // setRichValue(undefined) reproduces the producer's post-reset sidecar state exactly
+            // (written, data=undefined → reads the default) AND stamps the row, so a chained
+            // mirror re-propagates the reset downstream.
+            if (local !== undefined) s.setRichValue(local, producerCid as ComponentId, fieldIndex, undefined)
+            continue
+          }
+          if (state !== RICH_ROW_VALUE) {
+            throw new Error(`serialization: unknown rich row state ${state} — the delta stream is corrupt`)
+          }
           const json = readJsonBytes(cur)
           // RF-ROUNDTRIP /: a rich value for an unremapped producer entity is DROPPED, not misapplied.
           const local = work.get(handles[r] as number as EntityHandle)

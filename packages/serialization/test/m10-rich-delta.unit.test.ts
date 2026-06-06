@@ -3,7 +3,7 @@
 // values landing on entities CREATED by the same delta, and epsilon-diff (T-EPSILON-DROP / CORE-PURE).
 
 import { describe, it, expect } from 'vitest'
-import { createWorld, defineComponent, object } from '@ecsia/core'
+import { createWorld, defineComponent, field, object } from '@ecsia/core'
 import type { ComponentDef, EntityHandle, Schema } from '@ecsia/core'
 import {
   createSnapshotSerializer,
@@ -82,6 +82,94 @@ describe('RICH — delta carries changed rich values (T-RT-DELTA)', () => {
 
     const ne = remap.get(e as never) as EntityHandle
     expect((dst.entity(ne).read(R) as { meta: { k: string } }).meta).toEqual({ k: 'v1' })
+  })
+})
+
+describe('RICH — reset-to-default propagates (T-RT-RESET, v4 wire)', () => {
+  it('a string field reset to undefined re-defaults on the mirror (the v3 silent-keep bug)', () => {
+    const Label = defineComponent({ text: 'string' }, { name: 'label' })
+    const src = createWorld({ components: asComps(Label) })
+    const e = src.spawnWith([Label, { text: 'hello' }])
+
+    const R = defineComponent({ text: 'string' }, { name: 'label' })
+    const { dst, remap } = bootstrap(asComps(Label), asComps(R), src)
+    const ne = remap.get(e as never) as EntityHandle
+    expect((dst.entity(ne).read(R) as { text?: string }).text).toBe('hello')
+
+    const ser = createDeltaSerializer(src, src.currentTick())
+    src.advanceTick()
+    ;(src.entity(e).write(Label) as { text: string | undefined }).text = undefined
+    applyDelta(dst, ser.deltaCopy(), remap)
+    // the bare 'string' token defaults to '' — pre-v4 the mirror kept 'hello' forever
+    expect((dst.entity(ne).read(R) as { text?: string }).text).toBe('')
+  })
+
+  it('a reset lands on the DECLARED default, not undefined', () => {
+    const Tag = defineComponent({ name: field('string', { default: 'anon' }) }, { name: 'tag' })
+    const src = createWorld({ components: asComps(Tag) })
+    const e = src.spawnWith([Tag, { name: 'alice' }])
+
+    const R = defineComponent({ name: field('string', { default: 'anon' }) }, { name: 'tag' })
+    const { dst, remap } = bootstrap(asComps(Tag), asComps(R), src)
+    const ne = remap.get(e as never) as EntityHandle
+    expect((dst.entity(ne).read(R) as { name: string }).name).toBe('alice')
+
+    const ser = createDeltaSerializer(src, src.currentTick())
+    src.advanceTick()
+    ;(src.entity(e).write(Tag) as { name: string | undefined }).name = undefined
+    applyDelta(dst, ser.deltaCopy(), remap)
+    expect((dst.entity(ne).read(R) as { name: string }).name).toBe('anon')
+  })
+
+  it('an object<T> field reset to undefined re-defaults on the mirror', () => {
+    const Node = defineComponent({ hp: 'i32', meta: object<{ k: string }>() }, { name: 'node' })
+    const src = createWorld({ components: asComps(Node) })
+    const e = src.spawnWith([Node, { hp: 1, meta: { k: 'v0' } }])
+
+    const R = defineComponent({ hp: 'i32', meta: object<{ k: string }>() }, { name: 'node' })
+    const { dst, remap } = bootstrap(asComps(Node), asComps(R), src)
+    const ne = remap.get(e as never) as EntityHandle
+    expect((dst.entity(ne).read(R) as { meta?: { k: string } }).meta).toEqual({ k: 'v0' })
+
+    const ser = createDeltaSerializer(src, src.currentTick())
+    src.advanceTick()
+    ;(src.entity(e).write(Node) as { meta: { k: string } | undefined }).meta = undefined
+    applyDelta(dst, ser.deltaCopy(), remap)
+    expect((dst.entity(ne).read(R) as { meta?: { k: string } }).meta).toBeUndefined()
+  })
+
+  it('an unserializable value SKIPS (keeps the mirror value) — a skip never clobbers', () => {
+    const Node = defineComponent({ meta: object<unknown>() }, { name: 'node' })
+    const src = createWorld({ components: asComps(Node) })
+    const e = src.spawnWith([Node, { meta: { k: 'good' } }])
+
+    const R = defineComponent({ meta: object<unknown>() }, { name: 'node' })
+    const { dst, remap } = bootstrap(asComps(Node), asComps(R), src)
+    const ne = remap.get(e as never) as EntityHandle
+
+    const ser = createDeltaSerializer(src, src.currentTick(), { onUnserializable: () => undefined })
+    src.advanceTick()
+    const cyclic: { self?: unknown } = {}
+    cyclic.self = cyclic
+    ;(src.entity(e).write(Node) as { meta: unknown }).meta = cyclic
+    applyDelta(dst, ser.deltaCopy(), remap)
+    expect((dst.entity(ne).read(R) as { meta: unknown }).meta).toEqual({ k: 'good' })
+  })
+
+  it('a pre-v4 delta is rejected loudly (its wire conflates reset with unchanged)', () => {
+    const Label = defineComponent({ text: 'string' }, { name: 'label' })
+    const src = createWorld({ components: asComps(Label) })
+    const e = src.spawnWith([Label, { text: 'x' }])
+
+    const R = defineComponent({ text: 'string' }, { name: 'label' })
+    const { dst, remap } = bootstrap(asComps(Label), asComps(R), src)
+
+    const ser = createDeltaSerializer(src, src.currentTick())
+    src.advanceTick()
+    ;(src.entity(e).write(Label) as { text: string }).text = 'y'
+    const bytes = ser.deltaCopy()
+    new DataView(bytes.buffer, bytes.byteOffset).setUint16(4, 3, true) // forge a v3 stamp
+    expect(() => applyDelta(dst, bytes, remap)).toThrow(/unsupported delta format version 3/)
   })
 })
 
