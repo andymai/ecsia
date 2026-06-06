@@ -2,9 +2,10 @@
 // a server world broadcasting encoded ReplicationMessages over a MessageChannel, a client joining
 // mid-stream (baseline + chained deltas), spawn/despawn churn growing the receiver's remap, and
 // one dropped message triggering needBaseline → a single server resync → resumed convergence.
-// Convergence is keyed by stable id — an Identity-uid → handle query map, never a raw entity
-// handle. (Not createStableIndex: it is currently unsafe across the receiver's replace-loads;
-// see the workaround note in examples/replication.ts.)
+// Convergence is keyed by stable id — a createStableIndex over the Identity uid, never a raw
+// entity handle. The index is observer-maintained across the receiver's replace-loads (every
+// baseline/resync re-mints each entity index), so this run doubles as the end-to-end regression
+// test for the rich observer-window read at recycled indices.
 
 import { describe, expect, test } from 'vitest'
 import { main as replication } from '../replication.js'

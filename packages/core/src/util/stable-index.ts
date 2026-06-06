@@ -3,12 +3,13 @@
 // ids are NOT baked into entity identity. The index rebuilds itself after a snapshot load because the
 // deserialize path re-adds components, firing onAdd for every re-created entity.
 //
-// onRemove fires at observerDrain AFTER the entity is despawned + its index generation bumped, so a
-// rich-field read on the dying entity would hit the generation guard and return the DEFAULT. The
-// byIndex cache (populated at onAdd) is the only reliable id source in onRemove — this is why the util
-// sidesteps RF-REMOVE-READ entirely. The cache is keyed by entity INDEX (generation-stripped),
-// because the handle an onRemove observer sees carries the bumped generation and would not match the
-// onAdd handle.
+// onRemove fires at observerDrain AFTER the entity is despawned + its index generation bumped. A RICH
+// id field stays readable there through the generation-stamped pending-clear window (RF-REMOVE-READ),
+// but a NUMERIC id field's row may already be reused, so the byIndex cache (populated at onAdd) keeps
+// the util uniform across field kinds without depending on that window. The cache is keyed by entity
+// INDEX (generation-stripped), because the handle an onRemove observer sees carries the dying
+// generation when a rich pending window covers the index but the bumped one otherwise — neither is
+// safe to compare against the onAdd handle.
 
 import type { ComponentDef, EntityHandle, FieldValue, Schema, SchemaOf } from '@ecsia/schema'
 import { onAdd, onRemove } from '../reactivity/index.js'
@@ -51,9 +52,10 @@ export function createStableIndex<C extends ComponentDef<Schema>, F extends keyo
     byIndex.set(indexOf(e.handle), id)
   })
   const remove = world.observe(onRemove(component) as ReturnType<typeof onAdd>, (e) => {
-    // The handle here carries the BUMPED generation (despawn already ran), so it never equals the handle
-    // onAdd stored. Disambiguate by entity INDEX: only drop the mapping if it still points at this index
-    // (a re-add at the same index under a new id must not be clobbered by the prior tenant's removal).
+    // The handle here may carry either the dying or the bumped generation (see header), so it cannot be
+    // compared with the handle onAdd stored. Disambiguate by entity INDEX: only drop the mapping if it
+    // still points at this index (a re-add at the same index under a new id must not be clobbered by the
+    // prior tenant's removal).
     const idx = indexOf(e.handle)
     const id = byIndex.get(idx)
     if (id !== undefined) {

@@ -40,8 +40,10 @@ export interface AccessorWorld {
   // so accessor.ts stays free of any direct sidecar/entity dependency (same discipline as trackWrite).
   sidecarRead(key: SidecarKey, index: number, gen: number): unknown
   sidecarWrite(key: SidecarKey, index: number, gen: number, value: unknown): void
-  /** Low generationBits of the live handle at `index` — the RF-HYGIENE stamp source. */
-  generationOf(index: number): number
+  /** The generation embedded in `handle` — the RF-HYGIENE stamp source. For a live entity this equals
+   * the index's live generation; for an observer-window ref bound to a DYING handle it names the dead
+   * tenant, so its rich reads hit the pending-clear stash and never alias a same-window re-mint. */
+  handleGeneration(handle: EntityHandle): number
 }
 
 // The per-(archetype, component) binding context the world/storage builds. owns binding this
@@ -250,13 +252,13 @@ export function makeAccessorFactory<S extends Schema>(def: ComponentDef<S>): Acc
           const b = this.__binding
           if (b === null) return undefined
           const idx = b.world.handleIndex(this.__eid)
-          return b.world.sidecarRead(key, idx, b.world.generationOf(idx))
+          return b.world.sidecarRead(key, idx, b.world.handleGeneration(this.__eid))
         },
         set(this: Accessor, value: unknown): void {
           const b = this.__binding
           if (b === null) return
           const idx = b.world.handleIndex(this.__eid)
-          b.world.sidecarWrite(key, idx, b.world.generationOf(idx), value)
+          b.world.sidecarWrite(key, idx, b.world.handleGeneration(this.__eid), value)
           b.world.trackWrite(idx, componentId, fieldIndex)
         },
       })

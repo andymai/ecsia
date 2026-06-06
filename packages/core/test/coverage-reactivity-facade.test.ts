@@ -48,6 +48,9 @@ function makeReactivity(opts?: Partial<ReactivityDeps>): Harness {
       }
       return r
     },
+    eventRefOf: (index): EntityRef => deps.refOf(index),
+    onDestroyDrained: (): void => {},
+    onCreateDrained: (): void => {},
     resolveHandle: (index): number => 0xabc0000 + index,
     tracking: { active: false },
     ...opts,

@@ -39,6 +39,17 @@ export interface ReactivityDeps {
   holdsAll(index: number, componentIds: readonly ComponentId[]): boolean
   /** The pooled EntityRef bound to the current (index, generation) for `index` (observer dispatch). */
   refOf(index: number): EntityRef
+  /** The pooled EntityRef for a structural (add/remove) event at `index` — the stashed dying handle
+   * while a rich pending-clear window covers the index, else the current handle (see
+   * ObserverDeps.eventRefOf). */
+  eventRefOf(index: number): EntityRef
+  /** A Destroy entry for `index` was drained — pairs the oldest rich pending-clear stash with its
+   * dead tenant so a LATER Create can be recognized as a re-mint (see onCreateDrained). */
+  onDestroyDrained(index: number): void
+  /** A Create entry for `index` was drained AFTER a Destroy: the index was re-minted inside this
+   * observer window, so the oldest pending-clear tenant's remove events are all behind the drain
+   * cursor (log order) and its stash window closes. */
+  onCreateDrained(index: number): void
   /** index → its current FULL (generational) handle — for the structural journal's portable handles. */
   resolveHandle(index: number): number
   /** The accessor's shared write-path fast-out cell. Reactivity flips `.active` whenever a write consumer
@@ -119,6 +130,7 @@ export class Reactivity {
       idOf: deps.idOf,
       holdsAll: deps.holdsAll,
       refOf: deps.refOf,
+      eventRefOf: deps.eventRefOf,
       tick: deps.tick,
     }
     this.#observers = new ObserverRegistry(obsDeps)
@@ -513,6 +525,15 @@ export class Reactivity {
     this.#shapeLog.consume(this.#observerShapePtr, (source, base) => {
       if (source.length === 1 && source[0] === OVERFLOW_SENTINEL) return
       const { index, componentId, kind } = this.#unpackShape(source, base)
+      // A Create that follows a Destroy at the same index marks a re-mint: every remove/destroy
+      // event of the tenant that died before it has already dispatched, so the sidecar's pending
+      // window advances past it. The Destroy hook is what tells a re-mint Create apart from the
+      // dying tenant's own same-window mint.
+      if (kind === ShapeKind.Create) {
+        this.#deps.onCreateDrained(index)
+        return
+      }
+      if (kind === ShapeKind.Destroy) this.#deps.onDestroyDrained(index)
       const okind =
         kind === ShapeKind.Add || kind === ShapeKind.AddPair
           ? 'add'
