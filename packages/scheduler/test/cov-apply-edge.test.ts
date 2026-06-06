@@ -145,8 +145,8 @@ describe('apply.ts: drop-if-dead gate (validateSubject warns) across ops', () =>
   test('OP_REMOVE on a live entity coalesces into a removeMany migration (lines 119-121, 178-185)', () => {
     const { world, Health, Armor, codecById } = kit()
     const e = world.spawn()
-    world.add(e, Health, { hp: 10 })
-    world.add(e, Armor, { ac: 3 })
+    world.add(e, Health)
+    world.add(e, Armor)
     expect(world.has(e, Health)).toBe(true)
     const warns: string[] = []
     const cb = new Rec().remove(e as number, cidOf(Health)).buffer()
@@ -158,7 +158,7 @@ describe('apply.ts: drop-if-dead gate (validateSubject warns) across ops', () =>
   test('a remove-then-add of distinct ids on one entity lands both (removes-before-adds)', () => {
     const { world, Health, Armor, codecById } = kit()
     const e = world.spawn()
-    world.add(e, Health, { hp: 7 })
+    world.add(e, Health)
     const warns: string[] = []
     // Same wave: REMOVE Health then ADD Armor. drain() must apply removeMany THEN addMany.
     const cb = new Rec()
@@ -206,7 +206,7 @@ describe('apply.ts: SET_PAYLOAD edge cases (lines 197-202, branches 197/201)', (
   test('SET_PAYLOAD on an already-present component drains then writes (line 200-201)', () => {
     const { world, Health, codecById } = kit()
     const e = world.spawn()
-    world.add(e, Health, { hp: 3 })
+    world.add(e, Health)
     const warns: string[] = []
     const hc = codecById.get(cidOf(Health))!
     const cb = new Rec().setPayload(e as number, cidOf(Health), hc, { hp: 77 }).buffer()
@@ -333,12 +333,12 @@ describe('apply.ts: corrupt opcode throws (lines 241-242, branch 241)', () => {
 describe('apply.ts: deterministic merge order across workers', () => {
   test('buffers are applied in ascending workerIndex regardless of array order', () => {
     const { world, Health, codecById } = kit()
-    const e = world.spawn() as number
+    const e = world.spawn()
     const hc = codecById.get(cidOf(Health))!
     // Worker 1 sets hp=1, worker 0 sets hp=0. Passed out of order [w1, w0]; ascending order means
     // w0 applies first then w1 LAST → final hp=1. (Deterministic regardless of array order.)
-    const w1 = new Rec().add(e, cidOf(Health), hc, { hp: 1 }).buffer(1)
-    const w0 = new Rec().setPayload(e, cidOf(Health), hc, { hp: 0 }).buffer(0)
+    const w1 = new Rec().add(e as number, cidOf(Health), hc, { hp: 1 }).buffer(1)
+    const w0 = new Rec().setPayload(e as number, cidOf(Health), hc, { hp: 0 }).buffer(0)
     // w0 sets payload on an absent component first (warns, no-op), then w1 adds hp=1.
     const warns: string[] = []
     flushAll(worldApplyOf(world, codecById, warns), [w1, w0])

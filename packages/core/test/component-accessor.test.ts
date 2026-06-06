@@ -46,12 +46,15 @@ describe('defineComponent runtime', () => {
 })
 
 // The accessor world stub: trackWrite is the no-op; here we spy on the call SITE.
-function stubWorld(): AccessorWorld & { calls: Array<[number, number, number?]> } {
-  const calls: Array<[number, number, number?]> = []
+function stubWorld(): AccessorWorld & { calls: Array<[number, number, number | undefined]> } {
+  const calls: Array<[number, number, number | undefined]> = []
   return {
     calls,
-    trackWrite: (index, componentId, fieldIndex) => calls.push([index, componentId as number, fieldIndex]),
+    trackWrite: (index, componentId, fieldIndex) => void calls.push([index, componentId as number, fieldIndex]),
     handleIndex: (h) => (h as number) & 0x3fffff,
+    sidecarRead: () => undefined,
+    sidecarWrite: () => {},
+    generationOf: () => 0,
     // A live consumer is "present" for these spy tests so the setter's fast-out does not skip the
     // trackWrite call site under test.
     tracking: { active: true },

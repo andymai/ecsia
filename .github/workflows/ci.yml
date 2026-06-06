@@ -31,6 +31,9 @@ jobs:
       - name: Type-check examples + bench
         run: pnpm typecheck:extras
 
+      - name: Type-check package tests
+        run: pnpm typecheck:tests
+
       - name: Type-check documentation snippets
         run: pnpm docs:check
 

@@ -1,11 +1,11 @@
 // Guard for the readonly type-level fixture (m2-readonly.test-d.ts). The fixture is type-only;
 // vitest does not type-check it by default, so we drive tsc on it directly under the strict flags.
 //
-// DISCRIMINATION (the load-bearing requirement): a positive compile is not enough — an
-// @ts-expect-error passes for ANY error, so a clean compile alone would not prove the *readonly*
+// DISCRIMINATION (the load-bearing requirement): a positive compile is not enough —
+// an @ts-expect-error passes for ANY error, so a clean compile alone would not prove the *readonly*
 // modifier is what fails. We therefore also compile a MUTATED fixture in which ReadView is rebound to
-// a NON-readonly mapped type. With readonly stripped, `r.x = 5` no longer errors, so its
-// @ts-expect-error becomes UNUSED and tsc fails with TS2578. The pair (clean passes, mutated fails)
+// a NON-readonly mapped type. With readonly stripped, `r.x = 5` no longer errors, so
+// its @ts-expect-error becomes UNUSED and tsc fails with TS2578. The pair (clean passes, mutated fails)
 // is what proves the test discriminates the modifier.
 
 import { execFileSync } from 'node:child_process'

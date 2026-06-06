@@ -22,6 +22,9 @@ function stubWorld(): AccessorWorld {
     trackWrite: () => {},
     tracking: { active: true },
     handleIndex: (h) => (h as number) & 0x3fffff,
+    sidecarRead: () => undefined,
+    sidecarWrite: () => {},
+    generationOf: () => 0,
   }
 }
 

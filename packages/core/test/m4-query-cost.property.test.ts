@@ -293,6 +293,9 @@ function buildEngine(byId: Archetype[], fixedBitCount: number): QueryEngine {
     handleOf: (i) => i as unknown as EntityHandle,
     indexOfHandle: (h) => h, // rows hold bare indices in this harness
     signatureOf: () => canonicalize([]) as Signature,
+    coldResidentsOf: () => [],
+    coldColumnSet: () => undefined,
+    coldRowOf: () => -1,
   })
 }
 

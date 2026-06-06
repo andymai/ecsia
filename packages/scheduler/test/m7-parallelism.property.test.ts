@@ -19,11 +19,10 @@ import { describe, expect, test } from 'vitest'
 import fc from 'fast-check'
 import { createWorld, defineComponent, defineTopic, buildTopicCodec, handleIndex, onAdd, onRemove, onChange } from '@ecsia/core'
 import type { EntityHandle, TopicDef, World } from '@ecsia/core'
-import type { Schema } from '@ecsia/schema'
 import { WorkerPool } from '@ecsia/scheduler'
 import { flushAll, makeCommandBuffer, makeEncoder, buildFieldCodec } from '../src/internal.js'
 import type { PoolSystem } from '@ecsia/scheduler'
-import type { CommandBuffer, CommandEncoder, ComponentFieldCodec, WorldApply } from '../src/internal.js'
+import type { CommandBuffer, CommandEncoder, ComponentFieldCodec, EncoderEnv, WorldApply } from '../src/internal.js'
 import type { ComponentDef, ComponentId, Schema, SystemId } from '@ecsia/schema'
 
 const WORKER_ENTRY = fileURLToPath(new URL('../dist/workers/worker-entry.js', import.meta.url))
@@ -79,6 +78,15 @@ function worldApplyOf(world: World, codecById: ReadonlyMap<number, ComponentFiel
 }
 
 function encoderOver(cb: CommandBuffer, codecOf: (id: number) => ComponentFieldCodec, warn: (m: string) => void, kit?: Kit): CommandEncoder {
+  // OP_PUBLISH stamps the WORKER INDEX as the publishing SystemId in this rig (one system per
+  // worker) — the canonical stream must then equal SystemId order despite shuffled apply order.
+  const topicEnv: Pick<EncoderEnv, 'topicInfoOf' | 'publisherSystemId'> =
+    kit === undefined
+      ? {}
+      : {
+          topicInfoOf: (def) => ({ id: def.id as number, codec: buildTopicCodec(def.fields) }),
+          publisherSystemId: () => cb.workerIndex,
+        }
   return makeEncoder({
     cb,
     infoOf: (def) => {
@@ -86,10 +94,7 @@ function encoderOver(cb: CommandBuffer, codecOf: (id: number) => ComponentFieldC
       return { id: id as unknown as ComponentId, codec: codecOf(id) }
     },
     relationCodec: () => undefined,
-    topicInfoOf: kit === undefined ? undefined : (def) => ({ id: def.id as number, codec: buildTopicCodec(def.fields) }),
-    // OP_PUBLISH stamps the WORKER INDEX as the publishing SystemId in this rig (one system per
-    // worker) — the canonical stream must then equal SystemId order despite shuffled apply order.
-    publisherSystemId: kit === undefined ? undefined : () => cb.workerIndex,
+    ...topicEnv,
     warn,
   })
 }

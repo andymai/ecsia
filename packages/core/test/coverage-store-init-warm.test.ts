@@ -36,7 +36,7 @@ function storeKit(componentCount: number, maxHotArchetypes: number): {
   const bitmask = new Bitmask(buffers, registry.nextComponentId, 1 << 16, () => 'serial')
   const store = new ArchetypeStore({
     buffers,
-    accessorWorld: { tracking: { active: true }, trackWrite: () => {}, handleIndex: (h) => (h as number) & 0xffff },
+    accessorWorld: { tracking: { active: true }, trackWrite: () => {}, handleIndex: (h) => (h as number) & 0xffff, sidecarRead: () => undefined, sidecarWrite: () => {}, generationOf: () => 0 },
     bitmask,
     record,
     maxHotArchetypes,

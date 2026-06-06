@@ -24,7 +24,7 @@ import fc from 'fast-check'
 import { createWorld, defineComponent, read, has, without, optional } from '@ecsia/core'
 import { buildSigWords, canonicalize, signatureMatches } from '../src/internal.js'
 import type { ComponentDef, ComponentId, EntityHandle, Schema } from '@ecsia/core'
-import type { MatchTerm, Signature } from '../src/internal.js'
+import type { LiveQuery, MatchTerm, Signature } from '../src/internal.js'
 
 // A component def's id is mutated once at world registration, so every world needs FRESH defs.
 function freshDefs(n: number): ComponentDef<Schema>[] {
@@ -275,7 +275,7 @@ describe('PROP-OACOST per-archetype match is independent of entity count N', () 
               }
             }
             const q = world.query(...queryArgs(defs))
-            return q.matchingArchetypes.length
+            return (q as unknown as LiveQuery).matchingArchetypes.length
           }
 
           // The archetype set (hence the count of matching archetypes) is determined by the distinct

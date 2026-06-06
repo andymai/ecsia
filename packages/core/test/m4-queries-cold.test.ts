@@ -9,6 +9,7 @@
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, optional, read, has } from '@ecsia/core'
 import type { ComponentDef, EntityHandle, Schema } from '@ecsia/core'
+import type { LiveQuery } from '../src/internal.js'
 
 function coldKit(): {
   world: ReturnType<typeof createWorld>
@@ -34,7 +35,7 @@ describe('cold transparency on the iterator surface', () => {
 
     // Precondition: the {Position} archetype is genuinely cold (else this would not discriminate).
     const q = world.query(read(Position))
-    const arch = q.matchingArchetypes.find((a) => a.signature.length === 1)
+    const arch = (q as unknown as LiveQuery).matchingArchetypes.find((a) => a.signature.length === 1)
     expect(arch?.cold).toBe(true)
 
     const eachSet: number[] = []
@@ -57,7 +58,7 @@ describe('cold transparency on the iterator surface', () => {
     world.entity(b).write(Position).x = 22
 
     const q = world.query(read(Position))
-    expect(q.matchingArchetypes.find((ar) => ar.signature.length === 1)?.cold).toBe(true)
+    expect((q as unknown as LiveQuery).matchingArchetypes.find((ar) => ar.signature.length === 1)?.cold).toBe(true)
 
     const byHandle = new Map<number, number>()
     q.each((e) => {
@@ -85,7 +86,7 @@ describe('cold transparency on the iterator surface', () => {
 
     const q = world.query(read(Position), optional(Velocity))
     // both matching archetypes ({P} and {P,V}) are cold under maxHotArchetypes: 1.
-    expect(q.matchingArchetypes.every((a) => a.cold)).toBe(true)
+    expect((q as unknown as LiveQuery).matchingArchetypes.every((a) => a.cold)).toBe(true)
 
     const vel = new Map<number, number | undefined>()
     for (const e of q) {

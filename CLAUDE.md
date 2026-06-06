@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pnpm build                                       # tsc -b, needed only for dist-consuming smokes
 pnpm test                                        # all vitest projects
 pnpm vitest run <path>                           # single test file
+pnpm typecheck:tests                             # strict-typecheck packages/*/test — CI gate, not part of pnpm test
 pnpm docs:check                                  # compile-check doc snippets — run after public API changes
 ```
 

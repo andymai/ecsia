@@ -148,7 +148,7 @@ describe('current ⟺ matchingArchetypes coherence', () => {
     const { world, Position, Velocity } = makeKit()
     const q = world.query(read(Position))
     const handles: EntityHandle[] = []
-    for (let i = 0; i < 20; i++) handles.push(world.spawnWith(...(i % 2 ? [Position, Velocity] : [Position])))
+    for (let i = 0; i < 20; i++) handles.push(i % 2 ? world.spawnWith(Position, Velocity) : world.spawnWith(Position))
     for (let i = 0; i < 20; i += 3) world.despawn(handles[i] as EntityHandle)
 
     let walked = 0

@@ -41,7 +41,7 @@ import { pairKey64, overflowKey64 } from './pair-key.js'
 
 const WILDCARD = Symbol.for('ecsia.query.wildcard')
 /** The wildcard target sentinel: `Pair(R, Wildcard)` matches every R-pair via the presence bit. */
-export const Wildcard: unique symbol = WILDCARD as never as typeof Wildcard
+export const Wildcard: WildcardToken = WILDCARD as never as WildcardToken
 
 export type StorageKind = 'tag' | 'exclusive-column' | 'overflow-table'
 

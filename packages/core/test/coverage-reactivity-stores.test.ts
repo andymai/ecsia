@@ -205,6 +205,7 @@ function makeApply(): { apply: ObserverCommandApply & { log: string[] }; dead: S
     add: (h): void => void log.push(`add:${h as unknown as number}`),
     remove: (h): void => void log.push(`remove:${h as unknown as number}`),
     despawn: (h): void => void log.push(`despawn:${h as unknown as number}`),
+    writePayload: () => {},
   }
   return { apply, dead }
 }

@@ -77,12 +77,9 @@ export { defineSystem, inAnyOrderWith, beforeWritersOf, afterReadersOf } from '@
 // the world-attach entry point (`createRelations`) + `Wildcard`; `defineRelation` + `targetOf` are
 // reached through the returned Relations API. The frozen spec has
 // been reconciled to this as-built free-function surface.
-import { createRelations as _mkRel2, Wildcard as _Wildcard } from '@ecsia/relations'
-import type { WildcardToken as _WildcardToken } from '@ecsia/core'
-// The wildcard target sentinel for `rel.Pair(R, Wildcard)`. Re-typed as the schema-level `WildcardToken`
-// (the exact type `rel.Pair`'s target parameter accepts) so a user passing the umbrella's `Wildcard`
-// into `rel.Pair(...)` type-checks with no cast — the runtime symbol is unchanged.
-export const Wildcard: _WildcardToken = _Wildcard as unknown as _WildcardToken
+import { createRelations as _mkRel2 } from '@ecsia/relations'
+// The wildcard target sentinel for `rel.Pair(R, Wildcard)` — typed as WildcardToken at the source.
+export { Wildcard } from '@ecsia/relations'
 export type { DefinePrefabOptions, PairAccessor, StorageKind } from '@ecsia/relations'
 // Prefabs (createWorld({ prefabs: true })): the `Prefab` tag and `IsA` relation are PER-WORLD
 // built-ins (a ComponentDef registers to exactly one world; a RelationDef's id is world-scoped),

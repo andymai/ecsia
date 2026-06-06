@@ -380,7 +380,8 @@ function applyOp(kit: Kit, model: Model, handles: (EntityHandle | undefined)[], 
       const s = live[op.s % live.length]!
       const t = live[op.tt % live.length]!
       if (s === t) break
-      rel.addPair(handles[s] as EntityHandle, relDef(op.excl), handles[t] as EntityHandle, op.excl ? undefined : { w: op.w })
+      if (op.excl) rel.addPair(handles[s] as EntityHandle, relDef(true), handles[t] as EntityHandle)
+      else rel.addPair(handles[s] as EntityHandle, relDef(false) as RelationDef<Schema>, handles[t] as EntityHandle, { w: op.w })
       model.addPairExclusiveAware({ rel: op.excl ? 'ChildOf' : 'Likes', subject: s, target: t, w: op.w })
       break
     }

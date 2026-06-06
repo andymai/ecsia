@@ -7,6 +7,7 @@
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, optional, read, write } from '@ecsia/core'
 import type { ComponentDef, EntityHandle, Schema } from '@ecsia/core'
+import type { LiveQuery } from '../src/internal.js'
 
 function kit(opts?: { maxHotArchetypes?: number }): {
   world: ReturnType<typeof createWorld>
@@ -96,7 +97,7 @@ describe('added delta over a COLD matching archetype (scattered cold-bind path)'
 
     const e = world.spawnWith(Position) // migrates into the COLD {Position} archetype this frame
     ;(world.entity(e).write(Position) as { x: number }).x = 33
-    expect(q.matchingArchetypes.find((a) => a.signature.length === 1)?.cold).toBe(true)
+    expect((q as unknown as LiveQuery).matchingArchetypes.find((a) => a.signature.length === 1)?.cold).toBe(true)
 
     const seen: Array<{ handle: number; x: number }> = []
     q.eachAdded((el) => {
@@ -117,7 +118,7 @@ describe('cold optional value whose block was never allocated -> undefined', () 
     ;(world.entity(b).write(Position) as { x: number }).x = 2
 
     const q = world.query(read(Position), optional(Velocity))
-    expect(q.matchingArchetypes.some((ar) => ar.cold)).toBe(true)
+    expect((q as unknown as LiveQuery).matchingArchetypes.some((ar) => ar.cold)).toBe(true)
 
     const vel = new Map<number, number | undefined>()
     q.each((el) => {

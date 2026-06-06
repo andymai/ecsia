@@ -90,7 +90,7 @@ describe('AddPair / RemovePair shape entries flow through the deferred drain wit
 
     // The wildcard query sees the subject holding the relation (presence bit O(1)).
     let wildcardCount = 0
-    for (const _ of world.query()[Symbol.iterator]()) wildcardCount++
+    for (const _ of world.query()) wildcardCount++
     void wildcardCount
     expect(rel.hasRelation(s, Likes)).toBe(true)
     expect([...rel.subjectsOf(Likes, targets[0] as EntityHandle)]).toContain(s)
