@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.4](https://github.com/andymai/ecsia/compare/core-v0.7.3...core-v0.7.4) (2026-06-06)
+
+
+### Bug Fixes
+
+* cold-archetype residents now survive serialization — snapshot, clearAll, delta, and the receiver write path ([#36](https://github.com/andymai/ecsia/issues/36)) ([9ddec6c](https://github.com/andymai/ecsia/commit/9ddec6cc0f6ad88fd7ab2bfcf3192e5f1b810a0b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.7.4
+
 ## [0.7.3](https://github.com/andymai/ecsia/compare/core-v0.7.2...core-v0.7.3) (2026-06-06)
 
 
