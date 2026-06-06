@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.7.8](https://github.com/andymai/ecsia/compare/serialization-v0.7.7...serialization-v0.7.8) (2026-06-06)
+
+
+### Bug Fixes
+
+* epsilon shadow follows entity identity, not row position ([#44](https://github.com/andymai/ecsia/issues/44)) ([4c38824](https://github.com/andymai/ecsia/commit/4c38824fe7ad736de77b75aea11e2ec2e8ad711a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.7.8
+    * @ecsia/schema bumped to 0.7.8
+  * devDependencies
+    * @ecsia/relations bumped to 0.7.8
+
 ## [0.7.7](https://github.com/andymai/ecsia/compare/serialization-v0.7.6...serialization-v0.7.7) (2026-06-06)
 
 

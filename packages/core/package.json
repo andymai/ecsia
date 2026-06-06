@@ -1,6 +1,6 @@
 {
   "name": "@ecsia/core",
-  "version": "0.7.7",
+  "version": "0.7.8",
   "description": "The ecsia core: archetype storage, typed component accessors, queries, and change tracking. Works standalone on a single thread.",
   "keywords": [
     "ecs",
