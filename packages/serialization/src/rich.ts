@@ -24,15 +24,17 @@ export interface UnserializableContext {
 
 /**
  * Called when a rich value cannot be JSON-encoded (cycles, BigInt). Return a replacement value to encode,
- * or `undefined` to SKIP the field for that entity (the receiver re-defaults it).
+ * or `undefined` to SKIP the field for that entity (snapshot: the fresh receiver entity reads the field
+ * default; delta: the receiver KEEPS its current value — a skip never clobbers).
  * Default policy (no hook): SKIP + a dev-mode console.warn naming (component, field, handle).
  */
 export type OnUnserializable = (ctx: UnserializableContext) => unknown
 
 /**
  * Encode one rich value to its JSON string, applying the onUnserializable policy. Returns the JSON string
- * to write, or `undefined` to skip the field for this entity (RF-ROUNDTRIP: a skipped value re-defaults on
- * the receiver). `JSON.stringify` of `undefined`/`function`/`Symbol` does NOT throw (JSON silently omits
+ * to write, or `undefined` to skip the field for this entity (snapshot: absent on the wire, so the fresh
+ * receiver reads the default; delta: RICH_ROW_KEEP, so the receiver keeps its current value).
+ * `JSON.stringify` of `undefined`/`function`/`Symbol` does NOT throw (JSON silently omits
  * them) — only cycles/BigInt throw and reach the hook; that omission is documented as lossy.
  */
 export function encodeRichValue(
@@ -50,8 +52,8 @@ export function encodeRichValue(
       if (typeof console !== 'undefined') {
         console.warn(
           `[ecsia] rich field '${ctx.fieldName}' (component ${ctx.componentId as number}, entity ` +
-            `${ctx.handle as number}) holds a non-serializable value; skipping it from the wire ` +
-            `(the receiver re-defaults). Provide onUnserializable to encode a replacement.`,
+            `${ctx.handle as number}) holds a non-serializable value; skipping it from the wire. ` +
+            `Provide onUnserializable to encode a replacement.`,
         )
       }
       return undefined

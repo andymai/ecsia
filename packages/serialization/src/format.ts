@@ -7,18 +7,22 @@ import type { FieldDescriptor } from '@ecsia/schema'
 import type { WriteCursor, ReadCursor } from './cursor.js'
 
 // v2 added the version-gated RICH section + header offset word; v3 adds the schemaHash word to the
-// DELTA header (the gate snapshots have carried since v1), growing it 28→32 bytes. SNAPSHOT layout is
-// unchanged since v2, so the snapshot reader still range-checks `MIN_SUPPORTED_VERSION <= v <=
-// SERIALIZATION_FORMAT_VERSION` and per-section-gates the v2-only growth. DELTAS are different: the
-// header layout changed, so a pre-v3 delta is rejected loudly via `DELTA_MIN_SUPPORTED_VERSION`
-// (pre-publish, zero compat burden). Old readers reject new images via their strict version checks.
-export const SERIALIZATION_FORMAT_VERSION = 3
+// DELTA header (the gate snapshots have carried since v1), growing it 28→32 bytes; v4 widens the
+// delta RICH section's per-row flag to three states (RICH_ROW_*) so a rich field RESET to its
+// default propagates to receivers — pre-v4 deltas conflated reset with unchanged, so a mirror kept
+// the stale value forever. SNAPSHOT layout is unchanged since v2, so the snapshot reader still
+// range-checks `MIN_SUPPORTED_VERSION <= v <= SERIALIZATION_FORMAT_VERSION` and per-section-gates
+// the v2-only growth. DELTAS are different: each wire-semantics break is rejected loudly via
+// `DELTA_MIN_SUPPORTED_VERSION` (pre-publish, zero compat burden). Old readers reject new images
+// via their strict version checks.
+export const SERIALIZATION_FORMAT_VERSION = 4
 /** Oldest SNAPSHOT wire version a current reader accepts (per-section gated). */
 export const MIN_SUPPORTED_VERSION = 1
 /** The version in which the RICH section + its header offset word first appear. */
 export const RICH_FORMAT_VERSION = 2
-/** The version in which the delta header gains its schemaHash word; older deltas are rejected. */
-export const DELTA_MIN_SUPPORTED_VERSION = 3
+/** The version in which the delta RICH row flag gains its reset state; older deltas are rejected
+ * (their wire-0 conflates "unchanged" with "reset" — applying one would silently keep stale values). */
+export const DELTA_MIN_SUPPORTED_VERSION = 4
 export const SNAPSHOT_MAGIC = 0x45435349 // 'ECSI'
 /** The full-u32 NO_ENTITY sentinel as written in handle slots. */
 export const NO_ENTITY_U32 = 0xffffffff
@@ -30,6 +34,13 @@ export const FLAG_HAS_RELATIONS = 2
 export const FLAG_HAS_STRUCTURAL = 4
 /** Snapshot/delta: a RICH (sidecar JSON) section is present. v2+ only. */
 export const FLAG_HAS_RICH = 8
+
+// Delta SECTION R per-row states (v4). KEEP carries no information — the receiver's current value
+// stands (used ONLY for the onUnserializable skip policy, which must never clobber). RESET is the
+// state v4 exists for: the producer's slot reads as the field default, so the receiver re-defaults.
+export const RICH_ROW_KEEP = 0
+export const RICH_ROW_VALUE = 1
+export const RICH_ROW_RESET = 2
 
 export const enum DeltaOp {
   EntityCreate = 0,
