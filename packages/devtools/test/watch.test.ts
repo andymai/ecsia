@@ -127,6 +127,75 @@ describe('watchWorld — exact per-frame deltas over real frames', () => {
     expect(() => watcher.dispose()).not.toThrow()
   })
 
+  test('component churn on LIVING entities is not lifecycle: add()/remove() report spawned/despawned 0', () => {
+    const A = defineComponent({ x: 'i32' }, { name: 'a' })
+    const B = defineComponent({ y: 'i32' }, { name: 'b' })
+    const world = createWorld({ components: [A, B], maxEntities: 64 })
+    const frames: FrameDelta[] = []
+    const watcher = watchWorld(world, { onFrame: (d) => frames.push(d) })
+
+    const e1 = world.spawnWith([A, { x: 1 }])
+    const e2 = world.spawnWith([A, { x: 2 }])
+    const e3 = world.spawnWith([A, { x: 3 }])
+    watcher.tick()
+    expect(frames[0]!.spawned).toBe(3)
+    expect(frames[0]!.despawned).toBe(0)
+
+    // The pre-fix bug: three add() calls on living entities reported spawned: 3.
+    world.add(e1, B)
+    world.add(e2, B)
+    world.add(e3, B)
+    watcher.tick()
+    expect(frames[1]!.spawned).toBe(0)
+    expect(frames[1]!.despawned).toBe(0)
+    expect(frames[1]!.aliveDelta).toBe(0)
+
+    // ...and remove() on living entities is not a despawn.
+    world.remove(e1, B)
+    world.remove(e2, B)
+    watcher.tick()
+    expect(frames[2]!.spawned).toBe(0)
+    expect(frames[2]!.despawned).toBe(0)
+
+    watcher.dispose()
+  })
+
+  test('a bare spawn() with no components counts (component observers never fire for it)', () => {
+    const A = defineComponent({ x: 'i32' }, { name: 'a' })
+    const world = createWorld({ components: [A], maxEntities: 64 })
+    const frames: FrameDelta[] = []
+    const watcher = watchWorld(world, { onFrame: (d) => frames.push(d) })
+
+    const bare = world.spawn()
+    watcher.tick()
+    expect(frames[0]!.spawned).toBe(1)
+
+    world.despawn(bare)
+    watcher.tick()
+    expect(frames[1]!.despawned).toBe(1)
+    watcher.dispose()
+  })
+
+  test('despawn + respawn recycling the same index within one frame counts both', () => {
+    const A = defineComponent({ x: 'i32' }, { name: 'a' })
+    const world = createWorld({ components: [A], maxEntities: 64 })
+    const frames: FrameDelta[] = []
+    const watcher = watchWorld(world, { onFrame: (d) => frames.push(d) })
+
+    const e = world.spawnWith([A, { x: 1 }])
+    watcher.tick()
+
+    world.despawn(e)
+    const r1 = world.spawnWith([A, { x: 2 }]) // recycles e's index
+    world.despawn(r1)
+    world.spawnWith([A, { x: 3 }]) // recycles again — a Set keyed by index would count 1
+    watcher.tick()
+    expect(frames[1]!.spawned).toBe(2)
+    expect(frames[1]!.despawned).toBe(2)
+    expect(frames[1]!.aliveDelta).toBe(0)
+    watcher.dispose()
+  })
+
   test('every emitted delta is a plain serializable object', () => {
     const { sched, watcher, frames } = run()
     sched.update(1)
