@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.11](https://github.com/andymai/ecsia/compare/core-v0.7.10...core-v0.7.11) (2026-06-06)
+
+
+### Bug Fixes
+
+* FrameDelta spawned/despawned count real entity lifecycle, not component churn ([#51](https://github.com/andymai/ecsia/issues/51)) ([33f7a2d](https://github.com/andymai/ecsia/commit/33f7a2d16415d3863f5741cec15ed31e9c27d12f))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.7.11
+
 ## [0.7.10](https://github.com/andymai/ecsia/compare/core-v0.7.9...core-v0.7.10) (2026-06-06)
 
 

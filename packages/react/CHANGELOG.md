@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.7.11](https://github.com/andymai/ecsia/compare/react-v0.7.10...react-v0.7.11) (2026-06-06)
+
+
+### Miscellaneous
+
+* **react:** Synchronize ecsia versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.7.11
+    * @ecsia/schema bumped to 0.7.11
+  * devDependencies
+    * @ecsia/relations bumped to 0.7.11
+    * @ecsia/scheduler bumped to 0.7.11
+
 ## [0.7.10](https://github.com/andymai/ecsia/compare/react-v0.7.9...react-v0.7.10) (2026-06-06)
 
 
