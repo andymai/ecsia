@@ -1,11 +1,11 @@
 {
-  "packages/core": "0.7.7",
-  "packages/devtools": "0.7.7",
-  "packages/ecsia": "0.7.7",
-  "packages/react": "0.7.7",
-  "packages/relations": "0.7.7",
-  "packages/scheduler": "0.7.7",
-  "packages/schema": "0.7.7",
-  "packages/serialization": "0.7.7",
-  "packages/three": "0.7.7"
+  "packages/core": "0.7.8",
+  "packages/devtools": "0.7.8",
+  "packages/ecsia": "0.7.8",
+  "packages/react": "0.7.8",
+  "packages/relations": "0.7.8",
+  "packages/scheduler": "0.7.8",
+  "packages/schema": "0.7.8",
+  "packages/serialization": "0.7.8",
+  "packages/three": "0.7.8"
 }
