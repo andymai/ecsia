@@ -45,14 +45,15 @@ describe('row reuse re-defaults every field', () => {
   })
 
   test('non-uniform vec defaults encode per lane (not a whole-array coercion)', () => {
-    // The cast bridges a known type/runtime mismatch: FieldValue<vec> is the VecView VIEW type
-    // (.x/.y/.z), but the descriptor runtime reads vec defaults as plain arrays.
-    const vecDefault = [0, 1, 2] as unknown as { x: number; y: number; z: number; w: never; length: 3; [i: number]: number }
-    const P = defineComponent({ v: field(vec('f32', 3), { default: vecDefault }) }, { name: 'P' })
+    const P = defineComponent({ v: field(vec('f32', 3), { default: [0, 1, 2] }) }, { name: 'P' })
     const world = createWorld({ components: [P] })
     const a = world.spawn()
     world.add(a, P)
     const r = world.entity(a).read(P).v
     expect([r.x, r.y, r.z]).toEqual([0, 1, 2])
+  })
+
+  test('a wrong-length vec default is rejected at defineComponent', () => {
+    expect(() => defineComponent({ v: field(vec('f32', 3), { default: [1, 2] }) }, { name: 'P' })).toThrow(/exactly 3/)
   })
 })

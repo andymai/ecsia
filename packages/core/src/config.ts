@@ -131,7 +131,20 @@ export function resolveOptions(options: WorldOptions = {}): ResolvedWorldOptions
       'reactivity.logEntryWords: 1 is incompatible with relations/prefabs — pair shape-log entries need two words; drop the override or use logEntryWords: 2',
     )
   }
-  const logEntryWords: 1 | 2 = r.logEntryWords ?? (relations.length > 0 || prefabs ? 2 : 1)
+  // One-word entries pack `componentId << indexBits | index` into a u32, leaving generationBits
+  // bits of componentId headroom. Ids past that headroom — or ANY id when generationBits is 0
+  // (a 32-bit shift is a JS no-op) — would corrupt every packed entry silently: observers and
+  // `.changed` re-test the wrong entities. Auto-widen the default; reject an explicit override.
+  const componentIds = (options.components ?? []).length // sequential from FIRST_USER_COMPONENT_ID = 1
+  const narrowIdsFit = generationBits > 0 && componentIds < 2 ** generationBits
+  if (r.logEntryWords === 1 && !narrowIdsFit) {
+    throw new ConfigError(
+      generationBits === 0
+        ? 'reactivity.logEntryWords: 1 is incompatible with generationBits: 0 — one-word entries have no componentId bits; drop the override or use logEntryWords: 2'
+        : `reactivity.logEntryWords: 1 cannot pack ${componentIds} component ids into ${generationBits} bits (max ${2 ** generationBits - 1}); drop the override or use logEntryWords: 2`,
+    )
+  }
+  const logEntryWords: 1 | 2 = r.logEntryWords ?? (relations.length > 0 || prefabs || !narrowIdsFit ? 2 : 1)
 
   const workers: WorkerOption = options.scheduler?.workers ?? 0
   if (typeof workers === 'number' && (!Number.isInteger(workers) || workers < 0)) {

@@ -109,6 +109,13 @@ export function resolveDescriptor(name: string, token: FieldToken, userDefault?:
 
   if (isVecToken(token)) {
     const row = scalarRow(token.elem)
+    if (userDefault !== undefined && (!Array.isArray(userDefault) || userDefault.length !== token.len)) {
+      throw new Error(
+        `defineComponent: field '${name}' vec default must be an array of exactly ${token.len} values; got ${
+          Array.isArray(userDefault) ? `length ${userDefault.length}` : typeof userDefault
+        }`,
+      )
+    }
     const def = userDefault ?? (Array(token.len).fill(row.default) as unknown[])
     const needsExplicitInit =
       userDefault !== undefined && (def as unknown[]).some((axis) => !isZeroEquivalentDefault(axis))
