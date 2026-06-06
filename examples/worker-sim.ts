@@ -192,6 +192,14 @@ function makeInProcessDispatcher(
           dt,
           tick: world.currentTick() as unknown as Tick,
           query: world.query,
+          // These examples declare no topics; the in-process dispatcher provides loud stubs
+          // so a future topic-using system fails clearly instead of silently.
+          publish: () => {
+            throw new Error('this in-process dispatcher example does not wire topics')
+          },
+          consume: () => {
+            throw new Error('this in-process dispatcher example does not wire topics')
+          },
         })
       }
     },
