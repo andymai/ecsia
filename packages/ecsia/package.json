@@ -52,5 +52,8 @@
     "@ecsia/relations": "workspace:*",
     "@ecsia/scheduler": "workspace:*",
     "@ecsia/serialization": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

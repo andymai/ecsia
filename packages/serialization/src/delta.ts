@@ -155,8 +155,10 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
       if (allRows.length === 0) continue
       changedRowsByArch.set(a.id, allRows)
       // Epsilon (RF-SHADOW-FREE): keep a row only if SOME numeric lane exceeds tolerance vs the
-      // serializer-owned shadow; else drop it from SECTION V (its changeVersion stamp stays > baseline so
-      // it is re-considered next delta). The shadow updates to the EMITTED values after selection.
+      // serializer-owned shadow; else drop it from SECTION V. NOTE: `baseline` advances to `target`
+      // at the end of write(), so a dropped row is re-considered only if a LATER write re-stamps it —
+      // a one-shot sub-epsilon change is permanently dropped (bounded by epsilon, within the
+      // documented contract). The shadow updates to the EMITTED values after selection.
       const rows = epsilon !== undefined ? filterByEpsilon(a, allRows, shadow, epsilon) : allRows
       if (rows.length === 0) continue
       // PERSISTED columns only. The changeVersion stamp is per-entity and shared with the public

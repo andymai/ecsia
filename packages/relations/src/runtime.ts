@@ -375,6 +375,8 @@ export function createRelations(world: World): RelationsApi {
     // TODO: route through host.fieldLocationFor when exclusive relations get cold-archetype
     // coverage — columnSetFor is hot-only, so an exclusive target read/re-target on a COLD subject
     // silently no-ops today (the same hole the prefab copy path had before fieldLocationFor).
+    // Same scope: addPairExclusive's "first attach" branch also double-increments pairCount for a
+    // cold subject (the null read masks an existing target).
     const r = host.columnSetFor(subject, rt.presenceDef)
     if (r === null) return null
     const col = r.set.columns[rt.subjectTargetFieldIndex]
