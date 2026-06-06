@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.0](https://github.com/andymai/ecsia/compare/serialization-v0.5.0...serialization-v0.6.0) (2026-06-06)
+
+
+### Features
+
+* network replication helper — stream, receiver, and envelope over snapshots and deltas ([#22](https://github.com/andymai/ecsia/issues/22)) ([65153d8](https://github.com/andymai/ecsia/commit/65153d8c6362e47640fece7cc0f6f1cb56fb2add))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.6.0
+    * @ecsia/schema bumped to 0.6.0
+  * devDependencies
+    * @ecsia/relations bumped to 0.6.0
+
 ## [0.5.0](https://github.com/andymai/ecsia/compare/serialization-v0.4.0...serialization-v0.5.0) (2026-06-06)
 
 
