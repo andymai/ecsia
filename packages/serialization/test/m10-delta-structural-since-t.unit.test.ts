@@ -26,13 +26,13 @@ import {
 // A producer/receiver pair sharing the SAME defineComponent source (the cross-process invariant: both
 // sides run identical schema code so the schemaHash matches). Returns a baseline-synced mirror plus a
 // MUTABLE remap the delta apply extends with newly-spawned handles.
-interface Mirror {
+interface Mirror<R extends Record<string, ComponentDef<Schema>>> {
   dst: ReturnType<typeof createWorld>
-  R: Record<string, ComponentDef<Schema>>
+  R: R
   work: Map<EntityHandle, EntityHandle>
 }
 
-function mirror(src: ReturnType<typeof createWorld>, makeReceiverDefs: () => Record<string, ComponentDef<Schema>>): Mirror {
+function mirror<R extends Record<string, ComponentDef<Schema>>>(src: ReturnType<typeof createWorld>, makeReceiverDefs: () => R): Mirror<R> {
   const R = makeReceiverDefs()
   const dst = createWorld({ components: Object.values(R) })
   const { remap } = createSnapshotDeserializer(dst).load(createSnapshotSerializer(src).snapshotCopy())

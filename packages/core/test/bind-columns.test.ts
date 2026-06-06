@@ -286,7 +286,7 @@ describe('bindColumns invalidation', () => {
     const cold = Array.from({ length: 3 }, () => world.spawnWith(Position, Velocity, Extra))
 
     const q = world.query(write(Position), read(Velocity))
-    const coldArch = q.matchingArchetypes.find((a) => a.signature.length === 3)
+    const coldArch = (q as unknown as LiveQuery).matchingArchetypes.find((a) => a.signature.length === 3)
     expect(coldArch?.cold).toBe(true)
 
     let invocations = 0

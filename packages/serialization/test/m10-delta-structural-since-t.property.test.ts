@@ -264,13 +264,13 @@ describe('P-NOALLOC — repeated delta() reuses the hoisted buffer; zero per-row
     let abCount = 0
     class CountingF64 extends RealF64 {
       constructor(...args: ConstructorParameters<typeof RealF64>) {
-        super(...(args as []))
+        super(...args)
         f64Count++
       }
     }
     class CountingAB extends RealAB {
       constructor(...args: ConstructorParameters<typeof RealAB>) {
-        super(...(args as []))
+        super(...args)
         abCount++
       }
     }

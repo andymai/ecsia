@@ -5,7 +5,8 @@
 
 import { describe, expect, test } from 'vitest'
 import { defineComponent, object, field, vec3, staticString } from '@ecsia/core'
-import type { ComponentDef, FieldDescriptor, Schema } from '@ecsia/core'
+import type { ComponentDef, Schema } from '@ecsia/core'
+import type { FieldDescriptor } from '@ecsia/schema'
 
 const fieldsOf = (c: ComponentDef<Schema>): readonly FieldDescriptor[] => c.fields
 
@@ -16,7 +17,7 @@ describe('RF-DESC — ctor===null ⟺ rich!==undefined ⟺ shareable===false', (
         n: 'i32', // numeric column → not rich
         f: 'f64', // numeric column → not rich
         v: vec3('f32'), // vec column → not rich, shareable
-        choice: staticString(['a', 'b']), // enum staticString → column, shareable, NOT rich
+        choice: staticString('a', 'b'), // enum staticString → column, shareable, NOT rich
         text: 'string', // rich (string)
         meta: object<{ k: number }>(), // rich (object)
         labeled: field('string', { default: 'd' }), // rich (string) with default
@@ -35,7 +36,7 @@ describe('RF-DESC — ctor===null ⟺ rich!==undefined ⟺ shareable===false', (
 
   test("only 'string'/object fields are rich; their kind matches the token", () => {
     const C = defineComponent(
-      { text: 'string', meta: object<unknown>(), n: 'i32', choice: staticString(['x']) },
+      { text: 'string', meta: object<unknown>(), n: 'i32', choice: staticString('x') },
       { name: 'KindCheck' },
     )
     const byName = new Map(fieldsOf(C).map((f) => [f.name, f]))

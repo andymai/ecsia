@@ -95,7 +95,7 @@ describe('', () => {
                 const h = handles[ei % n]!
                 const def = useA ? A : B
                 // Write the same (entity, component) `reps+1` times THIS wave — dedup must coalesce.
-                for (let r = 0; r <= reps; r++) (world.entity(h).write(def) as XView).x = r + 1
+                for (let r = 0; r <= reps; r++) (world.entity(h).write(def) as unknown as XView).x = r + 1
               }
               // 'per-system': drain once per wave (the scheduler's per-wave serial slot).
               if (cadence === 'per-system') world.observerDrain()
@@ -138,7 +138,7 @@ describe('(O(changes), DEFERRED perf bench)', () => {
           world.frameReset()
           for (const raw of rawWrites) {
             const h = handles[raw % n]!
-            ;(world.entity(h).write(A) as XView).x = raw + 1
+            ;(world.entity(h).write(A) as unknown as XView).x = raw + 1
             writtenIndices.add(handleIndex(h, layout) as number)
           }
           world.observerDrain()

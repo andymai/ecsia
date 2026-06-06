@@ -62,6 +62,7 @@ describe('attachWorld — gating', () => {
         relations: [],
         numComponentTypes: 1,
       },
+      tick: 0,
     }
     expect(() => attachWorld(fake)).toThrow(/schemaHash mismatch/)
   })

@@ -40,6 +40,7 @@ export type {
   Backing,
   BackingStrategy,
   Region,
+  RegionKey,
   RegionOpts,
   ViewHolder,
   BuffersConfig,

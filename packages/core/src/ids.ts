@@ -2,8 +2,10 @@
 // ComponentId 0 is NEVER a user component: it is the NO_COMPONENT sentinel, doubling as the
 // CREATE/DESTROY shape-log "no component" marker and the changeVersion sentinel.
 
-/** A dense component type id. Branded so raw numbers can't be passed where a ComponentId is required. */
-export type ComponentId = number & { readonly __ecsiaComponentId: unique symbol }
+import type { ComponentId } from '@ecsia/schema'
+
+/** A dense component type id. The schema-level brand — every kernel surface is typed with it. */
+export type { ComponentId } from '@ecsia/schema'
 
 /** The reserved "no component" sentinel. Also the shape-log CREATE/DESTROY marker. */
 export const NO_COMPONENT = 0 as ComponentId

@@ -43,7 +43,7 @@ function harness(componentCount: number): Harness {
   const bitmask = new Bitmask(buffers, registry.nextComponentId, 1 << 16, () => 'serial')
   const store = new ArchetypeStore({
     buffers,
-    accessorWorld: { tracking: { active: true }, trackWrite: () => {}, handleIndex: (h) => (h as number) & 0xffff },
+    accessorWorld: { tracking: { active: true }, trackWrite: () => {}, handleIndex: (h) => (h as number) & 0xffff, sidecarRead: () => undefined, sidecarWrite: () => {}, generationOf: () => 0 },
     bitmask,
     record,
     maxHotArchetypes: 1 << 20,
@@ -299,7 +299,7 @@ describe('QueryEngine residual (out-of-stride) sigHas matching', () => {
   // #archetypeMatches / #matchesEntityNow exercise their residual sigHas loops end-to-end.
   function residualHarness(): Harness {
     const h = harness(2)
-    h.deps.compileContext.fixedBitCount = 0 as never
+    ;(h.deps.compileContext as { fixedBitCount: number }).fixedBitCount = 0
     return h
   }
 

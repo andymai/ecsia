@@ -59,7 +59,7 @@ describe('RF-PIN — the command-buffer field codec skips rich fields without er
     const codec = buildFieldCodec(Thing)
     // Only `hp` is encodable; `name` (string, shareable=false) is filtered out (defense-in-depth).
     expect(codec.fields.length).toBe(1)
-    const out = new Int32Array(codec.totalWords)
+    const out = new Uint32Array(codec.totalWords)
     expect(() => codec.encode({ hp: 5, name: 'ignored' }, out, 0)).not.toThrow()
   })
 })
