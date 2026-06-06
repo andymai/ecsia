@@ -192,7 +192,7 @@ function checkIntegrityAndBitmask(kit: Kit, model: Model, handles: (EntityHandle
     expect(world.isAlive(h)).toBe(e.alive)
     if (!e.alive) continue
     // entity(h) resolves a live ref (I*).
-    expect(world.entity(h).__handle >>> 0).toBe((h as number) >>> 0)
+    expect(world.entity(h).handle >>> 0).toBe((h as number) >>> 0)
     // The point-test bitmask agrees with the model's component set.
     for (const name of COMP_NAMES) {
       expect(world.has(h, defByName(D, name))).toBe(e.comps.has(name))
