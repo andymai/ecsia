@@ -34,10 +34,11 @@ pnpm build              # compile all packages
 pnpm test               # run the full test suite
 ```
 
-Then write your program against `ecsia` exactly as the snippets here do. Every example in
-`examples/` imports from the same package and runs through the same build: a flock of
-birds, a parent/child scene hierarchy, a worker-parallel simulation, and a
-damage-over-time effect with automatic cleanup.
+Then write your program against `ecsia` exactly as the snippets here do. The examples in
+`examples/` run through the same build: a flock of birds, a parent/child scene hierarchy,
+a worker-parallel simulation, and a damage-over-time effect with automatic cleanup. (Most
+import from `ecsia`; the devtools and THREE.js tours import their companion packages, the
+same way you would.)
 
 ## Your first world
 

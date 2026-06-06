@@ -167,9 +167,11 @@ const Movement = defineSystem({
 
 Changing *what an entity is made of* — `spawn`, `despawn`, adding or removing a
 component — is called a **structural change**, and it moves the entity between storage
-tables. ecsia only allows structural changes at safe, single-threaded moments: before
+tables. ecsia only allows structural changes to land at safe, single-threaded moments: before
 `scheduler.update()`, inside a main-thread system body via `ctx.world`, or inside an
-observer handler. A system body running on a worker thread that tries one **throws**.
+observer handler. A system body running on a worker thread can use the same calls — they
+are **staged** to a command buffer and applied at the next single-threaded moment, in a
+deterministic order (see [Multithreading](/guide/parallelism)).
 
 The idiomatic pattern: collect targets while you iterate, mutate after the loop — that
 way you never restructure the very table you're walking.

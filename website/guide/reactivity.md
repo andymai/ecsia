@@ -74,9 +74,12 @@ const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const world = createWorld({ components: [Position], maxEntities: 1 << 16 })
 const e = world.spawnWith([Position, { x: 0, y: 0 }])
 
+// Declare the changed-filter BEFORE the writes you want it to see — the write log only
+// records once a consumer exists.
+const changedPositions = world.query(read(Position)).changed()
+
 world.entity(e).write(Position).x = 10
 
-const changedPositions = world.query(read(Position)).changed()
 changedPositions.eachChanged((el) => {
   el.position.x   // only entities whose Position was written this frame
 })
@@ -97,10 +100,18 @@ const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const world = createWorld({ components: [Position], maxEntities: 1 << 16 })
 const e = world.spawnWith([Position, { x: 0, y: 0 }])
 
+// The first call switches version stamping on; writes after this point are recorded.
+world.changedSince(e, world.currentTick())
+
 const since = world.currentTick()
-world.entity(e).write(Position).x = 5
+world.frameReset()                           // move to the next frame…
+world.entity(e).write(Position).x = 5        // …so this write lands after `since`
 const moved = world.changedSince(e, since)   // true
 ```
+
+`changedSince` answers "did this entity change **after** tick `since`?" — a write in the
+same frame as `since` is not after it, which is why the example crosses a frame boundary
+before writing.
 
 ::: tip Two mechanisms, one set
 The `.changed()` **filter** (driven by the write log) and the `changedSince` **predicate**
