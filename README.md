@@ -165,11 +165,11 @@ Lower is faster (nanoseconds per entity):
 
 | loop | ns per entity |
 | --- | ---: |
-| ecsia `bindColumns` | 1.02 |
-| bitECS | 1.46 |
-| ecsia `eachChunk` | 1.56 |
-| ecsia `.each` | 10.86 |
-| miniplex | 13.37 |
+| ecsia `bindColumns` | 0.97 |
+| bitECS | 1.35 |
+| ecsia `eachChunk` | 1.47 |
+| ecsia `.each` | 10.14 |
+| miniplex | 12.15 |
 
 `.each` is the ergonomic accessor path from the example above; `eachChunk` loops over
 the raw storage arrays directly; `bindColumns` goes one step further and binds your
@@ -182,10 +182,10 @@ single-threaded result:
 
 | workers | speedup |
 | ---: | ---: |
-| 1 | 0.98x |
+| 1 | 0.99x |
 | 2 | 1.90x |
-| 4 | 3.63x |
-| 8 | 6.32x |
+| 4 | 3.62x |
+| 8 | 6.38x |
 
 Methodology and full tables on the [performance page](https://andymai.github.io/ecsia/guide/performance).
 

@@ -21,7 +21,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import { Bench } from 'tinybench'
-import { createWorld, defineComponent, write, read } from 'ecsia'
+import { createWorld, defineComponent, defineSystem, createScheduler, write, read } from 'ecsia'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(HERE, '..')
@@ -119,31 +119,56 @@ async function runIterate(makeEcsiaIter, makeEcsiaCursorIter, makeEcsiaPinnedIte
 // --- step 2: tracked-write cost (one .each run with a .changed() filter attached) ---------------
 // Same Position+Velocity integrator as the iterate row, but the writes go through the change-tracked
 // path and are drained via .changed()/.eachChanged() — measuring the write-log cost users opt into.
+//
+// The frame is driven by scheduler.update() — the supported loop — NOT a bare world.frameReset().
+// A bare frameReset never runs the observer drain, so the idle observer pointer pins the write ring
+// forever and every frame's writes spill; that measured chronic-spill churn no update()-driven world
+// pays. Worse, before the spill-loss fix (#47) the changed pointer silently skipped the spill
+// entirely — the row published ~133 ns/entity for a filter that was draining NOTHING from frame 4 on.
+// The in-loop drain-count assertion makes that failure mode impossible to publish again.
 function makeTrackedWriteCase(n) {
   const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
   const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
   const cap = nextPow2(n)
-  const world = createWorld({ components: [Position, Velocity], maxEntities: cap })
+  const world = createWorld({
+    components: [Position, Velocity],
+    maxEntities: cap,
+    // Pre-size the write log to the frame's write volume (2 writes/entity), per the docs'
+    // pre-sizing guidance — the row measures steady-state tracking, not ring-growth churn.
+    reactivity: { maxWritesPerFrame: nextPow2(n * 4) },
+  })
   for (let i = 0; i < n; i++) {
     const h = world.spawnWith(Position, Velocity)
     const v = world.entity(h).write(Velocity)
     v.dx = 1
     v.dy = 0.5
   }
-  const moving = world.query(write(Position), write(Velocity))
-  const changedPos = world.query(read(Position)).changed()
   const DT = 1 / 60
+  const move = defineSystem({
+    name: 'Move',
+    read: [Velocity],
+    write: [Position],
+    run({ query }) {
+      query(write(Position), read(Velocity)).each((e) => {
+        e.position.x += e.velocity.dx * DT
+        e.position.y += e.velocity.dy * DT
+      })
+    },
+  })
+  const scheduler = createScheduler(world, [move])
+  const changedPos = world.query(read(Position)).changed()
   return () => {
-    // Open a fresh write-log window for this frame so .changed() yields exactly this frame's writes.
-    world.frameReset()
-    moving.each((e) => {
-      e.position.x += e.velocity.dx * DT
-      e.position.y += e.velocity.dy * DT
-    })
+    scheduler.update(DT)
     let n2 = 0
     changedPos.eachChanged(() => {
       n2++
     })
+    if (n2 !== n) {
+      throw new Error(
+        `bench honesty gate: tracked-write drained ${n2} of ${n} changed entities — ` +
+          `the row would publish a number for a filter that is not seeing every write`,
+      )
+    }
     return n2
   }
 }
@@ -218,7 +243,7 @@ Each loop adds every entity's velocity to its position, over ${fmtInt(report.con
 | --- | ---: | ---: | ---: | ---: |
 ${iterRows.join('\n')}
 
-**Tracked-write cost** — the same \`.each\` loop with a \`.changed()\` filter attached and drained each frame (the change-tracking overhead you opt into for reacting to changes):
+**Tracked-write cost** — the same \`.each\` loop with a \`.changed()\` filter attached and drained each frame (the change-tracking overhead you opt into for reacting to changes). The frame is scheduler-driven and the harness asserts the filter drains every one of the frame's writes before a number is published:
 
 | loop | ops/s | ms/op | ns per entity | ratio vs bitECS |
 | --- | ---: | ---: | ---: | ---: |
