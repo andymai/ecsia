@@ -63,6 +63,8 @@ scheduler.update(dt) // run one frame
 ### Go parallel — same user code
 
 ```ts
+import { createWorld } from 'ecsia'
+
 // One flag — no changes to any system, query, or accessor code. Results are
 // bit-identical to the single-threaded run: each worker queues its changes,
 // and the queues are merged in a fixed order.

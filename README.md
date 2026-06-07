@@ -67,7 +67,9 @@ those at the same time on worker threads. Going parallel is one flag, with no ch
 to any system, query, or accessor code:
 
 ```ts
-const world = createWorld({ components: [...], threaded: true })
+import { createWorld } from 'ecsia'
+
+const world = createWorld({ components: [/* ... */], threaded: true })
 ```
 
 ## Guarantees
