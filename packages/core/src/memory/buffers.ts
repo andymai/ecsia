@@ -206,11 +206,20 @@ export interface ColumnGrowthNotice {
   readonly layout: ColumnLayout
 }
 
+/** A REGION re-backing (topic rings, cursor tables): same protocol, element-typed instead of laid out. */
+export interface RegionGrowthNotice {
+  readonly key: RegionKey
+  readonly backing: SharedArrayBuffer
+  readonly element: ElementKind
+}
+
+export type GrowthNotice = ColumnGrowthNotice | RegionGrowthNotice
+
 export interface ColumnGrowthLog {
   /** Monotonic re-backing generation. Equal across two reads ⇒ nothing re-backed (the steady-state check). */
   readonly generation: number
-  /** Re-backing notices accumulated since the last drain (latest backing per column). Empty unless `generation` advanced. */
-  drain(): ColumnGrowthNotice[]
+  /** Re-backing notices accumulated since the last drain (latest backing per column/region). Empty unless `generation` advanced. */
+  drain(): GrowthNotice[]
 }
 
 export class Buffers {
@@ -226,7 +235,7 @@ export class Buffers {
   // Bumped + appended ONLY on the SAB #growFallback path (workers re-wrap the
   // new backing at the wave fence). In-place `.grow()` never touches this — keeps it zero-cost.
   #growGeneration = 0
-  readonly #pendingGrowth = new Map<ColumnKey, ColumnGrowthNotice>()
+  readonly #pendingGrowth = new Map<string, GrowthNotice>()
 
   constructor(config: BuffersConfig) {
     this.capabilities = config.capabilities
@@ -373,11 +382,52 @@ export class Buffers {
   columnGrowth(): ColumnGrowthLog {
     return {
       generation: this.#growGeneration,
-      drain: (): ColumnGrowthNotice[] => {
+      drain: (): GrowthNotice[] => {
         const out = [...this.#pendingGrowth.values()]
         this.#pendingGrowth.clear()
         return out
       },
+    }
+  }
+
+  /**
+   * Grow a REGION to hold `requiredBytes` — in place via the backing's reservation when possible
+   * (length-tracking views auto-widen; no notice), else allocate-copy re-back. A shared re-back is
+   * journaled like a column re-back so worker-captured views re-wrap at the next wave fence.
+   * Serial / quiescent callers only (topic rings, cursor tables — mutated only at serial slots).
+   */
+  rebackRegion(reg: Region, requiredBytes: number): void {
+    if (requiredBytes <= reg.backing.byteLength) return
+    const element = this.#regionElement.get(reg.key as unknown as string) ?? 'u32'
+    const growable = reg.backing as Growable
+    const resizeFn = growable.grow ?? growable.resize
+    const max = growable.maxByteLength
+    if (typeof resizeFn === 'function' && typeof max === 'number' && requiredBytes <= max) {
+      try {
+        // The column doubling protocol: per-element callers (a topic ring growing one append at a
+        // time) must amortize, not re-grow per call.
+        resizeFn.call(growable, nextCapacityBytes(reg.backing.byteLength, requiredBytes, max))
+        reg.view = makeView(element, reg.backing) as typeof reg.view
+        return
+      } catch {
+        // fall through to re-back
+      }
+    }
+    const shared = isSharedBacking(reg.backing)
+    // Doubling on the re-back leg too: an exact-size alloc-copy per append past the reservation is
+    // O(n²) over a burst (the column #growFallback relies on its caller doubling; regions have no
+    // such caller, so the amortization lives here).
+    const targetBytes = Math.max(requiredBytes, reg.backing.byteLength * 2)
+    const fresh: Backing = shared
+      ? new (plainSab() ?? missingSharedBacking())(targetBytes)
+      : new ArrayBuffer(targetBytes)
+    const freshView = makeView(element, fresh)
+    ;(freshView as unknown as { set(a: ArrayLike<number>): void }).set(reg.view as unknown as ArrayLike<number>)
+    reg.backing = fresh
+    reg.view = freshView as typeof reg.view
+    if (isSharedBacking(fresh)) {
+      this.#growGeneration += 1
+      this.#pendingGrowth.set(reg.key as unknown as string, { key: reg.key, backing: fresh, element })
     }
   }
 

@@ -183,6 +183,7 @@ export function createScheduler(
         matchComponents: [...match],
         kernel: () => {},
         maxSpawnsPerWave: sb.maxSpawnsPerWave,
+        consumeTopics: sb.consumeTopics,
       }
     })
 

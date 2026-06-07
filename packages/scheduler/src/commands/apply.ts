@@ -62,6 +62,12 @@ export interface WorldApply {
    * Undefined in a topic-free wiring.
    */
   stagePublish?(topicId: number, systemId: number, words: Uint32Array, at: number, fieldWords: number): void
+  /**
+   * Worker consume-cursor advance (OP_CONSUMED): a worker-run consumer observed events up to `seq`
+   * (exclusive) mid-wave. Replayed here so cursor state stays main-thread-owned and lazy — a kernel
+   * that never calls consume emits no record and its cursor does not move (main-thread parity).
+   */
+  advanceConsume?(topicId: number, systemId: number, seq: number): void
   warn(message: string): void
 }
 
@@ -252,6 +258,15 @@ function applyBuffer(world: WorldApply, cb: CommandBuffer, newlyCreated: Set<num
         const f = words[at + 3] as number
         if (world.stagePublish !== undefined) world.stagePublish(topicId, systemId, words, at + 4, f)
         else world.warn('OP_PUBLISH encountered but topics are not wired')
+        break
+      }
+      case Op.CONSUMED: {
+        // Not entity-targeted (skips validateSubject). Idempotent: the store advances by max().
+        const topicId = words[at + 1] as number
+        const systemId = words[at + 2] as number
+        const seq = words[at + 3] as number
+        if (world.advanceConsume !== undefined) world.advanceConsume(topicId, systemId, seq)
+        else world.warn('OP_CONSUMED encountered but topics are not wired')
         break
       }
       default:

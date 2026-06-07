@@ -13,7 +13,7 @@
 
 import { Worker } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
-import type { World, ComponentId } from '@ecsia/core'
+import type { World, ComponentId, TopicDef } from '@ecsia/core'
 import { handleIndex } from '@ecsia/core'
 import type { ComponentDef, Schema, SystemId } from '@ecsia/schema'
 import { has } from '@ecsia/schema'
@@ -34,6 +34,12 @@ export interface PoolSystem {
   readonly matchComponents: readonly ComponentDef<Schema>[]
   readonly kernel: WorkerSystemKernel
   readonly maxSpawnsPerWave: number
+  /**
+   * Topics this system declares in `consume:`. The pool assigns each (system, topic) a cursor-table
+   * slot at construction and ships the (topicId, readerSlot) windows to workers, so a worker-run
+   * consumer reads its own cursor mid-wave and reports the advance back via OP_CONSUMED.
+   */
+  readonly consumeTopics?: readonly TopicDef<Schema>[]
 }
 
 /** One worker's full control-SAB set + Node Worker handle. */
@@ -138,6 +144,16 @@ export class WorkerPool {
 
     const maxBatch = cfg.maxBatchEntities ?? cfg.world.options.maxEntities
     const corralEntries = cfg.writeCorralEntries ?? maxBatch * 4
+
+    // Per-system consume windows: assign each (system, topic) its cursor-table slot now (slots are
+    // name-keyed in the store, so a re-created pool resumes the same cursors). Indexed by SystemId.
+    const topicsStore = cfg.world.__topics
+    const consumes = cfg.systems.map((s) =>
+      (s.consumeTopics ?? []).map((t) => ({
+        topicId: topicsStore.idOf(t),
+        readerSlot: topicsStore.readerSlotFor(t, s.name),
+      })),
+    )
     const reservationCap = Math.max(...cfg.systems.map((s) => s.maxSpawnsPerWave), 1)
     const here = fileURLToPath(import.meta.url)
     const entryUrl = cfg.workerEntryUrl ?? here.replace(/pool\.(js|ts)$/, 'worker-entry.$1')
@@ -162,6 +178,7 @@ export class WorkerPool {
         // re-plan that introduces new topics — a worker publish to an unaligned topic is dropped
         // with a diagnostic, never silently misrouted.
         topics: cfg.world.__topics.manifest(),
+        consumes,
         commandSab: command.words.buffer as SharedArrayBuffer,
         reservationSab: reservation.sab,
         reservationCapacity: reservation.capacity,
@@ -312,10 +329,15 @@ export class WorkerPool {
     const gen = log.generation
     const notices = log.drain()
     if (notices.length > 0) {
+      // Split column re-backs from region re-backs (TopicRingGrown): the worker re-wraps columns
+      // into its column map and regions (topic rings / cursor tables) into its regions map.
+      const cols = notices.filter((n): n is Extract<typeof n, { layout: unknown }> => 'layout' in n)
+      const regs = notices.filter((n): n is Exclude<typeof n, { layout: unknown }> => !('layout' in n))
       const msg: ColumnsAddedMessage = {
         kind: 'columns-added',
         generation: gen,
-        columns: notices.map((n) => ({ key: n.key as unknown as string, backing: n.backing, layout: n.layout })),
+        columns: cols.map((n) => ({ key: n.key as unknown as string, backing: n.backing, layout: n.layout })),
+        regions: regs.map((n) => ({ key: n.key as unknown as string, backing: n.backing, element: n.element })),
       }
       // Arm the fence for every worker (each ACKs by completing the wave once it has re-wrapped).
       this.#world.__setPhase('wave')
@@ -365,6 +387,14 @@ export class WorkerPool {
       removePair: (s, rid, t) => apply.removePair?.(s, rid, t),
       stagePublish: (topicId, systemId, words, at, fieldWords) =>
         world.__topics.stageWords(topicId, systemId, words, at, fieldWords),
+      advanceConsume: (topicId, systemId, seq) => {
+        const name = this.#systems[systemId]?.name
+        if (name === undefined) {
+          this.#diag(`OP_CONSUMED names unknown system id ${systemId}; record dropped`)
+          return
+        }
+        world.__topics.advanceFromWorker(topicId, name, seq)
+      },
       returnUnused: (cb) => {
         const slot = this.#slots[cb.workerIndex]
         const block = slot?.command.lastReservation

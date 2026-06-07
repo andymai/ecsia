@@ -10,6 +10,7 @@ import { defineComponent, defineTopic } from '@ecsia/core'
 
 const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
 const Mana = defineComponent({ mp: 'i32' }, { name: 'mana' })
+const Tally = defineComponent({ sum: 'u32', frames: 'u32' }, { name: 'tally' })
 const Hits = defineTopic('hits', { n: 'i32' })
 
 // Two DISJOINT-WRITE systems: Regen writes Health (reads nothing else), Channel writes Mana. They
@@ -51,18 +52,53 @@ function hitterKernel(view, indices) {
   }
 }
 
+// A CONSUMING kernel (worker-side consume): drains its (system, topic) cursor over the topic's
+// frozen SAB ring and folds each payload into an order-sensitive checksum on the single matched
+// Tally entity — the worker twin of the main-thread `for (const ev of consume(Hits))` loop. The
+// cursor advance rides back as an OP_CONSUMED record automatically.
+function loggerKernel(view, indices) {
+  if (indices.length === 0) return // tally entity not spawned (pure-consumer rigs use LoggerPure)
+  const idx = indices[0]
+  const id = Tally.id
+  let h = view.readField(idx, id, 0) >>> 0
+  for (const ev of view.consume(Hits)) {
+    h = (h * 31 + (ev.n >>> 0)) % 0x7fffffff
+  }
+  view.writeField(idx, id, 0, h)
+  view.writeField(idx, id, 1, (view.readField(idx, id, 1) >>> 0) + 1)
+}
+
+// A PURE consumer (matches no components): must still be dispatched and drain events — the events
+// are its input, not the entity set. It reports what it saw by publishing one Echo event per frame
+// carrying the running count (observable main-side through the canonical stream).
+const Echo = defineTopic('echo', { count: 'i32' })
+let pureSeen = 0
+function loggerPureKernel(view) {
+  for (const ev of view.consume(Hits)) {
+    void ev.n
+    pureSeen += 1
+  }
+  view.commands.publish(Echo, { count: pureSeen })
+}
+
 export function buildWorkerKernels() {
   const kernels = new Map([
     ['Regen', regenKernel],
     ['Channel', channelKernel],
     ['Spawner', spawnerKernel],
     ['Hitter', hitterKernel],
+    ['Logger', loggerKernel],
+    ['LoggerPure', loggerPureKernel],
   ])
   const components = new Map([
     ['health', Health],
     ['mana', Mana],
+    ['tally', Tally],
   ])
-  const topics = new Map([['hits', Hits]])
+  const topics = new Map([
+    ['hits', Hits],
+    ['echo', Echo],
+  ])
   return { kernels, components, topics }
 }
 

@@ -39,5 +39,7 @@ export type {
   ExportedColumnHandle,
   ExportedRegionHandle,
   ColumnGrowthNotice,
+  RegionGrowthNotice,
+  GrowthNotice,
   ColumnGrowthLog,
 } from './buffers.js'

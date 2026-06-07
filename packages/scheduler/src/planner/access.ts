@@ -39,13 +39,13 @@ function resolveIds(defs: readonly ComponentDef<Schema>[] | undefined): Componen
 }
 
 /**
- * A system is worker-ineligible if any declared component carries a non-shareable (object) field,
- * or if it consumes a topic: worker-side reader cursors are the deferred transport leg, so a
- * consumer runs in a main-thread batch (the object-component precedent). Publishers stay eligible —
- * worker publishes ride OP_PUBLISH on the command buffer.
+ * A system is worker-ineligible if any declared component carries a non-shareable (object) field.
+ * Topic publishers AND consumers are both eligible: publishes ride OP_PUBLISH on the command
+ * buffer, and consumers read the topic's frozen SAB ring mid-wave (cursor window from the shared
+ * cursor table; advance reported back via OP_CONSUMED). A threaded consumer needs a worker kernel
+ * in the kernel module like any other worker-run system.
  */
 function computeWorkerEligible(def: SystemDef): boolean {
-  if (def.consume !== undefined && def.consume.length > 0) return false
   const all = [...(def.read ?? []), ...(def.write ?? [])]
   for (const c of all) {
     for (const f of c.fields) {
