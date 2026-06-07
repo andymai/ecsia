@@ -49,6 +49,7 @@ export default defineConfig({
           text: 'Integrations',
           items: [
             { text: 'THREE.js bridge', link: '/guide/three-bridge' },
+            { text: 'React bindings', link: '/guide/react-bindings' },
             { text: 'Devtools', link: '/guide/devtools' },
           ],
         },
