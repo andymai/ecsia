@@ -73,9 +73,9 @@ number.
 - **ecsia `.each` beats miniplex.** The ergonomic accessor path — proxies, write-log awareness, and
   all — still out-iterates miniplex's array-of-objects walk. You do not pay for ecsia's ergonomics by
   dropping below the closest ergonomic competitor.
-- **ecsia `eachChunk` lands within ~1.4× of bitECS on a modern V8.** The column cursor re-resolves
+- **ecsia `eachChunk` lands within ~1.1× of bitECS on a modern V8.** The column cursor re-resolves
   its columns every call — that re-resolution is what keeps it safe under storage growth with zero
-  setup, and what `bindColumns` trades away for the last ~30%.
+  setup, and what `bindColumns` trades away for the last third.
 - **The tracked-write row is the cost you opt into.** Attaching a `.changed()` filter and draining it
   each frame is markedly more expensive than the bare integrate loop — that is the write-log doing
   real work so reactivity, deltas, and change observers are available. You pay it only when you ask

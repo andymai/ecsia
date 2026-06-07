@@ -39,8 +39,8 @@ importers:
         specifier: 4.1.8
         version: 4.1.8(vitest@4.1.8)
       bitecs:
-        specifier: ^0.3.40
-        version: 0.3.40
+        specifier: ^0.4.0
+        version: 0.4.0
       ecsia:
         specifier: workspace:*
         version: link:packages/ecsia
@@ -66,8 +66,8 @@ importers:
         specifier: ^0.184.0
         version: 0.184.0
       tinybench:
-        specifier: ^3.0.0
-        version: 3.1.1
+        specifier: ^6.0.2
+        version: 6.0.2
       typedoc:
         specifier: ^0.28.19
         version: 0.28.19(typescript@6.0.3)
@@ -1072,8 +1072,8 @@ packages:
   birpc@2.9.0:
     resolution: {integrity: sha512-KrayHS5pBi69Xi9JmvoqrIgYGDkD6mcSe/i6YKi3w5kekCLzrX4+nawcXqrj2tIp50Kw/mT/s3p+GVK0A0sKxw==}
 
-  bitecs@0.3.40:
-    resolution: {integrity: sha512-wAylY4pNfX8IeIH5phtwt1lUNtHKrkoSNrArI7Ris2Y4nEQWFIVvXdgAuqprEg9bq8Wolmlj0gVfeG6MFmtI2Q==}
+  bitecs@0.4.0:
+    resolution: {integrity: sha512-ho6Zop/L79DRTnBAfakPpGPuX7y0+lAjX06CpaAW+5tnAc7BH3L3RlSrWAXAqwnQGDZ10GsoxaxyTTsddlun3g==}
 
   brace-expansion@5.0.6:
     resolution: {integrity: sha512-kLpxurY4Z4r9sgMsyG0Z9uzsBlgiU/EFKhj/h91/8yHu0edo7XuixOIH3VcJ8kkxs6/jPzoI6U9Vj3WqbMQ94g==}
@@ -1453,9 +1453,9 @@ packages:
   tinybench@2.9.0:
     resolution: {integrity: sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==}
 
-  tinybench@3.1.1:
-    resolution: {integrity: sha512-74pmf47HY/bHqamcCMGris+1AtGGsqTZ3Hc/UK4QvSmRuf/9PIF9753+c8XBh7JfX2r9KeZtVjOYjd6vFpc0qQ==}
-    engines: {node: '>=18.0.0'}
+  tinybench@6.0.2:
+    resolution: {integrity: sha512-FlHoQpcFvCzeXK5kVPvV7IVgW/hs/B36QWTz876iSdeJguBDfdTSRQmYmaHX+fQNt4hp+gEFB2XXw+8hT4/y8A==}
+    engines: {node: '>=20.0.0'}
 
   tinyexec@1.2.4:
     resolution: {integrity: sha512-SHf/r48b7vOrjve9PxJo3MN5v5yuyjHvdUcrQffT3WXMUfnGmHDVbC4k3sHJaJTgZCwpUplIaAo5ANtMyp3YHg==}
@@ -2328,7 +2328,7 @@ snapshots:
 
   birpc@2.9.0: {}
 
-  bitecs@0.3.40: {}
+  bitecs@0.4.0: {}
 
   brace-expansion@5.0.6:
     dependencies:
@@ -2775,7 +2775,7 @@ snapshots:
 
   tinybench@2.9.0: {}
 
-  tinybench@3.1.1: {}
+  tinybench@6.0.2: {}
 
   tinyexec@1.2.4: {}
 

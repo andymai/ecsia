@@ -50,10 +50,13 @@ export interface BenchReport {
 
 function collect(bench: Bench): TaskResult[] {
   return bench.tasks.map((t) => {
+    // tinybench 6 results are a state union; statistics exist only on completed (or
+    // aborted-with-statistics) tasks. latency.mean is ms, throughput.mean is ops/s.
     const r = t.result
-    const meanMs = r?.latency?.mean ?? r?.mean ?? 0
-    const hz = r?.throughput?.mean ?? (meanMs > 0 ? 1000 / meanMs : null)
-    return { name: t.name, hz: hz ?? null, meanMs }
+    const stats = r && 'latency' in r ? r : undefined
+    const meanMs = stats?.latency.mean ?? 0
+    const hz = stats?.throughput.mean ?? (meanMs > 0 ? 1000 / meanMs : null)
+    return { name: t.name, hz, meanMs }
   })
 }
 
