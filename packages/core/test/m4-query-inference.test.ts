@@ -19,6 +19,9 @@ describe('query DSL inference contracts', () => {
         [
           'tsc',
           '--noEmit',
+          '--ignoreConfig',
+          '--types',
+          'node',
           '--strict',
           '--exactOptionalPropertyTypes',
           '--noUncheckedIndexedAccess',

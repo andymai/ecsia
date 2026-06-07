@@ -19,6 +19,9 @@ describe('bindColumns inference contracts', { timeout: 60_000 }, () => {
         [
           'tsc',
           '--noEmit',
+          '--ignoreConfig',
+          '--types',
+          'node',
           '--strict',
           '--exactOptionalPropertyTypes',
           '--noUncheckedIndexedAccess',

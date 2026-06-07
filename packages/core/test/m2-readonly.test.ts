@@ -25,6 +25,9 @@ function typecheck(file: string): { ok: boolean; out: string } {
       [
         'tsc',
         '--noEmit',
+        '--ignoreConfig',
+        '--types',
+        'node',
         '--strict',
         '--exactOptionalPropertyTypes',
         '--noUncheckedIndexedAccess',
