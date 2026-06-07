@@ -55,7 +55,7 @@
   "devDependencies": {
     "@ecsia/relations": "workspace:*",
     "@ecsia/scheduler": "workspace:*",
-    "@types/react": "^19.0.0",
+    "@types/react": "^19.2.17",
     "react": "^19.0.0"
   }
 }
