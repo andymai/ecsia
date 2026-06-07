@@ -30,7 +30,27 @@ import type { TopicDef } from './define.js'
 /** Reserved-zero metadata words per event row (future: tick + publishing system; payload-only v1). */
 export const TOPIC_HEADER_WORDS = 2
 
+/**
+ * Shared per-topic header region (`topic.<name>.hdr`, u32×4): [headRel, baseRel, 0, 0], where
+ * `headRel = head - tail` (the retained row count) and `baseRel = tail - baseSeq` (the ring-front
+ * offset of the oldest retained row). Written by the main thread ONLY at serial slots; read by
+ * worker consumers mid-wave with plain loads — frozen for the wave by the same quiescence argument
+ * as archetype columns.
+ *
+ * Everything on the worker wire is TAIL-RELATIVE (hdr words, cursor-table slots, OP_CONSUMED seq):
+ * absolute sequence numbers are unbounded JS integers main-side, and a wrapped u32 absolute would
+ * stall consumers for ~2^32 events at the wrap boundary (max(unwrapped, wrapped) pins the cursor).
+ * Relative values are bounded by the retained window — which fits u32 by construction — so the
+ * wire is wrap-safe forever. The main thread reconstructs absolutes from its own `rt.tail`, which
+ * cannot move during an update (retention drops only at the frame reset).
+ */
+export const TOPIC_HDR_HEAD_REL = 0
+export const TOPIC_HDR_BASE_REL = 1
+export const TOPIC_HDR_WORDS = 4
+
 const INITIAL_CAPACITY_ROWS = 256
+const INITIAL_READER_SLOTS = 16
+const MAX_READER_SLOTS = 4096
 const NO_SPILL = Number.MAX_SAFE_INTEGER
 
 function nextPow2(n: number): number {
@@ -73,6 +93,14 @@ interface TopicRuntime {
    * per never-returning name — bounded by distinct consumer names ever planned, never per-event.
    */
   readonly cursors: Map<string, number>
+  /**
+   * Worker-visible mirrors: the hdr region carries [tail, head, baseSeq]; the cursors region carries
+   * one u32 sequence per assigned reader slot. Main-thread-written at serial slots only.
+   */
+  readonly hdrRegion: Region<Uint32Array>
+  readonly cursorsRegion: Region<Uint32Array>
+  /** Reader key (system name) → cursor-table slot, assigned on first sight, stable across re-plans. */
+  readonly readerSlots: Map<string, number>
   /** The pooled consume view + its rebind hook (one per topic; never store the view). */
   readonly view: Record<string, unknown>
   bind(words: ArrayLike<number>, base: number): void
@@ -140,6 +168,12 @@ export class Topics {
     const region = this.#buffers.region(`topic.${def.name}.ring` as RegionKey, 'u32', capacityWords, {
       maxLength: capacityWords * 16,
     }) as Region<Uint32Array>
+    const hdrRegion = this.#buffers.region(`topic.${def.name}.hdr` as RegionKey, 'u32', TOPIC_HDR_WORDS, {
+      fixed: true,
+    }) as Region<Uint32Array>
+    const cursorsRegion = this.#buffers.region(`topic.${def.name}.cursors` as RegionKey, 'u32', INITIAL_READER_SLOTS, {
+      maxLength: MAX_READER_SLOTS,
+    }) as Region<Uint32Array>
 
     const view: Record<string, unknown> = {}
     let curWords: ArrayLike<number> = region.view
@@ -170,6 +204,9 @@ export class Topics {
       staged: new Map(),
       stagedEvents: 0,
       cursors: new Map(),
+      hdrRegion,
+      cursorsRegion,
+      readerSlots: new Map(),
       view,
       bind(words, base) {
         curWords = words
@@ -234,6 +271,7 @@ export class Topics {
     const rt = this.#runtimeOf(def)
     rt.codec.encode(init, rt.scratchRow, 0)
     this.#appendRow(rt, rt.scratchRow, 0)
+    this.#syncWorkerVisible(rt)
   }
 
   /** `ctx.publish` (main-thread system) — encode now, stage to the system's segment. */
@@ -291,8 +329,48 @@ export class Topics {
       }
       rt.staged.clear()
       rt.stagedEvents = 0
+      this.#syncWorkerVisible(rt)
     }
     this.#stagedTopics = 0
+  }
+
+  /**
+   * After every serial-slot mutation of a SHARED (worker-visible) topic: fold any spill into the
+   * ring — a worker consumer reads ONLY the SAB ring, so the retained stream must live there in its
+   * entirety before the next wave dispatches — then publish [tail, head, baseSeq] to the hdr region.
+   * A re-back past the ring's reservation is journaled (buffers.rebackRegion), so the pool's
+   * TopicRingGrown notice re-wraps worker views at the wave fence. Plain-AB (single-thread) worlds
+   * skip the fold: the spill stays until the frame reset, exactly the pre-worker behavior.
+   */
+  #syncWorkerVisible(rt: TopicRuntime): void {
+    if (!isSharedBacking(rt.region.backing)) return
+    if (rt.spillStartSeq !== NO_SPILL) {
+      const neededBytes = (rt.head - rt.baseSeq) * rt.rowWords * 4
+      this.#buffers.rebackRegion(rt.region, neededBytes)
+      rt.ring = rt.region.view
+      const f = rt.rowWords
+      for (let seq = rt.spillStartSeq; seq < rt.head; seq++) {
+        const src = (seq - rt.spillStartSeq) * f
+        const dst = (seq - rt.baseSeq) * f
+        for (let i = 0; i < f; i++) rt.ring[dst + i] = rt.spill[src + i]!
+      }
+      rt.spill = []
+      rt.spillStartSeq = NO_SPILL
+    }
+    const hdr = rt.hdrRegion.view
+    hdr[TOPIC_HDR_HEAD_REL] = (rt.head - rt.tail) >>> 0
+    hdr[TOPIC_HDR_BASE_REL] = (rt.tail - rt.baseSeq) >>> 0
+  }
+
+  /**
+   * Re-anchor every assigned cursor slot to the CURRENT tail. Must run whenever tail moves (the
+   * frame reset): slot values are tail-relative, so a stale anchor would make a worker reconstruct
+   * a cursor that is off by exactly the dropped row count.
+   */
+  #remirrorCursors(rt: TopicRuntime): void {
+    for (const [key] of rt.readerSlots) {
+      this.#mirrorCursor(rt, key, rt.cursors.get(key) ?? rt.tail)
+    }
   }
 
   #appendRow(rt: TopicRuntime, words: ArrayLike<number>, at: number): void {
@@ -330,6 +408,65 @@ export class Topics {
   initCursor(def: TopicDef<Schema>, readerKey: string): void {
     const rt = this.#runtimeOf(def)
     if (!rt.cursors.has(readerKey)) rt.cursors.set(readerKey, this.#everUpdated ? rt.head : rt.tail)
+    // Plan-time slot assignment doubles as the SAB sync point for readers that previously ran on
+    // the main thread (their map cursor advanced without a slot to mirror into).
+    this.#mirrorCursor(rt, readerKey, rt.cursors.get(readerKey)!)
+  }
+
+  /**
+   * The cursor-table slot for `(def, readerKey)`, assigned on first request and stable for the
+   * world's lifetime (re-plans re-request and get the same slot — cursor continuity mirrors the
+   * name-keyed map). The pool ships this to workers at boot; a worker consumer reads its own slot
+   * mid-wave (frozen — the main thread writes cursors only at serial slots or for systems running
+   * in OTHER batches, never the one reading it).
+   */
+  readerSlotFor(def: TopicDef<Schema>, readerKey: string): number {
+    const rt = this.#runtimeOf(def)
+    let slot = rt.readerSlots.get(readerKey)
+    if (slot === undefined) {
+      slot = rt.readerSlots.size
+      if (slot >= MAX_READER_SLOTS) {
+        throw new Error(`topic '${rt.name}': more than ${MAX_READER_SLOTS} distinct consumer names — raise MAX_READER_SLOTS`)
+      }
+      rt.readerSlots.set(readerKey, slot)
+      this.#buffers.rebackRegion(rt.cursorsRegion, (slot + 1) * 4)
+      this.#mirrorCursor(rt, readerKey, rt.cursors.get(readerKey) ?? rt.tail)
+    }
+    return slot
+  }
+
+  #mirrorCursor(rt: TopicRuntime, readerKey: string, seq: number): void {
+    const slot = rt.readerSlots.get(readerKey)
+    // Tail-relative, clamped at 0: a cursor behind the tail mirrors as "at the oldest retained
+    // event" — the retention-snap semantic, computed worker-side for free.
+    if (slot !== undefined) rt.cursorsRegion.view[slot] = Math.max(0, seq - rt.tail) >>> 0
+  }
+
+  /**
+   * OP_CONSUMED apply: a worker-run consumer observed events up to `seq` (exclusive) mid-wave.
+   * Idempotent and monotonic — `max` absorbs duplicate records and replays. The missed-events
+   * warning fires here with the same wording as the main-thread consume path: the cursor the worker
+   * started from is the map value, and `tail` cannot have moved since the wave started (retention
+   * drops only at the frame reset).
+   */
+  advanceFromWorker(topicId: number, readerKey: string, relSeq: number): void {
+    const rt = this.#byId.get(topicId)
+    if (rt === undefined) {
+      this.#warn(`OP_CONSUMED names unknown topic id ${topicId}; record dropped`)
+      return
+    }
+    const current = rt.cursors.get(readerKey) ?? rt.tail
+    if (this.#dev && current < rt.tail) {
+      this.#warn(
+        `topic '${rt.name}': reader '${readerKey}' missed ${rt.tail - current} event(s) dropped by retention; cursor snapped to the oldest retained event`,
+      )
+    }
+    // relSeq is tail-relative as of the wave the record was written in — and rt.tail cannot have
+    // moved since (retention drops only at the frame reset, never mid-update), so the
+    // reconstruction is exact. max() absorbs duplicate records and replays.
+    const next = Math.max(current, rt.tail + (relSeq >>> 0))
+    rt.cursors.set(readerKey, next)
+    this.#mirrorCursor(rt, readerKey, next)
   }
 
   /**
@@ -357,10 +494,13 @@ export class Topics {
     // slots, never while a system body runs, so `end` is the head as of the consumer's wave start.
     const end = rt.head
     rt.cursors.set(readerKey, cursor)
+    this.#mirrorCursor(rt, readerKey, cursor) // the retention snap must reach the SAB slot too
     for (let seq = cursor; seq < end; seq++) {
       // Advance BEFORE the yield: a consumer that breaks out of the loop has still observed the
-      // yielded event, and exactly-once means it must not be redelivered next consume.
+      // yielded event, and exactly-once means it must not be redelivered next consume. The SAB
+      // mirror tracks in lockstep so a re-plan that moves this reader onto a worker resumes right.
       rt.cursors.set(readerKey, seq + 1)
+      this.#mirrorCursor(rt, readerKey, seq + 1)
       if (seq >= rt.spillStartSeq) {
         rt.bind(rt.spill, (seq - rt.spillStartSeq) * rt.rowWords + TOPIC_HEADER_WORDS)
       } else {
@@ -387,6 +527,8 @@ export class Topics {
       this.#compact(rt, newTail)
       rt.peakRows = rt.head - rt.tail
       rt.overflowWarned = false
+      this.#syncWorkerVisible(rt)
+      this.#remirrorCursors(rt) // tail moved: every tail-relative cursor slot must re-anchor
     }
   }
 
@@ -426,35 +568,11 @@ export class Topics {
   }
 
   #growRing(rt: TopicRuntime, requiredWords: number): void {
-    const region = rt.region
-    const requiredBytes = requiredWords * 4
-    if (requiredBytes <= region.backing.byteLength) {
-      rt.ring = region.view
-      return
-    }
-    // The reactivity-ring growth protocol: in-place resizable grow when the reservation allows,
-    // else allocate-copy re-back (serial quiescent point; main thread is the only ring reader in
-    // v1 — worker-side consume, and with it the TopicRingGrown re-wrap notice, is the deferred leg).
-    const growable = region.backing as { maxByteLength?: number; grow?: (b: number) => void; resize?: (b: number) => void }
-    const resizeFn = growable.grow ?? growable.resize
-    const max = growable.maxByteLength
-    if (typeof resizeFn === 'function' && typeof max === 'number' && requiredBytes <= max) {
-      try {
-        resizeFn.call(growable, requiredBytes)
-        region.view = new Uint32Array(region.backing as ArrayBufferLike) as typeof region.view
-        rt.ring = region.view
-        return
-      } catch {
-        // fall through to re-back
-      }
-    }
-    const shared = isSharedBacking(region.backing)
-    const fresh = shared ? new SharedArrayBuffer(requiredBytes) : new ArrayBuffer(requiredBytes)
-    const freshView = new Uint32Array(fresh)
-    freshView.set(region.view)
-    region.backing = fresh as typeof region.backing
-    region.view = freshView as typeof region.view
-    rt.ring = freshView
+    // In-place resizable grow when the reservation allows, else allocate-copy re-back — both via
+    // the buffers registry so a SHARED re-back is journaled and the pool's TopicRingGrown notice
+    // re-wraps worker-captured views at the next wave fence (serial quiescent point either way).
+    this.#buffers.rebackRegion(rt.region, requiredWords * 4)
+    rt.ring = rt.region.view
   }
 
   // ---- introspection (tests, diagnostics) ------------------------------------------------------

@@ -16,6 +16,7 @@ export const enum Op {
   REMOVE_PAIR = 5, // OP_REMOVE_PAIR eid relationId targetEid
   SET_PAYLOAD = 6, // OP_SET_PAYLOAD eid componentId fieldWordCount [field words...]
   PUBLISH = 7, // OP_PUBLISH topicId publisherSystemId fieldWordCount [field words...]
+  CONSUMED = 8, // OP_CONSUMED topicId consumerSystemId seq — worker consume cursor advance (exclusive end)
 }
 
 /**
@@ -32,6 +33,7 @@ export function recordLen(words: Uint32Array, at: number): number {
     case Op.REMOVE:
       return 3
     case Op.REMOVE_PAIR:
+    case Op.CONSUMED:
       return 4
     case Op.ADD:
     case Op.SET_PAYLOAD:

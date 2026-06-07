@@ -14,7 +14,7 @@
 // The worker NEVER mutates shared structure mid-wave and NEVER reads the bitmask.
 
 import { parentPort, workerData } from 'node:worker_threads'
-import { makeEncoder, buildFieldCodec, ensureWords } from '../commands/index.js'
+import { makeEncoder, buildFieldCodec, ensureWords, Op } from '../commands/index.js'
 import type { CommandBuffer, ComponentFieldCodec } from '../commands/index.js'
 import { buildWorkerWorldView, makeWriteCorralWriter } from './world-view.js'
 import { completeWave, setWaveError } from './wave-sync.js'
@@ -23,7 +23,7 @@ import type { WorkerReservationSab } from './reservation.js'
 import type { WorkerBootstrap, ColumnsAddedMessage } from './manifest.js'
 import type { WorkerSystemKernel } from './worker-system.js'
 import type { ComponentDef, ComponentId, Schema } from '@ecsia/schema'
-import { NO_ENTITY, buildTopicCodec } from '@ecsia/core'
+import { NO_ENTITY, buildTopicCodec, TOPIC_HEADER_WORDS, TOPIC_HDR_HEAD_REL, TOPIC_HDR_BASE_REL } from '@ecsia/core'
 import type { TopicCodec, TopicDef } from '@ecsia/core'
 import type { WaveCounter } from '../executor/seams.js'
 
@@ -156,6 +156,119 @@ async function main(): Promise<void> {
 
   const writeCorral = makeWriteCorralWriter(boot.writeCorralSab)
   const view = buildWorkerWorldView(boot.buffers, boot.indexBitsMask, encoder, writeCorral)
+
+  // ---- worker-side topic consume ----------------------------------------------------------------
+  // A consumer system's kernel iterates the topic's SAB canonical ring directly: the stream is
+  // mutated only at serial slots, so [tail, head, baseSeq] (the hdr region) and the ring rows are
+  // frozen for the wave. The (system, topic) cursor lives in the topic's SAB cursor table, OWNED by
+  // the main thread — the worker reads its slot at consume entry and reports its advance back as an
+  // OP_CONSUMED record, replayed at the serial flush. The record is appended before the first yield
+  // and its seq word PATCHED per yield (advance-before-yield parity: a kernel that breaks mid-loop
+  // has still observed the yielded prefix). A kernel that never calls consume emits no record, so
+  // its cursor never moves — identical to the main-thread lazy-consume contract.
+  interface WorkerTopicRt {
+    readonly rowWords: number
+    readonly ringKey: string
+    readonly hdrKey: string
+    readonly cursorsKey: string
+    readonly view: Record<string, unknown>
+    bind(words: ArrayLike<number>, base: number): void
+  }
+  const topicRtById = new Map<number, WorkerTopicRt>()
+  const topicRtOf = (def: TopicDef<Schema>): WorkerTopicRt | undefined => {
+    const id = (def as unknown as { id: number }).id
+    if (id < 0) return undefined
+    let rt = topicRtById.get(id)
+    if (rt === undefined) {
+      const codec = buildTopicCodec(def.fields)
+      const pooled: Record<string, unknown> = {}
+      let curWords: ArrayLike<number> = []
+      let curBase = 0
+      for (const f of codec.fields) {
+        Object.defineProperty(pooled, f.name, {
+          enumerable: true,
+          get: () => f.decode(curWords, curBase + f.offset),
+        })
+      }
+      rt = {
+        rowWords: TOPIC_HEADER_WORDS + codec.fieldWords,
+        ringKey: `topic.${def.name}.ring`,
+        hdrKey: `topic.${def.name}.hdr`,
+        cursorsKey: `topic.${def.name}.cursors`,
+        view: pooled,
+        bind(words, base) {
+          curWords = words
+          curBase = base
+        },
+      }
+      topicRtById.set(id, rt)
+    }
+    return rt
+  }
+  // Per-dispatch consume state: the declared (topicId → readerSlot) window for the running system,
+  // plus local progress so a SECOND consume call in the same run resumes where the first stopped
+  // (the SAB slot only updates at the flush — without this, a re-call would redeliver).
+  const consumesBySystem: ReadonlyArray<ReadonlyMap<number, number>> = (boot.consumes ?? []).map(
+    (list) => new Map(list.map((c) => [c.topicId, c.readerSlot])),
+  )
+  let currentConsumes: ReadonlyMap<number, number> = new Map()
+  const localCursors = new Map<number, number>()
+
+  function emitConsumed(topicId: number, seq: number): number {
+    if (!ensureWords(cb, 4)) return -1 // overflow: events redeliver next wave (never lost), diagnosed via cb.overflowed
+    const w = cb.head
+    cb.words[w] = Op.CONSUMED
+    cb.words[w + 1] = topicId >>> 0
+    cb.words[w + 2] = currentSystemId >>> 0
+    cb.words[w + 3] = seq >>> 0
+    cb.head += 4
+    cb.recordCount += 1
+    return w
+  }
+
+  function* consumeTopic(def: TopicDef<Schema>): IterableIterator<Record<string, unknown>> {
+    const id = (def as unknown as { id: number }).id
+    const slot = id >= 0 ? currentConsumes.get(id) : undefined
+    if (slot === undefined) {
+      throw new Error(
+        `system '${names[currentSystemId] ?? currentSystemId}' consumes topic '${def.name}' without declaring it — add it to the system's consume: [...] so the scheduler can order it after publishers`,
+      )
+    }
+    const rt = topicRtOf(def)!
+    const hdr = view.regionView(rt.hdrKey) as Uint32Array | undefined
+    const cursors = view.regionView(rt.cursorsKey) as Uint32Array | undefined
+    const ring = view.regionView(rt.ringKey) as Uint32Array | undefined
+    if (hdr === undefined || cursors === undefined || ring === undefined) {
+      throw new Error(`topic '${def.name}': shared ring/hdr/cursor regions missing from the worker manifest`)
+    }
+    // Everything here is TAIL-RELATIVE (see TOPIC_HDR_* in core): wrap-safe by construction, and
+    // the retention snap is free — a behind-tail cursor mirrors as 0.
+    const headRel = hdr[TOPIC_HDR_HEAD_REL]! >>> 0
+    const baseRel = hdr[TOPIC_HDR_BASE_REL]! >>> 0
+    let rel = cursors[slot]! >>> 0
+    const local = localCursors.get(id)
+    if (local !== undefined && local > rel) rel = local
+    if (rel >= headRel) return
+    const rec = emitConsumed(id, rel)
+    if (rec < 0) {
+      // The command buffer is full, so the cursor advance cannot reach the main thread. Delivering
+      // anyway would mean the kernel observes these events TWICE (again next wave, after the cursor
+      // failed to move) — a silent serial-equivalence break. Deliver NOTHING: the events arrive
+      // exactly once next wave through the same cursor. The cap is already diagnosed via overflow.
+      parentPort?.postMessage({
+        kind: 'diagnostic',
+        message: `command-buffer full before OP_CONSUMED for topic '${def.name}'; consume deferred one wave (raise commandWords)`,
+      })
+      return
+    }
+    for (let s = rel; s < headRel; s++) {
+      cb.words[rec + 3] = (s + 1) >>> 0
+      localCursors.set(id, s + 1)
+      rt.bind(ring, (baseRel + s) * rt.rowWords + TOPIC_HEADER_WORDS)
+      yield rt.view
+    }
+  }
+  ;(view as { consume?: typeof consumeTopic }).consume = consumeTopic
   const wake = new Int32Array(boot.wakeSab)
   const work = new Int32Array(boot.workSab)
   const workF32 = new Float32Array(boot.workSab)
@@ -186,6 +299,7 @@ async function main(): Promise<void> {
   }
 
   let lastWake = 0
+  const missingKernelWarned = new Set<string>()
   parentPort?.postMessage({ kind: 'ready', workerIndex: boot.workerIndex })
 
   while (true) {
@@ -206,6 +320,7 @@ async function main(): Promise<void> {
           view.applyColumnGrowth(
             msg.columns.map((c) => ({ key: c.key as never, backing: c.backing, layout: c.layout })),
           )
+          if (msg.regions !== undefined && msg.regions.length > 0) view.applyRegionGrowth(msg.regions)
           appliedNoticeGen = msg.generation
         }
       } catch (err) {
@@ -220,14 +335,26 @@ async function main(): Promise<void> {
     const count = Atomics.load(work, 1)
     const dt = workF32[2]!
     currentSystemId = systemId
+    currentConsumes = consumesBySystem[systemId] ?? new Map()
+    localCursors.clear()
     cb.head = 0
     cb.recordCount = 0
     cb.overflowed = false
     writeCorral.reset()
     const name = names[systemId]
     const kernel = name !== undefined ? kernels.get(name) : undefined
+    // The kernel runs UNCONDITIONALLY, zero matched entities included — the single-thread executor
+    // runs every system body every frame, and a count gate silently starves any side-effecting
+    // zero-match kernel (pure consumers reading events, pure publishers emitting them, spawners).
+    if (kernel === undefined && name !== undefined && !missingKernelWarned.has(name)) {
+      missingKernelWarned.add(name)
+      parentPort?.postMessage({
+        kind: 'diagnostic',
+        message: `no worker kernel named '${name}' in the kernel module — the system is a no-op on this worker (add it to buildWorkerKernels())`,
+      })
+    }
     try {
-      if (kernel !== undefined && count > 0) {
+      if (kernel !== undefined) {
         const indices = new Int32Array(boot.workSab, WORK_INDICES_BYTE_OFFSET, count)
         kernel(view, indices, dt)
       }

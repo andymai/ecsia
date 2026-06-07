@@ -160,16 +160,18 @@ describe('explainPlan — the WHY of a real schedule', () => {
     }
   })
 
-  test('a topic consumer is pinned with reason topic-consumer and the explain carries publish/consume', () => {
+  test('a topic consumer is worker-eligible (main-thread only by placement) and the explain carries publish/consume', () => {
     const T = defineTopic('dt_evt', { n: 'i32' })
     const world = createWorld({})
     const Pub = defineSystem({ name: 'Pub', publish: [T], run() {} })
     const Cons = defineSystem({ name: 'Cons', consume: [T], run() {} })
     const plan = explainPlan(createScheduler(world, [Pub, Cons]))
 
+    // Worker-side consume shipped: consuming a topic no longer pins. In this zero-worker plan the
+    // consumer lands on the main thread by PLACEMENT, not ineligibility.
     const pin = plan.pinned.find((p) => p.system === 'Cons')
     expect(pin).toBeDefined()
-    expect(pin!.reason).toBe('topic-consumer')
+    expect(pin!.reason).toBe('main-thread')
 
     // The topic edge's WHY is visible: the publisher's wave precedes the consumer's, and the
     // per-system explain names the topic on both ends.

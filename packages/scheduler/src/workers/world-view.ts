@@ -5,7 +5,8 @@
 // entity's (archetypeId, row) comes from the shared entity-record regions, never the bitmask
 
 import { elementCtor } from '@ecsia/core'
-import type { ColumnGrowthNotice, ColumnKey, ElementKind, RegionKey, SharedHandleManifest, TypedArray } from '@ecsia/core'
+import type { ColumnGrowthNotice, ColumnKey, ElementKind, RegionKey, SharedHandleManifest, TopicDef, TypedArray } from '@ecsia/core'
+import type { Schema } from '@ecsia/schema'
 import type { CommandEncoder } from '../commands/index.js'
 
 const REC_ARCH_ID = 'entity.archetypeId' as RegionKey
@@ -38,6 +39,18 @@ export interface WorkerWorldView {
    * never produces a notice — those views length-track automatically.
    */
   applyColumnGrowth(notices: readonly ColumnGrowthNotice[]): void
+  /** Re-wrap re-backed REGIONS (topic rings / cursor tables) — the TopicRingGrown leg of the same fence. */
+  applyRegionGrowth(notices: ReadonlyArray<{ key: string; backing: SharedArrayBuffer; element: ElementKind }>): void
+  /** A region view by key (length-tracking; re-fetch per use so re-wraps are picked up). */
+  regionView(key: string): TypedArray | undefined
+  /**
+   * Worker-side topic consume (injected by worker-entry; absent on the main-thread mirror view).
+   * Iterates this system's unseen events over the topic's frozen SAB ring and reports the cursor
+   * advance back via an OP_CONSUMED record — exactly-once per (system, topic), same as the
+   * main-thread `ctx.consume`. The yielded view is pooled: read fields inside the loop, never
+   * store it. Throws on a topic the running system did not declare in `consume:`.
+   */
+  consume?<S extends Schema>(def: TopicDef<S>): IterableIterator<Record<string, unknown>>
 }
 
 /**
@@ -123,6 +136,14 @@ export function buildWorkerWorldView(
       for (const n of notices) {
         columns.set(n.key as unknown as string, { view: wrap(n.backing, n.layout.element), stride: n.layout.stride })
       }
+    },
+    applyRegionGrowth(notices) {
+      for (const n of notices) {
+        regions.set(n.key, wrap(n.backing, n.element))
+      }
+    },
+    regionView(key) {
+      return regions.get(key)
     },
   }
   // indexBitsMask reserved for handle→index narrowing in callers; kept for API symmetry.

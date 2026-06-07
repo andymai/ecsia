@@ -366,7 +366,7 @@ describe('plan shape: DAG edges yes, WAVE-CONFLICT no', () => {
     expect(sched.plan.waves[0]!.rounds[0]!.length).toBe(2)
   })
 
-  test('a consumer is pinned to the main-thread batch (worker-side consume is the deferred leg)', () => {
+  test('a consumer is worker-assigned like any eligible system (worker-side consume shipped)', () => {
     const T = defineTopic('Pin', { n: 'i32' })
     const world = createWorld({})
     const Pub = defineSystem({ name: 'Pub', publish: [T], run() {} })
@@ -375,7 +375,7 @@ describe('plan shape: DAG edges yes, WAVE-CONFLICT no', () => {
     const consBatch = sched.plan.waves.flatMap((w) => w.rounds.flat()).find(
       (b) => sched.plan.systems[b.systemId as unknown as number]!.name === 'Cons',
     )
-    expect(consBatch!.workerIndex).toBe(-1)
+    expect(consBatch!.workerIndex).toBeGreaterThanOrEqual(0) // consumers ride workers now
     const pubBatch = sched.plan.waves.flatMap((w) => w.rounds.flat()).find(
       (b) => sched.plan.systems[b.systemId as unknown as number]!.name === 'Pub',
     )

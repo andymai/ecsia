@@ -58,7 +58,7 @@ const scheduler = createScheduler(world, [])
 const plan = explainPlan(scheduler, componentNameMap(world))
 plan.waves        // each wave's batches and the systems in them
 plan.conflicts    // pairwise: { a, b, on, kind } (read-write / write-write / …)
-plan.pinned       // worker-ineligible systems + reason ('main-thread' | 'rich-fields' | 'topic-consumer')
+plan.pinned       // main-thread systems + reason ('main-thread' placement | 'rich-fields' ineligibility)
 ```
 
 ## `watchWorld` — per-frame deltas

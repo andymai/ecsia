@@ -41,17 +41,12 @@ export function explainPlan(input: PlanLike, names?: ReadonlyMap<number, string>
   })
 
   // --- pinned: every system landing in a main-thread slot (workerIndex -1). Reason discriminates
-  // the two structural ineligibility causes (rich fields vs topic consume) from an
-  // eligible-but-main-thread placement (e.g. a single-threaded plan, workers === 0). A system with
-  // BOTH causes reports 'rich-fields': the data constraint is permanent, the consume pin lifts when
-  // worker-side consume ships. ---
+  // the structural ineligibility cause (rich fields) from an eligible-but-main-thread placement
+  // (e.g. a single-threaded plan, workers === 0). Topic consumers stopped being a pin cause when
+  // worker-side consume shipped — a consumer pins only if its components carry rich fields. ---
   const pinReason = (sb: SystemBox): PinExplain['reason'] => {
     if (sb.workerEligible) return 'main-thread'
-    const hasRichFields = [...(sb.def.read ?? []), ...(sb.def.write ?? [])].some((c) =>
-      c.fields.some((f) => !f.shareable),
-    )
-    if (hasRichFields) return 'rich-fields'
-    return sb.consumeTopics.length > 0 ? 'topic-consumer' : 'rich-fields'
+    return 'rich-fields'
   }
   const pinnedSeen = new Set<number>()
   const pinned: PinExplain[] = []

@@ -28,6 +28,13 @@ export interface WorkerBootstrap {
    * records carry the main thread's topicId. Empty in a topic-free world.
    */
   readonly topics: readonly { readonly name: string; readonly id: number }[]
+  /**
+   * Per-system consume windows, indexed by SystemId: for each topic the system declares in
+   * `consume:`, the topic id plus this (system, topic) reader's cursor-table slot. A worker-run
+   * consumer reads its own slot from the topic's SAB cursor region (frozen mid-wave) and reports
+   * its advance back via OP_CONSUMED. Empty arrays for non-consuming systems.
+   */
+  readonly consumes: ReadonlyArray<ReadonlyArray<{ readonly topicId: number; readonly readerSlot: number }>>
   /** Per-worker control SABs. */
   readonly commandSab: SharedArrayBuffer
   readonly reservationSab: SharedArrayBuffer
@@ -72,4 +79,9 @@ export interface ColumnsAddedMessage {
   readonly kind: 'columns-added'
   readonly generation: number
   readonly columns: ReadonlyArray<{ key: string; backing: SharedArrayBuffer; layout: import('@ecsia/core').ColumnLayout }>
+  /**
+   * Region re-backs riding the same broadcast (TopicRingGrown: a topic ring or cursor table moved
+   * to a new SAB past its reservation). The worker re-wraps these in its regions map before ACKing.
+   */
+  readonly regions?: ReadonlyArray<{ key: string; backing: SharedArrayBuffer; element: import('@ecsia/core').ElementKind }>
 }

@@ -121,12 +121,11 @@ export interface PinExplain {
   readonly system: string
   /**
    * 'rich-fields' = reads/writes an object<T>/'string' component (structural, permanent);
-   * 'topic-consumer' = consumes a topic (worker-side consume is the deferred transport leg);
    * 'main-thread' = worker-eligible but placed on the main thread by the plan.
-   * A system with BOTH ineligibility causes reports 'rich-fields' — the data constraint is
-   * permanent, while the consume pin lifts when worker-side consume ships.
+   * Topic consumers stopped being a pin cause when worker-side consume shipped — a consumer
+   * pins only if its components carry rich fields.
    */
-  readonly reason: 'rich-fields' | 'topic-consumer' | 'main-thread'
+  readonly reason: 'rich-fields' | 'main-thread'
 }
 
 /** The whole-plan explanation — the WHY of the schedule, plain + serializable (waves ). */

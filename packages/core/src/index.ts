@@ -58,7 +58,7 @@ export type {
   ObserverContext,
 } from './reactivity/index.js'
 
-export type { SharedHandleManifest, ColumnGrowthNotice, ColumnGrowthLog } from './memory/index.js'
+export type { SharedHandleManifest, ColumnGrowthNotice, RegionGrowthNotice, GrowthNotice, ColumnGrowthLog } from './memory/index.js'
 
 // Schema surface re-exported so users import tokens/inference from @ecsia/core (the umbrella).
 export {
@@ -126,7 +126,7 @@ export { NO_COMPONENT, FIRST_USER_COMPONENT_ID } from './ids.js'
 export type { WorldApplySurface, RelationsHost } from './world.js'
 // @ecsia/scheduler's topic seam: the store class behind `world.__topics`, plus the shared payload
 // codec the worker-side OP_PUBLISH encoder reuses (one codec ⇒ byte-identical streams).
-export { Topics, buildTopicCodec, TOPIC_HEADER_WORDS } from './topics/index.js'
+export { Topics, buildTopicCodec, TOPIC_HEADER_WORDS, TOPIC_HDR_HEAD_REL, TOPIC_HDR_BASE_REL, TOPIC_HDR_WORDS } from './topics/index.js'
 export type { TopicCodec, TopicFieldCodec } from './topics/index.js'
 export type {
   SerializationSurface,
