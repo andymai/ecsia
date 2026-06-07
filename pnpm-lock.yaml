@@ -66,8 +66,8 @@ importers:
         specifier: ^0.184.0
         version: 0.184.0
       tinybench:
-        specifier: ^3.0.0
-        version: 3.1.1
+        specifier: ^6.0.2
+        version: 6.0.2
       typedoc:
         specifier: ^0.28.19
         version: 0.28.19(typescript@6.0.3)
@@ -1453,9 +1453,9 @@ packages:
   tinybench@2.9.0:
     resolution: {integrity: sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==}
 
-  tinybench@3.1.1:
-    resolution: {integrity: sha512-74pmf47HY/bHqamcCMGris+1AtGGsqTZ3Hc/UK4QvSmRuf/9PIF9753+c8XBh7JfX2r9KeZtVjOYjd6vFpc0qQ==}
-    engines: {node: '>=18.0.0'}
+  tinybench@6.0.2:
+    resolution: {integrity: sha512-FlHoQpcFvCzeXK5kVPvV7IVgW/hs/B36QWTz876iSdeJguBDfdTSRQmYmaHX+fQNt4hp+gEFB2XXw+8hT4/y8A==}
+    engines: {node: '>=20.0.0'}
 
   tinyexec@1.2.4:
     resolution: {integrity: sha512-SHf/r48b7vOrjve9PxJo3MN5v5yuyjHvdUcrQffT3WXMUfnGmHDVbC4k3sHJaJTgZCwpUplIaAo5ANtMyp3YHg==}
@@ -2775,7 +2775,7 @@ snapshots:
 
   tinybench@2.9.0: {}
 
-  tinybench@3.1.1: {}
+  tinybench@6.0.2: {}
 
   tinyexec@1.2.4: {}
 
