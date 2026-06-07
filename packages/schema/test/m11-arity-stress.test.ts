@@ -27,6 +27,9 @@ const budgetFixture = resolve(here, 'm11-arity-budget.fixture.ts')
 
 const STRICT_FLAGS = [
   '--noEmit',
+  '--ignoreConfig',
+  '--types',
+  'node',
   '--strict',
   '--exactOptionalPropertyTypes',
   '--noUncheckedIndexedAccess',

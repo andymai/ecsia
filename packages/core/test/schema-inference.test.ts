@@ -18,6 +18,9 @@ describe('schema inference contracts', () => {
         [
           'tsc',
           '--noEmit',
+          '--ignoreConfig',
+          '--types',
+          'node',
           '--strict',
           '--exactOptionalPropertyTypes',
           '--noUncheckedIndexedAccess',
