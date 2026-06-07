@@ -30,9 +30,12 @@ react-three-fiber.
 
 ```tsx
 import { WorldProvider, useQuery, useComponent, useWorld } from '@ecsia/react'
-import { read } from '@ecsia/core'
+import { createWorld, defineComponent, read, type EntityHandle } from '@ecsia/core'
 
-<WorldProvider world={world}><App /></WorldProvider>
+const Health = defineComponent({ hp: 'u32' }, { name: 'health' })
+const world = createWorld({ components: [Health] })
+
+const app = <WorldProvider world={world}><App /></WorldProvider>
 
 function App() {
   const enemies = useQuery(read(Health))        // readonly EntityHandle[] — valid as keys

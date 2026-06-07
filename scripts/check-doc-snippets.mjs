@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Doc-snippet truthfulness gate. Extracts every ```ts (or ```typescript) code fence from
-// website/**/*.md into a per-page scratch module under website/.snippet-check/, then type-checks the
+// Doc-snippet truthfulness gate. Extracts every ```ts / ```typescript / ```tsx code fence from
+// website/**/*.md, the root README, and packages/*/README.md into a per-page scratch module under
+// website/.snippet-check/, then type-checks the
 // whole batch with `tsc` against the workspace SOURCE (via tsconfig paths, same mapping examples/ use).
 // A snippet whose fence is marked `ts no-check` (or `twoslash`, or carries a `no-check` meta word) is
 // copied verbatim but excluded from compilation — reserve that for non-code blocks like install lines.
@@ -59,7 +60,7 @@ function extractFences(src) {
 }
 
 function isTs(lang) {
-  return lang === 'ts' || lang === 'typescript'
+  return lang === 'ts' || lang === 'typescript' || lang === 'tsx'
 }
 
 function isCheckable(meta) {
@@ -73,6 +74,14 @@ async function main() {
   await mkdir(SCRATCH, { recursive: true })
 
   const mdFiles = await walkMarkdown(WEBSITE)
+  // READMEs are the npm landing pages — their snippets must compile for the same reason the guide's do.
+  const rootReadme = join(ROOT, 'README.md')
+  if (existsSync(rootReadme)) mdFiles.push(rootReadme)
+  for (const ent of await readdir(join(ROOT, 'packages'), { withFileTypes: true })) {
+    if (!ent.isDirectory()) continue
+    const readme = join(ROOT, 'packages', ent.name, 'README.md')
+    if (existsSync(readme)) mdFiles.push(readme)
+  }
   const generated = []
   let totalBlocks = 0
   let skipped = 0
@@ -88,8 +97,9 @@ async function main() {
         continue
       }
       blockIndex++
-      const relPath = relative(WEBSITE, md).replace(/[\\/]/g, '__').replace(/\.md$/, '')
-      const outFile = join(SCRATCH, `${relPath}__${blockIndex}.ts`)
+      const relPath = relative(ROOT, md).replace(/[\\/]/g, '__').replace(/\.md$/, '')
+      const ext = f.lang === 'tsx'? 'tsx': 'ts'
+      const outFile = join(SCRATCH, `${relPath}__${blockIndex}.${ext}`)
       // Each snippet becomes its OWN module so top-level `import`/`const` across blocks never collide.
       const header =
         `// AUTO-GENERATED from ${relative(ROOT, md)} (block #${blockIndex}, src line ${f.line}). DO NOT EDIT.\n` +
@@ -116,6 +126,7 @@ async function main() {
       // Snippets show illustrative fragments; isolatedModules' single-statement rule is too strict here.
       isolatedModules: false,
       verbatimModuleSyntax: false,
+      jsx: 'react-jsx',
       types: ['node', 'three'],
       baseUrl: '../..',
       paths: {
@@ -127,9 +138,10 @@ async function main() {
         '@ecsia/serialization': ['packages/serialization/src/index.ts'],
         '@ecsia/three': ['packages/three/src/index.ts'],
         '@ecsia/devtools': ['packages/devtools/src/index.ts'],
+        '@ecsia/react': ['packages/react/src/index.ts'],
       },
     },
-    include: ['**/*.ts'],
+    include: ['**/*.ts', '**/*.tsx'],
   }
   await writeFile(join(SCRATCH, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2), 'utf8')
 
@@ -148,10 +160,10 @@ async function main() {
   if (res.status !== 0) {
     // Rewrite scratch paths back to the source .md so the failure points at the doc, not the temp file.
     const remapped = out.replace(
-      new RegExp(`website\\${sep}\\.snippet-check\\${sep}([^\\s(])\\.ts`, 'g'),
-      (_m, name) => {
-        const g = generated.find((x) => x.outFile.endsWith(`${name}.ts`))
-        return g? `${relative(ROOT)} (snippet near line ${g.line})`: name
+      new RegExp(`website\\${sep}\\.snippet-check\\${sep}([^\\s(]+)\\.(tsx?)`, 'g'),
+      (m, name, ext) => {
+        const g = generated.find((x) => x.outFile.endsWith(`${name}.${ext}`))
+        return g? `${relative(ROOT, g.md)} (snippet near line ${g.line})`: m
       },
     )
     console.error(remapped.trim() || 'tsc failed with no output')

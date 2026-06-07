@@ -32,6 +32,14 @@ points at this entity?" — either for one relation, or across **all** relations
 by passing `Wildcard` in the relation position:
 
 ```ts
+import { createWorld } from '@ecsia/core'
+import { createRelations, Wildcard } from '@ecsia/relations'
+
+const world = createWorld({ components: [] })
+const rel = createRelations(world)
+const ChildOf = rel.defineRelation(null, { exclusive: true })
+const parent = world.spawn()
+
 rel.subjectsOf(ChildOf, parent)    // every child of `parent`
 rel.subjectsOf(Wildcard, parent)   // anyone pointing at `parent` via ANY relation
 ```
