@@ -9,11 +9,9 @@ import type { QueryChunk } from 'ecsia'
 import { World as MiniplexWorld } from 'miniplex'
 import {
   createWorld as bitCreateWorld,
-  defineComponent as bitDefineComponent,
-  defineQuery as bitDefineQuery,
   addEntity as bitAddEntity,
   addComponent as bitAddComponent,
-  Types as BitTypes,
+  query as bitQuery,
 } from 'bitecs'
 
 export interface IterCase {
@@ -165,29 +163,32 @@ export function makeMiniplexIter(n: number): IterCase {
   }
 }
 
+// bitECS 0.4: components are caller-owned SoA stores (the library tracks membership only), queries
+// are the `query(world, terms)` function (cached per world after first use), and addComponent takes
+// (world, eid, component). Pre-sized Float32Array columns keep this the raw-SoA loop the comparison
+// has always measured.
 export function makeBitEcsIter(n: number): IterCase {
   const world = bitCreateWorld()
-  const Position = bitDefineComponent({ x: BitTypes.f32, y: BitTypes.f32 })
-  const Velocity = bitDefineComponent({ dx: BitTypes.f32, dy: BitTypes.f32 })
-  const query = bitDefineQuery([Position, Velocity])
+  const cap = nextPow2(n + 1)
+  const Position = { x: new Float32Array(cap), y: new Float32Array(cap) }
+  const Velocity = { dx: new Float32Array(cap), dy: new Float32Array(cap) }
   let firstEid = 0
   for (let i = 0; i < n; i++) {
     const eid = bitAddEntity(world)
     if (i === 0) firstEid = eid
-    bitAddComponent(world, Position, eid)
-    bitAddComponent(world, Velocity, eid)
+    bitAddComponent(world, eid, Position)
+    bitAddComponent(world, eid, Velocity)
     Velocity.dx[eid] = 1
     Velocity.dy[eid] = 0.5
   }
-  // Hoist the SoA component arrays once — bitECS types each field as a (possibly-undefined) TypedArray.
-  const px = Position.x!
-  const py = Position.y!
-  const vdx = Velocity.dx!
-  const vdy = Velocity.dy!
+  const px = Position.x
+  const py = Position.y
+  const vdx = Velocity.dx
+  const vdy = Velocity.dy
   return {
     name: 'bitECS',
     step() {
-      const ents = query(world)
+      const ents = bitQuery(world, [Position, Velocity])
       for (let i = 0; i < ents.length; i++) {
         const eid = ents[i]!
         px[eid] = px[eid]! + vdx[eid]! * DT

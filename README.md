@@ -160,15 +160,16 @@ treat the shapes as durable, the milliseconds as a snapshot; AMD Ryzen 9 7950X3D
 Node v24.11.0).
 
 Single-thread iteration — the classic ECS workload of adding each entity's velocity
-to its position, over 50,000 entities. Lower is faster (nanoseconds per entity):
+to its position, over 50,000 entities, against bitECS 0.4.0 and miniplex 2.0.0.
+Lower is faster (nanoseconds per entity):
 
 | loop | ns per entity |
 | --- | ---: |
-| ecsia `bindColumns` | 0.98 |
-| bitECS | 1.07 |
-| ecsia `eachChunk` | 1.47 |
-| ecsia `.each` | 10.12 |
-| miniplex | 13.93 |
+| ecsia `bindColumns` | 1.02 |
+| bitECS | 1.46 |
+| ecsia `eachChunk` | 1.56 |
+| ecsia `.each` | 10.86 |
+| miniplex | 13.37 |
 
 `.each` is the ergonomic accessor path from the example above; `eachChunk` loops over
 the raw storage arrays directly; `bindColumns` goes one step further and binds your
@@ -182,9 +183,9 @@ single-threaded result:
 | workers | speedup |
 | ---: | ---: |
 | 1 | 0.98x |
-| 2 | 1.89x |
-| 4 | 3.55x |
-| 8 | 6.05x |
+| 2 | 1.90x |
+| 4 | 3.63x |
+| 8 | 6.32x |
 
 Methodology and full tables on the [performance page](https://andymai.github.io/ecsia/guide/performance).
 
