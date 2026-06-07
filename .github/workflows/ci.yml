@@ -37,8 +37,8 @@ jobs:
       - name: Type-check documentation snippets
         run: pnpm docs:check
 
-      - name: Test (unit + property + worker + type-level)
-        run: pnpm test
+      - name: Test (unit + property + worker + type-level, coverage-gated)
+        run: pnpm test -- --coverage
 
   # ---------------------------------------------------------------------------
   # Runtime lanes (P3): prove the SHIPPED dist actually runs on each claimed runtime.

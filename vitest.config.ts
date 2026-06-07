@@ -77,6 +77,15 @@ export default defineConfig({
         'packages/scheduler/src/workers/worker-entry.ts',
       ],
       reporter: ['text', 'json-summary', 'json'],
+      // A ratchet, not a target: floors sit a few points under measured reality
+      // (2026-06: stmts 94.9 / branch 87.7 / fn 95.7 / lines 97.3) so only real
+      // erosion fails CI, never run-to-run noise. Raise them when reality rises.
+      thresholds: {
+        statements: 92,
+        branches: 84,
+        functions: 92,
+        lines: 95,
+      },
     },
   },
 })
