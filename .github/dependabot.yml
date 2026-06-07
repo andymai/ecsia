@@ -1,0 +1,30 @@
+# Weekly dependency updates. Dev-dep minors/patches arrive grouped as one PR; majors
+# get individual PRs so each carries its own evaluation. Runtime deps are few and
+# workspace-internal — anything external that appears later gets a PR per update.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      dev-minor-patch:
+        applies-to: version-updates
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # engines pin node >=22.13 — types track the minimum supported runtime, not latest
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+    commit-message:
+      prefix: chore
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: ci
