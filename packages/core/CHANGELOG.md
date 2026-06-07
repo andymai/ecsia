@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.0](https://github.com/andymai/ecsia/compare/core-v0.8.0...core-v0.9.0) (2026-06-07)
+
+
+### Features
+
+* worker-side topic consume — consumers ride workers, TopicRingGrown completes the notice fence ([#73](https://github.com/andymai/ecsia/issues/73)) ([8857488](https://github.com/andymai/ecsia/commit/8857488117cc4558243f274e1cf74fe9aee0a95d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.9.0
+
 ## [0.8.0](https://github.com/andymai/ecsia/compare/core-v0.7.12...core-v0.8.0) (2026-06-06)
 
 
