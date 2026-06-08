@@ -1,6 +1,6 @@
 {
   "name": "@ecsia/devtools",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Inspect ecsia worlds and schedules: entity and archetype reports, plus a breakdown of what runs in parallel and why.",
   "keywords": [
     "ecs",

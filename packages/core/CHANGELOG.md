@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.0](https://github.com/andymai/ecsia/compare/core-v0.9.0...core-v0.10.0) (2026-06-08)
+
+
+### Features
+
+* relation-level pair observers + useTarget/useTargets react hooks ([#75](https://github.com/andymai/ecsia/issues/75)) ([5f66a58](https://github.com/andymai/ecsia/commit/5f66a58d6fc1a1a34b79b5da48eaad58c6218fc4))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.10.0
+
 ## [0.9.0](https://github.com/andymai/ecsia/compare/core-v0.8.0...core-v0.9.0) (2026-06-07)
 
 
