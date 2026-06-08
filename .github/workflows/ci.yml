@@ -40,6 +40,9 @@ jobs:
       - name: Test (unit + property + worker + type-level, coverage-gated)
         run: pnpm test -- --coverage
 
+      - name: Bundle-size budget (tree-shaken min+gzip)
+        run: pnpm size
+
   # ---------------------------------------------------------------------------
   # Runtime lanes (P3): prove the SHIPPED dist actually runs on each claimed runtime.
   # Each lane builds first (the smoke imports packages/ecsia/dist), then runs the SAME
