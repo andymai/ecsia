@@ -1,6 +1,6 @@
 {
   "name": "@ecsia/three",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "three.js bindings for ecsia: drive Object3D transforms and instanced meshes from components.",
   "keywords": [
     "ecs",
