@@ -12,8 +12,8 @@
 // to move.
 
 export { WorldProvider, useWorld } from './world.js'
-export type { EcsiaWorld, EntityRefLike, WorldProviderProps } from './world.js'
+export type { EcsiaWorld, EntityRefLike, RelationLike, RelationsLike, WorldProviderProps } from './world.js'
 
-export { useQuery, useQueryFirst, useComponent, useHas, useComponentEffect, useObserve } from './hooks.js'
+export { useQuery, useQueryFirst, useComponent, useHas, useTarget, useTargets, useComponentEffect, useObserve } from './hooks.js'
 
 export type { ComponentSnapshot } from './snapshot.js'

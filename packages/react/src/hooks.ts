@@ -13,8 +13,8 @@ import type { ComponentDef, EntityHandle, QueryTerm, Schema } from '@ecsia/schem
 import { bridgeFor } from './bridge.js'
 import type { QueryLike } from './bridge.js'
 import type { ComponentSnapshot } from './snapshot.js'
-import { useWorld } from './world.js'
-import type { EntityRefLike } from './world.js'
+import { useRelationsRuntime, useWorld } from './world.js'
+import type { EntityRefLike, RelationLike } from './world.js'
 
 /**
  * The handles currently matching `terms` (the full query DSL: `read`/`write`/`has`/`without`/
@@ -52,6 +52,30 @@ export function useComponent<const C extends ComponentDef<Schema>>(
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot) as
     | ComponentSnapshot<C>
     | undefined
+}
+
+/**
+ * The current targets of `relation` on `handle` — every entity this subject points at, as stable
+ * handles (valid React keys). Re-renders ONLY when the pair membership for this (subject, relation)
+ * changes: a pair added or removed (explicit, exclusive retarget, or cascade teardown). Values are
+ * recomputed from `rel.targetsOf` at snapshot time — always-current truth, identity-stable when the
+ * set is unchanged. Requires the relations runtime on the provider:
+ * `<WorldProvider world={world} relations={rel}>`.
+ */
+export function useTargets(handle: EntityHandle, relation: RelationLike): readonly EntityHandle[] {
+  const world = useWorld()
+  const rel = useRelationsRuntime()
+  const store = bridgeFor(world).targetsStore(rel, handle, relation)
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot)
+}
+
+/**
+ * The single target of `relation` on `handle`, or `undefined` when none — the exclusive-relation
+ * ergonomic (a ChildOf parent, a Targeting victim). Same subscription and re-render cut as
+ * {@link useTargets}; for a non-exclusive relation this is its first target.
+ */
+export function useTarget(handle: EntityHandle, relation: RelationLike): EntityHandle | undefined {
+  return useTargets(handle, relation)[0]
 }
 
 /**
@@ -104,8 +128,12 @@ export function useObserve(
   })
   // Term factories return a fresh object per render; key the effect on the term's signature so an
   // equivalent term does not churn the registration. Keyed by component id, not name — two defs
-  // may share a name, and ids are world-assigned and stable by the time a hook can run.
-  const signature = `${term.kind}:${term.components.map((c) => c.id).join(',')}`
+  // may share a name, and ids are world-assigned and stable by the time a hook can run. Pair terms
+  // (onPairAdded/onPairRemoved) key by relation id.
+  const signature =
+    'relationId' in term
+      ? `${term.kind}:rel:${term.relationId}`
+      : `${term.kind}:${term.components.map((c) => c.id).join(',')}`
   useEffect(() => {
     const handle: ObserverHandle = world.observe(term, (e, ctx) => {
       handlerRef.current(e, ctx)

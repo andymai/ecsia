@@ -19,12 +19,15 @@
 // on the happy path (useSyncExternalStore treats a fresh object per call as an endless change).
 
 import { onAdd, onChange, onRemove } from '@ecsia/core'
-import type { ObserverContext, ObserverHandle } from '@ecsia/core'
+import type { ObserverContext, ObserverHandle, PairObserverTerm } from '@ecsia/core'
 import type { ComponentDef, EntityHandle, QueryTerm, Schema } from '@ecsia/schema'
 import { computeSnapshot, snapshotsEqual } from './snapshot.js'
-import type { EcsiaWorld } from './world.js'
+import type { EcsiaWorld, RelationLike, RelationsLike } from './world.js'
 
 type Kind = 'add' | 'remove' | 'change'
+type PairKind = 'pair-add' | 'pair-remove'
+
+const PAIR_KINDS: readonly PairKind[] = ['pair-add', 'pair-remove']
 
 const VALUE_KINDS: readonly Kind[] = ['add', 'remove', 'change']
 const PRESENCE_KINDS: readonly Kind[] = ['add', 'remove']
@@ -283,6 +286,82 @@ export class QueryStore {
   }
 }
 
+/**
+ * The targets of one relation on one subject — `useTargets` (all) and `useTarget` (first) share it,
+ * mirroring ComponentStore's contract: handles in, value snapshots out, re-render only when the
+ * pair MEMBERSHIP for this (subject, relation) actually changes (set-compared, identity-stable).
+ * Subscribes through the bridge's refcounted relation-level pair observers; recomputes from
+ * rel.targetsOf — always-current truth, never decoded from the event.
+ */
+export class TargetsStore {
+  readonly #bridge: ReactBridge
+  readonly #rel: RelationsLike
+  readonly #relation: RelationLike
+  readonly watchedHandle: EntityHandle
+  readonly watchedIndex: number
+  #dirty = true
+  #targets: readonly EntityHandle[] = EMPTY_HANDLES
+  #active = false
+  readonly #listeners = new Set<() => void>()
+
+  constructor(bridge: ReactBridge, world: EcsiaWorld, rel: RelationsLike, handle: EntityHandle, relation: RelationLike) {
+    this.#bridge = bridge
+    this.#rel = rel
+    this.#relation = relation
+    this.watchedHandle = handle
+    this.watchedIndex = world.decodeHandle(handle).index
+  }
+
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.#listeners.add(listener)
+    if (!this.#active) {
+      this.#active = true
+      this.#dirty = true
+      this.#bridge.__registerTargetsStore(this.#relation, this.watchedHandle, this)
+      this.#bridge.__activatePairWatcher(this.#relation, this)
+    }
+    return () => {
+      this.#listeners.delete(listener)
+      if (this.#listeners.size === 0 && this.#active) {
+        this.#active = false
+        this.#bridge.__deactivatePairWatcher(this.#relation, this)
+        this.#bridge.__evictTargetsStore(this.#relation, this.watchedHandle, this)
+      }
+    }
+  }
+
+  #compute(): readonly EntityHandle[] {
+    const next: EntityHandle[] = []
+    for (const t of this.#rel.targetsOf(this.watchedHandle, this.#relation)) next.push(t)
+    return next.length === 0 ? EMPTY_HANDLES : next
+  }
+
+  readonly getSnapshot = (): readonly EntityHandle[] => {
+    if (this.#dirty) {
+      const next = this.#compute()
+      if (!sameMembership(this.#targets, next)) this.#targets = next
+      this.#dirty = false
+    }
+    return this.#targets
+  }
+
+  readonly getServerSnapshot = (): readonly EntityHandle[] => {
+    const next = this.#compute()
+    if (!sameMembership(this.#targets, next)) this.#targets = next
+    return this.#targets
+  }
+
+  onPairEvent(kind: PairKind, eventHandle: EntityHandle): void {
+    // pair-add describes the slot's CURRENT occupant; a different handle means a recycled index
+    // (this watcher's subject already got its pair-remove wake-ups when its pairs tore down).
+    // pair-remove wakes by index alone — the dying subject's generation is already bumped.
+    if (kind === 'pair-add' && eventHandle !== this.watchedHandle) return
+    if (this.#dirty) return
+    this.#dirty = true
+    for (const listener of this.#listeners) listener()
+  }
+}
+
 class EffectWatcher implements EntityWatcher {
   readonly #world: EcsiaWorld
   readonly #def: ComponentDef<Schema>
@@ -331,6 +410,11 @@ export class ReactBridge {
   readonly #componentStores = new Map<ComponentDef<Schema>, Map<EntityHandle, ComponentStore>>()
   readonly #hasStores = new Map<ComponentDef<Schema>, Map<EntityHandle, HasStore>>()
   readonly #queryStores = new Map<QueryLike, QueryStore>()
+  // Relation-level pair plumbing, keyed by relation id (relation defs are runtime-minted objects;
+  // the numeric id is the stable identity the observer terms use anyway).
+  readonly #pairObservers = new Map<number, Map<PairKind, ObserverCell>>()
+  readonly #pairWatchers = new Map<number, Map<number, Set<TargetsStore>>>()
+  readonly #targetsStores = new Map<number, Map<EntityHandle, TargetsStore>>()
 
   constructor(world: EcsiaWorld) {
     this.#world = world
@@ -351,6 +435,12 @@ export class ReactBridge {
 
   queryStore(query: QueryLike): QueryStore {
     return this.#queryStores.get(query) ?? new QueryStore(this, query)
+  }
+
+  targetsStore(rel: RelationsLike, handle: EntityHandle, relation: RelationLike): TargetsStore {
+    return (
+      this.#targetsStores.get(relation.id)?.get(handle) ?? new TargetsStore(this, this.#world, rel, handle, relation)
+    )
   }
 
   /** Register a useComponentEffect callback; returns its dispose. Not shared — one per hook. */
@@ -467,10 +557,54 @@ export class ReactBridge {
     if (this.#queryStores.get(query) === store) this.#queryStores.delete(query)
   }
 
+  __registerTargetsStore(relation: RelationLike, handle: EntityHandle, store: TargetsStore): void {
+    let byHandle = this.#targetsStores.get(relation.id)
+    if (byHandle === undefined) {
+      byHandle = new Map()
+      this.#targetsStores.set(relation.id, byHandle)
+    }
+    if (!byHandle.has(handle)) byHandle.set(handle, store)
+  }
+
+  __evictTargetsStore(relation: RelationLike, handle: EntityHandle, store: TargetsStore): void {
+    const byHandle = this.#targetsStores.get(relation.id)
+    if (byHandle?.get(handle) === store) {
+      byHandle.delete(handle)
+      if (byHandle.size === 0) this.#targetsStores.delete(relation.id)
+    }
+  }
+
+  __activatePairWatcher(relation: RelationLike, store: TargetsStore): void {
+    for (const kind of PAIR_KINDS) this.#acquirePair(relation.id, kind)
+    let byIndex = this.#pairWatchers.get(relation.id)
+    if (byIndex === undefined) {
+      byIndex = new Map()
+      this.#pairWatchers.set(relation.id, byIndex)
+    }
+    let set = byIndex.get(store.watchedIndex)
+    if (set === undefined) {
+      set = new Set()
+      byIndex.set(store.watchedIndex, set)
+    }
+    set.add(store)
+  }
+
+  __deactivatePairWatcher(relation: RelationLike, store: TargetsStore): void {
+    const byIndex = this.#pairWatchers.get(relation.id)
+    const set = byIndex?.get(store.watchedIndex)
+    if (byIndex !== undefined && set !== undefined) {
+      set.delete(store)
+      if (set.size === 0) byIndex.delete(store.watchedIndex)
+      if (byIndex.size === 0) this.#pairWatchers.delete(relation.id)
+    }
+    for (const kind of PAIR_KINDS) this.#releasePair(relation.id, kind)
+  }
+
   /** Live core-observer count — the dispose-accounting probe the leak tests assert on. */
   __liveObserverCount(): number {
     let n = 0
     for (const kinds of this.#observers.values()) n += kinds.size
+    for (const kinds of this.#pairObservers.values()) n += kinds.size
     return n
   }
 
@@ -479,6 +613,7 @@ export class ReactBridge {
     let n = this.#queryStores.size
     for (const byHandle of this.#componentStores.values()) n += byHandle.size
     for (const byHandle of this.#hasStores.values()) n += byHandle.size
+    for (const byHandle of this.#targetsStores.values()) n += byHandle.size
     return n
   }
 
@@ -513,6 +648,47 @@ export class ReactBridge {
     cell.handle.dispose()
     kinds.delete(kind)
     if (kinds.size === 0) this.#observers.delete(def)
+  }
+
+  #acquirePair(relationId: number, kind: PairKind): void {
+    let kinds = this.#pairObservers.get(relationId)
+    if (kinds === undefined) {
+      kinds = new Map()
+      this.#pairObservers.set(relationId, kinds)
+    }
+    let cell = kinds.get(kind)
+    if (cell === undefined) {
+      // The term object is constructed literally — same shape onPairAdded/onPairRemoved produce —
+      // so the binding needs no @ecsia/relations import (it has only the numeric relation id).
+      const term: PairObserverTerm = { kind, relationId }
+      cell = {
+        refs: 0,
+        handle: this.#world.observe(term, (e) => {
+          this.#dispatchPair(kind, relationId, e.handle)
+        }),
+      }
+      kinds.set(kind, cell)
+    }
+    cell.refs += 1
+  }
+
+  #releasePair(relationId: number, kind: PairKind): void {
+    const kinds = this.#pairObservers.get(relationId)
+    const cell = kinds?.get(kind)
+    if (kinds === undefined || cell === undefined) return
+    cell.refs -= 1
+    if (cell.refs > 0) return
+    cell.handle.dispose()
+    kinds.delete(kind)
+    if (kinds.size === 0) this.#pairObservers.delete(relationId)
+  }
+
+  #dispatchPair(kind: PairKind, relationId: number, subjectHandle: EntityHandle): void {
+    const index: number = this.#world.decodeHandle(subjectHandle).index
+    const watchers = this.#pairWatchers.get(relationId)?.get(index)
+    if (watchers !== undefined) {
+      for (const store of watchers) store.onPairEvent(kind, subjectHandle)
+    }
   }
 
   #dispatch(kind: Kind, def: ComponentDef<Schema>, eventHandle: EntityHandle, ctx: ObserverContext): void {
