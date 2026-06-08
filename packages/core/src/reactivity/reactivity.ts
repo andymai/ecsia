@@ -375,6 +375,11 @@ export class Reactivity {
     return this.#observers.hasKindFor('remove', componentId)
   }
 
+  /** Any remove-observer at all — arms the deferred-despawn window (numeric location stash). */
+  get hasAnyRemoveObserver(): boolean {
+    return this.#observers.hasAnyRemoveObserver
+  }
+
   // --- query-flavor hooks ---------------------
 
   /**
