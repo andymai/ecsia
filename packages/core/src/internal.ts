@@ -104,7 +104,7 @@ export type {
   ObserverDeps,
 } from './reactivity/index.js'
 
-export { QueryEngine, LiveQuery, SparseSetU32, compileQuery } from './query/index.js'
+export { QueryEngine, LiveQuery, SparseSetU32, compileQuery, analyzeEachBody } from './query/index.js'
 export type {
   QueryEngineDeps,
   LiveQueryDeps,
@@ -117,6 +117,9 @@ export type {
   RowFilterTerm,
   ValueRole,
   Word,
+  EachPlan,
+  EachViewSpec,
+  EachAnalyzeDeps,
 } from './query/index.js'
 
 // Low-level schema inference helpers re-exported through core (not on the curated public surface; the

@@ -138,6 +138,41 @@ export function makeEcsiaPinnedIter(n: number): IterCase {
   }
 }
 
+// The compiled-ergonomic variant: the SAME readable `.each` body the `ecsia` bucket runs, but handed to
+// q.compile, which rewrites `e.<comp>.<field>` to direct column indexing and codegens the bindColumns-
+// shape loop. It should land near ecsia-pinned while keeping the proxy-path syntax — the point of the
+// bucket is to show the ergonomic path no longer pays the per-row proxy tax.
+export function makeEcsiaCompiledIter(n: number): IterCase {
+  const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
+  const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
+  const world = createWorld({ components: [Position, Velocity], maxEntities: nextPow2(n) })
+  let first = 0 as unknown as ReturnType<typeof world.spawnWith>
+  for (let i = 0; i < n; i++) {
+    const h = world.spawnWith(Position, Velocity)
+    if (i === 0) first = h
+    const v = world.entity(h).write(Velocity) as { dx: number; dy: number }
+    v.dx = 1
+    v.dy = 0.5
+  }
+  const q = world.query(write(Position), write(Velocity)) as unknown as {
+    compile<Ctx>(b: (e: { position: { x: number; y: number }; velocity: { dx: number; dy: number } }, ctx: Ctx) => void): (ctx: Ctx) => void
+  }
+  const run = q.compile<{ dt: number }>((e, ctx) => {
+    e.position.x += e.velocity.dx * ctx.dt
+    e.position.y += e.velocity.dy * ctx.dt
+  })
+  const ctx = { dt: DT }
+  return {
+    name: 'ecsia-compiled',
+    step() {
+      run(ctx)
+    },
+    sampleX() {
+      return (world.entity(first).read(Position) as { x: number }).x
+    },
+  }
+}
+
 interface MiniEntity {
   position: { x: number; y: number }
   velocity: { dx: number; dy: number }

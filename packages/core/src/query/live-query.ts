@@ -26,8 +26,46 @@ import type { CompiledQuery, CompiledValueTerm, RowFilterTerm } from './compile.
 import type { SparseSetU32 } from './sparse-set.js'
 import { buildPinnedRunner } from './codegen.js'
 import type { PinnedFactory } from './codegen.js'
+import { analyzeEachBody } from './compile-each.js'
 
 const NO_HANDLE = 0xffffffff as EntityHandle
+
+/** The reactivity write-path seam a compiled loop needs, read off an accessor singleton's binding. */
+interface WorldSeam {
+  trackWrite(index: number, componentId: number, fieldIndex?: number): void
+  handleIndex(handle: EntityHandle): number
+  readonly tracking: { readonly active: boolean }
+}
+
+/** Stand-in seam for a read-only compiled body (it is never called; keeps the runner total). */
+const NOOP_SEAM: WorldSeam = {
+  trackWrite: () => {},
+  handleIndex: (h) => h as unknown as number,
+  tracking: { active: false },
+}
+
+/** The bundle a generated `compile` factory destructures: bound columns + the reactivity seam + count. */
+interface CompileArgs {
+  readonly views: readonly TypedArray[]
+  readonly arch: Archetype
+  readonly trackWrite: (index: number, componentId: number, fieldIndex?: number) => void
+  readonly tracking: { readonly active: boolean }
+  readonly handleIndex: (handle: EntityHandle) => number
+  readonly meta: { readonly count: number }
+}
+
+/** Recover the ComponentDef a query term carries (`write(C)`/`read(C)` wrap it as `.c`; a bare def is C). */
+function termComponentDef(t: unknown): ComponentDef<Schema> | null {
+  if (t === null || typeof t !== 'object') return null
+  const wrapped = (t as { c?: unknown }).c
+  if (wrapped !== undefined && wrapped !== null && (wrapped as { fields?: unknown }).fields !== undefined) {
+    return wrapped as ComponentDef<Schema>
+  }
+  if ((t as { fields?: unknown }).fields !== undefined && typeof (t as { name?: unknown }).name === 'string') {
+    return t as ComponentDef<Schema>
+  }
+  return null
+}
 
 /** The pooled element handed to each callback: value props (per value term) + the entity handle. */
 type PooledElement = Record<string, unknown> & { handle: EntityHandle }
@@ -585,6 +623,201 @@ export class LiveQuery {
         if (b.arch.count !== 0) b.runner(ctx)
       }
     }
+  }
+
+  /**
+   * Compile an ergonomic `.each` body into the fast column loop `bindColumns` runs — without you naming
+   * columns or restating the math. `compile` reads the callback's own source, rewrites `e.<comp>.<field>`
+   * to direct typed-array indexing, and codegens a specialized per-archetype loop. The result keeps the
+   * readable accessor syntax but lands near `eachChunk` (~1.5 ns/entity) instead of paying the per-row
+   * proxy tax (~10 ns/entity).
+   *
+   * Unlike `bindColumns`, this path PRESERVES reactivity: a component the body writes is recorded in the
+   * write log exactly as the accessor setter would, so `.changed()` filters and observers see it — for
+   * free when no consumer is registered (the same gate the accessor uses), at write-log cost when one is.
+   *
+   * It is a pure SPEEDUP: the analyzer is conservative and falls back to the unchanged proxy `.each` (so
+   * results are always identical) whenever it cannot prove the rewrite safe — a non-straight-line body
+   * (`if`/`?`/`&&`/`return`/loops/nested fns), a string/comment/template, a non-numeric-scalar field
+   * (vec/bool/eid/bigint/rich), a component the query does not REQUIRE, any `e` use other than
+   * `e.<comp>.<field>`, a per-row `ctx` write, a row-filtered query, or a runtime that blocks `new
+   * Function` (strict CSP). Call it ONCE and reuse the returned runner per frame.
+   *
+   * ```ts
+   * const run = q.compile<{ dt: number }>((e, ctx) => {
+   *   e.position.x += e.velocity.dx * ctx.dt
+   *   e.position.y += e.velocity.dy * ctx.dt
+   * })
+   * run({ dt: 1 / 60 }) // per frame — same result as q.each(e => ...), faster
+   * ```
+   */
+  compile<Ctx = void>(body: (e: PooledElement, ctx: Ctx) => void): (ctx: Ctx) => void {
+    const proxyRun = (ctx: Ctx): void => this.each((e) => body(e, ctx))
+    // A flat compiled loop cannot skip rows; row-filtered queries stay on the proxy (which can).
+    if (this.compiled.rowFilters.length !== 0) return proxyRun
+
+    const valueKeys = new Set(this.compiled.valueTerms.map((vt) => vt.key))
+    const defByName = new Map<string, ComponentDef<Schema>>()
+    for (const t of this.terms) {
+      const def = termComponentDef(t)
+      if (def !== null && valueKeys.has(def.name)) defByName.set(def.name, def)
+    }
+    const requiredIds = this.#requiredComponentIds()
+    const plan = analyzeEachBody(body as unknown as (...a: never[]) => unknown, {
+      defByName: (n) => defByName.get(n),
+      idOf: (d) => ((d.id as number) >= 0 ? (d.id as number) : undefined),
+      isRequired: (d) => requiredIds.has(d.id as number),
+    })
+    if (plan === null) return proxyRun
+
+    // Probe up front, then SCRATCH pre-flight, both gating a proxy fallback:
+    //  1. compile the generated source — a transform bug that produced malformed code (or a runtime that
+    //     blocks `new Function`) throws here, deterministically.
+    //  2. run the runner ONCE on 1-row throwaway typed arrays with the tracked path forced on. A body that
+    //     is not self-contained — it closes over an outer variable (`const G = 9.8; … += G`) — throws a
+    //     ReferenceError here, where it can be caught and demoted to the proxy, instead of crashing the
+    //     first real frame (or, worse, half-integrating a row before throwing). The scratch arrays mean a
+    //     mutating body can never touch real data during the probe.
+    let makeFactory: () => (args: CompileArgs) => (ctx: Ctx) => void
+    try {
+      makeFactory = () =>
+        new Function('return (' + plan.factorySource + ')')() as (args: CompileArgs) => (ctx: Ctx) => void
+      const scratchViews = plan.specs.map((s) => {
+        const fd = (s.def.fields as readonly FieldDescriptor[]).find((f) => f.name === s.field)
+        const Ctor = fd?.ctor ?? Float64Array
+        return new Ctor(1) as TypedArray
+      })
+      const probeArch = { rows: new Uint32Array(1), count: 1 } as unknown as Archetype
+      const probeArgs: CompileArgs = {
+        views: scratchViews,
+        arch: probeArch,
+        trackWrite: () => {},
+        tracking: { active: true },
+        handleIndex: () => 0,
+        meta: { count: 1 },
+      }
+      makeFactory()(probeArgs)(new Proxy({}, { get: () => 1 }) as Ctx)
+    } catch {
+      return proxyRun
+    }
+
+    interface CompiledBinding {
+      readonly arch: Archetype
+      readonly cols: readonly Column[]
+      views: readonly TypedArray[]
+      runner: (ctx: Ctx) => void
+      readonly meta: { readonly count: number }
+    }
+
+    let seam: WorldSeam | null = null
+    const seamOf = (arch: Archetype): WorldSeam => {
+      if (seam !== null) return seam
+      for (const spec of plan.specs) {
+        const cs = arch.columnSets.get(spec.def.id as ComponentId)
+        const w = cs && (cs.accessor as { __binding?: { world?: WorldSeam } }).__binding?.world
+        if (w) return (seam = w)
+      }
+      // Read-only bodies never call the seam; a no-op keeps the runner total even if one is unreachable.
+      return (seam = NOOP_SEAM)
+    }
+
+    const argsFor = (arch: Archetype, views: readonly TypedArray[], meta: { readonly count: number }): CompileArgs => {
+      const s = seamOf(arch)
+      return { views, arch, trackWrite: s.trackWrite.bind(s), tracking: s.tracking, handleIndex: s.handleIndex.bind(s), meta }
+    }
+
+    const byArch = new Map<number, CompiledBinding>()
+    let bindings: CompiledBinding[] = []
+    let coldMatched: Archetype[] = []
+    let boundMatchCount = -1
+
+    const colsOf = (arch: Archetype): Column[] =>
+      plan.specs.map((spec) => {
+        const cs = arch.columnSets.get(spec.def.id as ComponentId)
+        const col = cs && cs.columns[spec.colIndex]
+        if (!col) throw new Error(`compile: missing column for '${spec.def.name}.${spec.field}'`)
+        return col
+      })
+
+    const makeBinding = (arch: Archetype): CompiledBinding => {
+      const cols = colsOf(arch)
+      const views = cols.map((c) => c.view)
+      const meta = {
+        get count(): number {
+          return arch.count
+        },
+      }
+      return { arch, cols, views, runner: makeFactory()(argsFor(arch, views, meta)), meta }
+    }
+
+    const reinvoke = (b: CompiledBinding): void => {
+      b.views = b.cols.map((c) => c.view)
+      b.runner = makeFactory()(argsFor(b.arch, b.views, b.meta))
+    }
+
+    const rebuild = (): void => {
+      const archs = this.matchingArchetypes
+      const nextBindings: CompiledBinding[] = []
+      const nextCold: Archetype[] = []
+      for (let ai = 0; ai < archs.length; ai++) {
+        const arch = archs[ai] as Archetype
+        if (arch.cold) {
+          nextCold.push(arch)
+          continue
+        }
+        let b = byArch.get(arch.id as number)
+        if (b === undefined) {
+          b = makeBinding(arch)
+          byArch.set(arch.id as number, b)
+        }
+        nextBindings.push(b)
+      }
+      bindings = nextBindings
+      coldMatched = nextCold
+      boundMatchCount = archs.length
+    }
+
+    rebuild()
+
+    // Cold archetypes have no contiguous columns: the compiled loop cannot visit them, so a query that
+    // fragments into cold storage runs those rows through the proxy (correctness over the fast path).
+    return (ctx: Ctx): void => {
+      if (this.matchingArchetypes.length !== boundMatchCount) {
+        rebuild()
+      } else {
+        for (let i = 0; i < coldMatched.length; i++) {
+          if (!(coldMatched[i] as Archetype).cold) {
+            rebuild()
+            break
+          }
+        }
+      }
+      const bs = bindings
+      for (let bi = 0; bi < bs.length; bi++) {
+        const b = bs[bi] as CompiledBinding
+        const cols = b.cols
+        const views = b.views
+        for (let i = 0; i < cols.length; i++) {
+          if ((cols[i] as Column).view !== views[i]) {
+            reinvoke(b)
+            break
+          }
+        }
+        if (b.arch.count !== 0) b.runner(ctx)
+      }
+      for (let i = 0; i < coldMatched.length; i++) {
+        const arch = coldMatched[i] as Archetype
+        if (arch.cold) this.#eachCold(arch, this.#hotBinding(), (e) => body(e, ctx))
+      }
+    }
+  }
+
+  /** Required component ids: single-bit with-words + non-negated residual terms (the bindColumns rule). */
+  #requiredComponentIds(): Set<number> {
+    const ids = new Set<number>()
+    for (const w of this.compiled.withWords) ids.add(w.wordIndex * 32 + (31 - Math.clz32(w.mask)))
+    for (const r of this.compiled.residualWith) if (!r.negate) ids.add(r.componentId as number)
+    return ids
   }
 
   *[Symbol.iterator](): Iterator<PooledElement> {

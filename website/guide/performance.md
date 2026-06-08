@@ -21,7 +21,9 @@ adds each entity's `Velocity` to its `Position`, one frame per timed op. The inn
 allocation-free — it creates no objects while running — so the measurement is storage and iteration
 cost, not garbage collection.
 
-- **ecsia `.each`** — the ergonomic accessor path: per-row proxy objects, write-log aware.
+- **ecsia `.each`** — the ergonomic accessor path: per-row proxy objects, write-log aware. Its readable
+  `e.position.x += …` body can be compiled to the fast column loop with
+  [`compile`](#compile-the-ergonomic-path-compile) — same syntax, near-`eachChunk` speed.
 - **ecsia `eachChunk`** — the opt-in column cursor. ecsia stores each component field in its own
   contiguous array (a column), a layout called Structure-of-Arrays (SoA). `eachChunk` hands you those
   raw typed-array columns plus a row span, and the loop indexes `Float32Array` directly — bypassing
@@ -159,6 +161,51 @@ The trade-offs are the same as `eachChunk`: writes through the bound arrays bypa
 `.changed()` filters and observers will not see them, and structural changes during `run()` follow
 the same collect-first, mutate-after rule as every other loop.
 
+## Compile the ergonomic path: `compile`
+
+`bindColumns` is fast but makes you name every column and rewrite your loop against raw arrays.
+`compile` gets the same speed from the **readable `.each` body you would write anyway**: hand it a
+callback, and it reads that callback's source, rewrites each `e.<component>.<field>` to direct column
+indexing, and codegens the same specialized per-archetype loop. The result lands near `eachChunk` —
+roughly **6× faster than the proxy `.each`** — while you keep writing `e.position.x += …`.
+
+```ts
+import { createWorld, defineComponent, write, read } from 'ecsia'
+
+const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
+const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
+const world = createWorld({ components: [Position, Velocity], maxEntities: 1 << 16 })
+
+const q = world.query(write(Position), read(Velocity))
+
+const run = q.compile<{ dt: number }>((e, ctx) => {
+  e.position.x += e.velocity.dx * ctx.dt
+  e.position.y += e.velocity.dy * ctx.dt
+})
+
+run({ dt: 1 / 60 }) // call once per frame
+```
+
+Two things set it apart from `bindColumns`:
+
+- **It preserves reactivity.** Unlike `bindColumns` and `eachChunk`, a component your body writes is
+  recorded in the write log exactly as the accessor setter would record it, so `.changed()` filters and
+  observers still fire. That bookkeeping is free when no consumer is registered (the same gate the
+  accessor uses) and costs the write-log push only when one is — so `compile` is the fast path you can
+  reach for *even when you depend on change tracking*.
+- **It is a pure speedup that can never change your result.** The analyzer is deliberately
+  conservative: it compiles only straight-line numeric-scalar bodies, and for anything it cannot prove
+  safe it transparently runs your unchanged callback through the normal `.each`. So a body with control
+  flow (`if`/`?`/`&&`/`return`/a loop/a nested function), a string or comment, a non-numeric-scalar
+  field (`vec`/`bool`/`eid`/`string`/object), a component the query does not *require*, any use of `e`
+  other than `e.<component>.<field>`, a per-row write to `ctx`, a row-filtered query, or a runtime that
+  blocks `new Function` (a strict Content-Security-Policy) all keep working — they just run the proxy
+  loop. A property test asserts the compiled loop is byte-identical to `.each` under random spawn /
+  despawn / write / growth churn, with and without a change consumer.
+
+Call `compile` once and reuse the returned `run` every frame, the same as `bindColumns`. Structural
+changes during `run()` follow the same collect-first, mutate-after rule as every other loop.
+
 ## Reproduce
 
 ```bash
@@ -190,9 +237,9 @@ numbers still come from `bench:report` on a fixed machine.
 
 ## Bundle size
 
-The kernel — typed data, systems, queries, and the scheduler — is about **40 KB min+gzip**; just a
-world and components (`@ecsia/core` alone) is ~30 KB, and importing *everything* from the umbrella is
-~55 KB. ecsia is batteries-included, so it is larger than a minimal core like bitECS (~5 KB); the
+The kernel — typed data, systems, queries, and the scheduler — is about **42 KB min+gzip**; just a
+world and components (`@ecsia/core` alone) is ~32 KB, and importing *everything* from the umbrella is
+~57 KB. ecsia is batteries-included, so it is larger than a minimal core like bitECS (~5 KB); the
 packages are `sideEffects: false`, so a bundler ships only the subsystems you import — relations,
 serialization, and topics drop unless used. A CI budget (`pnpm size`) holds these numbers in place so
 a change can't quietly inflate the install.
