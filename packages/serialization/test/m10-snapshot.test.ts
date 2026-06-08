@@ -106,3 +106,29 @@ describe('snapshot — relations', () => {
     expect(relDst.getPair(nAtk, DamageDst, nV1).read()['amount']).toBe(50)
   })
 })
+
+// A snapshot taken MID observer-window (a deferred despawn left a held dead row above count, then a
+// same-archetype re-mint forced an allocRow eviction) must serialize ONLY the live [0,count) — the
+// held dead row must never round-trip as a live entity. Pins the dense-storage hold's snapshot
+// exclusion (the [0,count) iteration the serializer relies on).
+describe('snapshot — deferred-dead-row hold (mid observer-window)', () => {
+  it('excludes held dead rows from the snapshot', () => {
+    const D = defs()
+    const src = createWorld({ components: [D.Position, D.Velocity, D.Target, D.Tag] })
+    src.observe(({ kind: 'remove', components: [D.Position] } as never), () => {}) // arm the window
+    const t1 = src.spawnWith([D.Position, { x: 11, y: 0 }] as never)
+    src.frameReset()
+    src.observerDrain()
+
+    src.frameReset()
+    src.despawn(t1) // deferred → t1 held above count
+    src.spawnWith([D.Position, { x: 99, y: 0 }] as never) // same arch → allocRow evicts the held row
+    // Snapshot NOW, before the drain releases the held row:
+    const bytes = createSnapshotSerializer(src).snapshotCopy()
+
+    const R = defs()
+    const dst = createWorld({ components: [R.Position, R.Velocity, R.Target, R.Tag] })
+    const result = createSnapshotDeserializer(dst).load(bytes)
+    expect(result.entitiesCreated).toBe(1) // ONLY the live x=99 entity, never the held dead t1
+  })
+})

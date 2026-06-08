@@ -67,6 +67,12 @@ export interface StorageDeps {
   tick(): number
   defOf(c: ComponentId): ComponentDef<Schema> | undefined
   handleIndex(handle: number): number
+  /**
+   * A held deferred-dead row was relocated (allocRow evicting it to keep [0,count) dense): tell the
+   * observer-window location stash its new row, so a dead-tenant ref still resolves the right slot.
+   * Optional — a query-less harness omits it (no observer window to update).
+   */
+  relocateHeld?(handle: number, archId: number, newRow: number): void
 }
 
 export class ArchetypeStore {
@@ -75,6 +81,8 @@ export class ArchetypeStore {
   readonly #byHash = new Map<number, Archetype[]>()
   #hotCount = 0
   readonly cold: ColdStore = makeColdStore()
+  /** Archetypes with held > 0 — the release set (avoids scanning byId at flushPending). */
+  readonly #archesWithHeld = new Set<Archetype>()
   readonly #initialRows: number
   /** archetypeCreated subscribers: tested against each new archetype once. */
   readonly #onCreated: Array<(arch: Archetype) => void> = []
@@ -188,12 +196,40 @@ export class ArchetypeStore {
   /** Reserve a row in `arch` for `handle`; records the occupant. Caller writes column values. */
   allocRow(arch: Archetype, handle: number): number {
     if (arch.cold) return this.#coldAllocRow(arch, handle)
-    this.#ensureRowCapacity(arch, arch.count + 1)
+    if (arch.held > 0) {
+      // The alloc slot `count` is occupied by a held deferred-dead row. Evict it to the top of the
+      // held region (above all held rows) to free `count` while keeping the held region contiguous
+      // — [0,count) stays dense and the dead row's data survives until flushPending.
+      const evict = arch.count
+      const top = arch.count + arch.held // first free slot above the held region
+      this.#ensureRowCapacity(arch, top + 1)
+      for (const cs of arch.columnSets.values()) {
+        for (const col of cs.columns) copyRowWithinColumn(col, evict, top)
+      }
+      const deadHandle = arch.rows[evict] as number
+      arch.rows[top] = deadHandle >>> 0
+      // The held region shifts up by one as `count` advances below; its size (held) is unchanged.
+      this.#deps.relocateHeld?.(deadHandle, arch.id as number, top)
+    } else {
+      this.#ensureRowCapacity(arch, arch.count + 1)
+    }
     const row = arch.count
     arch.rows[row] = handle >>> 0
     arch.count = row + 1
     arch.lastAccessTick = this.#deps.tick()
     return row
+  }
+
+  /**
+   * Release every archetype's held deferred-dead rows back to the allocatable region. Called at the
+   * observer drain's flushPending (after onRemove handlers have read the dying values): held → 0, so
+   * the next allocRow reuses [count, …) and overwrites the abandoned dead data. Iteration is
+   * unaffected (the rows were always above count); only allocation reclaims them.
+   */
+  releaseHeldRows(): void {
+    if (this.#archesWithHeld.size === 0) return
+    for (const arch of this.#archesWithHeld) arch.held = 0
+    this.#archesWithHeld.clear()
   }
 
   #coldAllocRow(arch: Archetype, handle: number): number {
@@ -271,6 +307,26 @@ export class ArchetypeStore {
       }
     }
     arch.count = last
+    if (relocateDying !== undefined) {
+      // HOLD the dying row (now at `last` = the new count) above the live region until flushPending,
+      // so a same-archetype re-mint before the drain cannot overwrite its column data. The dying row
+      // abuts any existing held rows (they sit at [oldCount, …)); held stays contiguous above count.
+      arch.held += 1
+      this.#archesWithHeld.add(arch)
+    } else if (arch.held > 0) {
+      // A NON-deferred removeRow (migration-out, or a non-deferred despawn) lowered count but did not
+      // add a held row, so the held region [oldCount, oldCount+held) no longer abuts the new count —
+      // the vacated slot `count` sits below it. Slide the TOP held row down into that slot (O(1)) so
+      // held stays contiguous at [count, count+held); otherwise the next allocRow eviction would copy
+      // the stale vacated slot over a real held dead row and corrupt it.
+      const top = arch.count + arch.held // physical top held row (one above the vacated slot's region)
+      for (const cs of arch.columnSets.values()) {
+        for (const col of cs.columns) copyRowWithinColumn(col, top, arch.count)
+      }
+      const moved = arch.rows[top] as number
+      arch.rows[arch.count] = moved >>> 0
+      this.#deps.relocateHeld?.(moved, arch.id as number, arch.count)
+    }
   }
 
   // ---
