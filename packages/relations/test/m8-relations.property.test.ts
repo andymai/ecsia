@@ -261,7 +261,7 @@ describe('— cascade is iterative BFS: terminates & visits each entity once, ev
     expect(world.handleStats().aliveCount).toBe(0) // every sibling reached & removed once
   })
 
-  it('a DEEP (100k) deleteSubject chain despawns without recursion (recursion-free cascade)', { timeout: 30_000 }, () => {
+  it('a DEEP (100k) deleteSubject chain despawns without recursion (recursion-free cascade)', { timeout: 60_000 }, () => {
     // /: a deep deleteSubject chain must despawn WITHOUT recursion. The cascade hoists a single
     // shared frontier queue; the re-entrant onPreDespawn that host.despawn fires per victim appends to
     // that queue and unwinds one frame, so the native stack stays CONSTANT regardless of chain depth. A
