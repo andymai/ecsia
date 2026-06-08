@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.13.0](https://github.com/andymai/ecsia/compare/scheduler-v0.12.1...scheduler-v0.13.0) (2026-06-08)
+
+
+### Miscellaneous
+
+* **scheduler:** Synchronize ecsia versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.13.0
+    * @ecsia/schema bumped to 0.13.0
+  * devDependencies
+    * @ecsia/relations bumped to 0.13.0
+
 ## [0.12.1](https://github.com/andymai/ecsia/compare/scheduler-v0.12.0...scheduler-v0.12.1) (2026-06-08)
 
 

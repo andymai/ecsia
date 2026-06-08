@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/andymai/ecsia/compare/schema-v0.12.1...schema-v0.13.0) (2026-06-08)
+
+
+### Features
+
+* compile() — the ergonomic .each path, codegen'd to bindColumns speed ([#86](https://github.com/andymai/ecsia/issues/86)) ([fb1317c](https://github.com/andymai/ecsia/commit/fb1317c255be9bcc3e3a6ee61fd2308b6d2c547e))
+
 ## [0.12.1](https://github.com/andymai/ecsia/compare/schema-v0.12.0...schema-v0.12.1) (2026-06-08)
 
 
