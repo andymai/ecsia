@@ -14,6 +14,7 @@ import {
   returnReservedIds,
 } from './entity/index.js'
 import type {
+  AccessorResolver,
   EntityGeneration,
   EntityHandle,
   EntityIndex,
@@ -558,11 +559,11 @@ export function createWorld(options: WorldOptions = {}): World {
   // deferred row reclaim keeps numeric values readable in onRemove, so the sidecar must stash the
   // dying rich values for the same observer window (RF-REMOVE-READ). The decision mirrors storage's
   // `defer` gate exactly so rich and numeric parity holds.
-  const sidecarOnDespawn = (handle: EntityHandle): void => {
+  const sidecarOnDespawn = (handle: EntityHandle): boolean => {
     const index = handleIndexOf(handle as number)
     const archId = records.archetypeIdOf(index)
     const arch = storage.archetypes.byId[archId] as Archetype | undefined
-    if (arch === undefined) return
+    if (arch === undefined) return false
     const richKeys: SidecarKey[] = []
     let defer = false
     for (let i = 0; i < arch.signature.length; i++) {
@@ -578,11 +579,61 @@ export function createWorld(options: WorldOptions = {}): World {
       if (reactivity?.hasRemoveObserver(c as number) === true) defer = true
     }
     // Unconditional (even with no rich keys): the sidecar's per-index despawn ordinal must count
-    // EVERY despawn so drain-side Destroy entries pair with the right stashed tenant.
-    sidecar.onDespawn(index, handleGeneration(handle, handleLayout) as number, richKeys, defer)
+    // EVERY despawn so drain-side Destroy entries pair with the right stashed tenant. windowArmed
+    // (any remove-observer exists) lets the window run in a rich-free world for the numeric location
+    // stash. Returns `defer` so the caller captures the final location after storage.onDespawn.
+    sidecar.onDespawn(
+      index,
+      handleGeneration(handle, handleLayout) as number,
+      richKeys,
+      defer,
+      reactivity?.hasAnyRemoveObserver ?? false,
+    )
+    return defer
   }
 
-  entities.setAccessorResolver(storage)
+  // The generation-aware resolver shim: a dead-tenant observer ref (lenient bind, dying generation)
+  // resolves a HELD NUMERIC component through the dying tenant's stashed archetype location, not the
+  // live records a same-window re-mint at the index has overwritten. The divert is per-read +
+  // per-component and guarded three ways, so it never perturbs a normal read:
+  //   - only while a deferred-despawn window is open (hasPending), only for the lenient observer path;
+  //   - only for a generation that has a location stash (a dying tenant — a live handle never matches);
+  //   - only when the stashed archetype HOLDS the component AND its row STILL holds this handle
+  //     (a same-archetype re-mint that reused the dense row fails the survival check → prior behavior;
+  //     a never-held component fails the holds check → prior rich-default / not-held behavior).
+  // The rich half stays covered by the generation-guarded sidecar read; this closes the numeric half
+  // for every case the dying row survives (PR2's deferred-dead-row hold closes the reused-row case).
+  const genAwareResolver: AccessorResolver = {
+    resolveRead: (handle, archetypeId, row, def, lenient) =>
+      divertLocation(handle, def, lenient) ?? storage.resolveRead(handle, archetypeId, row, def, lenient),
+    resolveWrite: (handle, archetypeId, row, def, lenient) =>
+      divertWrite(handle, def, lenient) ?? storage.resolveWrite(handle, archetypeId, row, def, lenient),
+  }
+  function divertTarget(handle: EntityHandle, def: unknown, lenient: boolean | undefined): { archId: number; row: number } | null {
+    if (lenient !== true || !sidecar.hasPending()) return null
+    const index = handleIndexOf(handle as number)
+    const gen = handleGeneration(handle, handleLayout) as number
+    const loc = sidecar.locationForObserver(index, gen)
+    if (loc === undefined) return null
+    const arch = storage.archetypes.byId[loc.archId] as { cold?: boolean; signature: ArrayLike<number>; rows: ArrayLike<number> } | undefined
+    if (arch === undefined || arch.cold === true) return null
+    const id = (def as { id: number }).id
+    let holds = false
+    for (let i = 0; i < arch.signature.length; i++) if ((arch.signature[i] as number) === id) { holds = true; break }
+    if (!holds) return null
+    if ((arch.rows[loc.row] as number) !== (handle as number)) return null // dense row reused → decline
+    return loc
+  }
+  function divertLocation(handle: EntityHandle, def: unknown, lenient: boolean | undefined): unknown {
+    const loc = divertTarget(handle, def, lenient)
+    return loc === null ? undefined : storage.resolveRead(handle, loc.archId, loc.row, def, lenient)
+  }
+  function divertWrite(handle: EntityHandle, def: unknown, lenient: boolean | undefined): unknown {
+    const loc = divertTarget(handle, def, lenient)
+    return loc === null ? undefined : storage.resolveWrite(handle, loc.archId, loc.row, def, lenient)
+  }
+
+  entities.setAccessorResolver(genAwareResolver)
   entities.setLifecycle({
     onSpawn: (handle) => storage.onSpawn(handle),
     onDespawn: (handle) => {
@@ -591,8 +642,15 @@ export function createWorld(options: WorldOptions = {}): World {
       preDespawnHook?.(handle)
       // The rich clear runs BEFORE storage.onDespawn so the dying entity's signature is still resolvable
       // (storage.onDespawn shuffle-pops the row; the entity index record is unchanged either way).
-      sidecarOnDespawn(handle)
+      const deferred = sidecarOnDespawn(handle)
       storage.onDespawn(handle)
+      // AFTER storage.onDespawn the deferred swap-pop has settled the dying entity at its resting row;
+      // capture (archId, row) NOW (the index record is still the dying tenant's — freeEntity and any
+      // re-mint run later) so the resolver shim can serve the dying numeric values.
+      if (deferred) {
+        const index = handleIndexOf(handle as number)
+        sidecar.setPendingLocation(index, records.archetypeIdOf(index), records.rowOf(index))
+      }
     },
   })
 

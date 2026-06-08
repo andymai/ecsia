@@ -105,6 +105,7 @@ export class ObserverRegistry {
   #count = 0
   #changeCount = 0
   #pairCount = 0
+  #removeCount = 0
 
   constructor(deps: ObserverDeps) {
     this.#deps = deps
@@ -122,6 +123,14 @@ export class ObserverRegistry {
   /** True iff any pair-kind observer is registered — gates the drain's pairId→relationId resolve. */
   get hasPairObservers(): boolean {
     return this.#pairCount > 0
+  }
+
+  /** True iff ANY component remove-observer (`onRemove`) is registered — arms the deferred-despawn
+   * window (the numeric location stash + ordinal counting) even in a rich-free world. Pair-remove
+   * observers (`onPairRemoved`) do NOT arm it: this window serves component reads of a dying entity,
+   * and the pair-observer subject leg is a separate concern. */
+  get hasAnyRemoveObserver(): boolean {
+    return this.#removeCount > 0
   }
 
   /** True iff any observer subscribes to `kind` events on `componentId` — gates deferred-row reclaim. */
@@ -173,6 +182,7 @@ export class ObserverRegistry {
     }
     this.#count += 1
     if (term.kind === 'change') this.#changeCount += 1
+    if (term.kind === 'remove') this.#removeCount += 1
     let disposed = false
     return {
       id: obs.id,
@@ -188,6 +198,7 @@ export class ObserverRegistry {
         }
         this.#count -= 1
         if (term.kind === 'change') this.#changeCount -= 1
+        if (term.kind === 'remove') this.#removeCount -= 1
       },
     }
   }

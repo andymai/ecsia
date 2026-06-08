@@ -8,10 +8,19 @@
 // closes RF-HYGIENE: a recycled index never leaks the prior tenant's value (a stale slot reads the
 // field default). Main-thread-only by construction (rich components are restrictedToMainThread).
 //
-// Residual boundary (the generation guard covers RICH storage only): a dead tenant's observer-window
-// ref reading a NUMERIC component it never held, and a numeric read at an index re-minted within the
-// same window, both resolve by INDEX through the live records — they alias the newest tenant. Closing
-// either requires generation-aware numeric storage; this is a pre-existing limit, not a window bug.
+// This store also owns the field-kind-AGNOSTIC deferred-despawn window: besides the rich
+// pending-clear values it stashes the dying tenant's archetype LOCATION (archId, row), so a dead
+// tenant's observer-window ref reading a NUMERIC component it HELD resolves through the stashed
+// location rather than the live records — which a same-window re-mint at the index has overwritten.
+// The window arms whenever any remove-observer exists (not only when rich columns do), so the numeric
+// leg works in rich-free worlds. The divert is PER-READ + per-component (the world's resolver shim):
+// it fires only for a component the dying archetype holds whose row still survives, so a read of a
+// never-held component keeps the prior rich-default / not-held behavior.
+//
+// Remaining boundary (PR2): a SAME-archetype spawn into the freed row before the drain (the
+// load(…, 'replace') free-then-remint shape) physically overwrites the dense numeric row — the
+// row-survival guard then declines the stash and the prior behavior stands. Closing it needs the
+// per-archetype deferred-dead-row HOLD (storage, follow-up).
 
 const FIELD_BITS = 8 // up to 256 fields per component; schema arity is far below.
 
@@ -48,6 +57,11 @@ interface PendingClear {
    * Destroy is the tenant's own mint (spawned in the same window); only a Create drained AFTER it is
    * a re-mint that ends the tenant's window and supersedes the entry. */
   destroyDrained: boolean
+  /** The dying tenant's archetype location, captured AFTER storage.onDespawn settles the deferred
+   * row. -1 until setPendingLocation; the resolver shim serves a dead-tenant ref's NUMERIC reads
+   * here when the component is held and the row still survives. */
+  archId: number
+  row: number
 }
 
 export class SidecarStore {
@@ -186,17 +200,20 @@ export class SidecarStore {
    * `richKeysOnEntity` are the sidecar keys the entity actually held (its signature's rich fields);
    * only those are stashed/cleared. `defer` is true iff any held component has a remove-observer.
    */
-  onDespawn(index: number, gen: number, richKeysOnEntity: readonly SidecarKey[], defer: boolean): void {
-    // No rich columns in this world (the column set is fixed at createWorld): no stash can ever
-    // exist, so neither the despawn ordinal nor a pending entry would ever be consulted — skip.
-    if (this.#cols.size === 0) return
+  onDespawn(index: number, gen: number, richKeysOnEntity: readonly SidecarKey[], defer: boolean, windowArmed: boolean): void {
+    // Inert when the world has neither rich columns NOR any remove-observer: no stash can exist, so
+    // neither the despawn ordinal nor a pending entry would be consulted — skip, keeping the
+    // no-observer numeric-only despawn free of all window cost.
+    if (this.#cols.size === 0 && !windowArmed) return
+    // Count EVERY despawn at the index while armed — despawnsBefore pairs a tenant with its
+    // drain-side Destroy entry, and an interleaved non-deferred despawn consumes an ordinal too.
     const despawnsBefore = this.#despawnSeq.get(index) ?? 0
     this.#despawnSeq.set(index, despawnsBefore + 1)
     if (defer) {
-      // EVERY deferred despawn stashes — a rich-free tenant gets a gen-only entry (empty values).
-      // The entry's generation is what binds the tenant's drained events to its OWN dead handle
-      // (eventRefOf), so attribution is uniform: a rich read through a rich-free tenant's ref hits
-      // the generation guard and returns the default, never a same-window successor's stash.
+      // EVERY deferred despawn stashes — a rich-free tenant gets a values-empty entry whose
+      // generation + location still bind its drained events to its OWN dead handle (eventRefOf):
+      // a rich read hits the generation guard (default), a numeric read resolves the stashed
+      // location, and neither sees a same-window successor.
       const values = new Map<SidecarKey, unknown>()
       for (const key of richKeysOnEntity) {
         const col = this.#cols.get(key)
@@ -204,7 +221,7 @@ export class SidecarStore {
         const v = index < col.written.length && col.written[index] === 1 ? col.data[index] : col.def
         values.set(key, v === undefined ? col.def : v)
       }
-      const entry: PendingClear = { gen, values, despawnsBefore, destroyDrained: false }
+      const entry: PendingClear = { gen, values, despawnsBefore, destroyDrained: false, archId: -1, row: -1 }
       const list = this.#pending.get(index)
       if (list === undefined) this.#pending.set(index, [entry])
       else list.push(entry)
@@ -212,6 +229,34 @@ export class SidecarStore {
     // Whether deferred or not, the live slot is invalidated now: a recycled index must not read this
     // tenant's value. The generation guard already protects correctness; clearing releases the GC ref.
     for (const key of richKeysOnEntity) this.#clearSlot(key, index)
+  }
+
+  /**
+   * Stamp the dying tenant's final archetype location onto the entry its `onDespawn` just created —
+   * called AFTER storage.onDespawn (the deferred swap-pop has settled the dying row), only for a
+   * deferred despawn. The latest entry for `index` is that tenant's.
+   */
+  setPendingLocation(index: number, archId: number, row: number): void {
+    const list = this.#pending.get(index)
+    const entry = list?.[list.length - 1]
+    if (entry !== undefined && entry.archId === -1) {
+      entry.archId = archId
+      entry.row = row
+    }
+  }
+
+  /**
+   * The dying tenant's stashed (archId, row) for `index` at generation `gen`, or undefined. The
+   * resolver shim consults this for a dead-tenant ref before resolving through the live records that
+   * a same-window re-mint has overwritten. Mirrors readForObserver's gen match.
+   */
+  locationForObserver(index: number, gen: number): { archId: number; row: number } | undefined {
+    const list = this.#pending.get(index)
+    if (list === undefined) return undefined
+    for (const pend of list) {
+      if (pend.gen === gen && pend.archId !== -1) return { archId: pend.archId, row: pend.row }
+    }
+    return undefined
   }
 
   #clearSlot(key: SidecarKey, index: number): void {
