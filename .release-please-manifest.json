@@ -1,11 +1,11 @@
 {
-  "packages/core": "0.12.1",
-  "packages/devtools": "0.12.1",
-  "packages/ecsia": "0.12.1",
-  "packages/react": "0.12.1",
-  "packages/relations": "0.12.1",
-  "packages/scheduler": "0.12.1",
-  "packages/schema": "0.12.1",
-  "packages/serialization": "0.12.1",
-  "packages/three": "0.12.1"
+  "packages/core": "0.13.0",
+  "packages/devtools": "0.13.0",
+  "packages/ecsia": "0.13.0",
+  "packages/react": "0.13.0",
+  "packages/relations": "0.13.0",
+  "packages/scheduler": "0.13.0",
+  "packages/schema": "0.13.0",
+  "packages/serialization": "0.13.0",
+  "packages/three": "0.13.0"
 }
