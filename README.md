@@ -172,9 +172,10 @@ Lower is faster (nanoseconds per entity):
 | miniplex | 12.15 |
 
 `.each` is the ergonomic accessor path from the example above; `eachChunk` loops over
-the raw storage arrays directly; `bindColumns` goes one step further and binds your
-loop to those arrays once, up front — which is what lets it edge ahead of bitECS, so
-long as you size the world before binding.
+the raw storage arrays directly; `bindColumns` goes one step further and compiles a
+specialized loop per archetype — which is what lets it beat bitECS, and it holds that
+edge as the world grows (no pre-sizing required; it falls back to a plain loop where a
+strict CSP or sandbox forbids dynamic compilation).
 
 Worker-thread speedup on a compute-heavy simulation (8,192 entities, 512 physics
 steps per frame, 60 frames), with every threaded run byte-identical to the

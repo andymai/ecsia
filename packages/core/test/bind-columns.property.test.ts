@@ -78,11 +78,21 @@ function makeRig(pinned: boolean): Rig {
         [Position, 'y'],
         [Velocity, 'dx'],
         [Velocity, 'dy'],
-        ([px, py, dx, dy], meta) => () => {
-          const count = meta.count
-          for (let i = 0; i < count; i++) {
-            px[i] = (px[i] as number) + (dx[i] as number) * DT
-            py[i] = (py[i] as number) + (dy[i] as number) * DT
+        // SELF-CONTAINED (DT defined inside, closes over nothing) so the CODEGEN path is exercised —
+        // this property (codegen integrator byte-identical to .each under random spawn/despawn/grow)
+        // is the primary codegen correctness gate.
+        (vs, meta) => {
+          const px = vs[0] as Float32Array
+          const py = vs[1] as Float32Array
+          const dx = vs[2] as Float32Array
+          const dy = vs[3] as Float32Array
+          const dt = 1 / 60
+          return () => {
+            const count = meta.count
+            for (let i = 0; i < count; i++) {
+              px[i] = px[i]! + dx[i]! * dt
+              py[i] = py[i]! + dy[i]! * dt
+            }
           }
         },
       )
