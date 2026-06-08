@@ -18,11 +18,14 @@ export type { StructuralRecord } from './structural-journal.js'
 export { ObserverCommandBuffer } from './observer-commands.js'
 export type { ObserverCommandApply } from './observer-commands.js'
 
-export { ObserverRegistry, onAdd, onRemove, onChange } from './observers.js'
+export { ObserverRegistry, onAdd, onRemove, onChange, onPairAdded, onPairRemoved } from './observers.js'
 export type {
   ObserverKind,
   ObserverHandle,
   ObserverTerm,
+  ComponentObserverTerm,
+  PairObserverTerm,
+  PairObserverKind,
   ObserverContext,
   ObserverHandler,
   ObserverDeps,

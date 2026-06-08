@@ -217,6 +217,9 @@ export function createRelations(world: World): RelationsApi {
   // Every relation's presence ComponentId — with pairKeyById, the filter that splits a prefab's
   // copyable components from its relation artifacts (spawnFrom copies components only).
   const presenceIds = new Set<number>()
+  // presenceId -> relationId, for the pair-observer resolver: the exclusive valve journals its pair
+  // events on the presence id (no per-target pair ids exist on that path).
+  const relationIdByPresence = new Map<number, number>()
 
   // SubjectIndex → (relationId → count).
   const relationPairCount = new Map<number, Map<number, number>>()
@@ -488,13 +491,20 @@ export function createRelations(world: World): RelationsApi {
       host.migrateAddingMany(subject, [rt.presenceDef])
       incrPairCount(sIdx, rt.relationId)
     } else {
-      backrefRemove(rt, host.handleIndex(oldTarget), subject)
+      const oldTIdx = host.handleIndex(oldTarget)
+      backrefRemove(rt, oldTIdx, subject)
+      // The retarget's REMOVE leg, as an observer-only carrier on the presence id (no per-target
+      // pair ids exist on the valve): onPairRemoved(old) fires before onPairAdded(new) — shape-log
+      // FIFO preserves the order. journal=false: exclusive pairs serialize via the eid column.
+      host.trackShapePair(sIdx, rt.presenceId, oldTIdx, false, false)
     }
     backrefAdd(rt, tIdx, subject)
     writeExclusiveTarget(rt, subject, target) // THE VALVE — no archetype move on re-target
     if (payload !== undefined) writeExclusivePayload(rt, subject, payload)
-    // re-target is a write, not a structural change → write-log push (not shape-log).
+    // re-target is a write, not a structural change → write-log push (not shape-log)...
     host.trackWrite(sIdx, rt.presenceId)
+    // ...plus the ADD leg of the pair-observer carrier (both attach and retarget land here).
+    host.trackShapePair(sIdx, rt.presenceId, tIdx, true, false)
     markDepthDirty(rt, sIdx)
   }
 
@@ -512,6 +522,7 @@ export function createRelations(world: World): RelationsApi {
       writeExclusiveTarget(rt, subject, null)
       host.migrateRemovingMany(subject, [rt.presenceDef]) // last target removed → drop columns
       decrPairCount(sIdx, rt.relationId)
+      host.trackShapePair(sIdx, rt.presenceId, tIdx, false, false) // observer-only carrier
       markDepthDirty(rt, sIdx)
       return
     }
@@ -767,15 +778,24 @@ export function createRelations(world: World): RelationsApi {
         }
         rt.backref.delete(dIdx)
       }
-      // (B) dying is a SUBJECT: drop its outgoing pairs / back-ref contributions.
+      // (B) dying is a SUBJECT: drop its outgoing pairs / back-ref contributions. Each torn-down
+      // pair emits an observer-only carrier (journal=false — despawn serialization is the Destroy
+      // record): onPairRemoved's contract covers the cascade in BOTH directions, and a react
+      // TargetsStore watching this subject must wake or it renders the dead links forever.
       if (rt.exclusive) {
         const t = readExclusiveTarget(rt, dying)
-        if (t !== null) backrefRemove(rt, host.handleIndex(t), dying)
+        if (t !== null) {
+          backrefRemove(rt, host.handleIndex(t), dying)
+          host.trackShapePair(dIdx, rt.presenceId, host.handleIndex(t), false, false)
+        }
         // the columns vanish with the row removal in storage.onDespawn; no migration needed.
       } else {
         for (const tIdx of outgoingTargets(rt, dIdx)) {
           const cid = lookupPairId(rt.relationId, tIdx)
-          if (cid !== undefined) pairRefCount.set(cid, (pairRefCount.get(cid) ?? 1) - 1)
+          if (cid !== undefined) {
+            pairRefCount.set(cid, (pairRefCount.get(cid) ?? 1) - 1)
+            host.trackShapePair(dIdx, cid, tIdx, false, false)
+          }
           backrefRemove(rt, tIdx, dying)
           if (rt.overflow !== null) {
             const row = overflowRowFor(rt.overflow, dIdx, tIdx, false)
@@ -854,6 +874,7 @@ export function createRelations(world: World): RelationsApi {
     const presenceId = host.allocSyntheticId()
     host.registerSynthetic(presenceDef, presenceId)
     presenceIds.add(presenceId as number)
+    relationIdByPresence.set(presenceId as number, relationId as number)
 
     const overflow = storageKind === 'overflow-table' ? buildOverflow(name, payload as Schema) : null
 
@@ -1301,6 +1322,14 @@ export function createRelations(world: World): RelationsApi {
   host.setPreDespawn(onPreDespawn)
   host.setSerializationProvider(serializationProvider)
   host.setPairResolver(resolvePair)
+  // Relation-level pair observers (onPairAdded/onPairRemoved): the deferred drain hands us each
+  // pair shape entry's synthetic ComponentId; this resolves it to its relation so core can dispatch
+  // per-relation buckets without ever learning relation structure.
+  host.setPairObserverResolver((pairComponentId) => {
+    const viaPair = pairKeyById.get(pairComponentId as ComponentId)?.relationId as unknown as number | undefined
+    if (viaPair !== undefined) return viaPair
+    return relationIdByPresence.get(pairComponentId) ?? -1
+  })
   host.setApplyPair(
     (subject, relationId, target, payload) => {
       const rt = byRelationId.get(relationId as number)

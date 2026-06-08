@@ -8,4 +8,7 @@
 // overflowKey64) are an internal encoding detail consumed only by ./runtime.js — they are NOT part of
 // the published surface and are reached relatively.
 export { createRelations, Wildcard } from './runtime.js'
+// Relation-level observer terms — defined in core (the drain dispatches them), re-exported here
+// because they are part of the relations story: observe pair membership per relation, any target.
+export { onPairAdded, onPairRemoved } from '@ecsia/core'
 export type { DefinePrefabOptions, PairAccessor, StorageKind } from './runtime.js'

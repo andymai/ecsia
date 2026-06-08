@@ -90,6 +90,9 @@ export class Reactivity {
   // Filled by the world wiring so MAINTAIN_STRUCTURAL + observer "all present" can re-test entities.
   #maintainHook: ((index: number, componentId: number) => void) | null = null
   #currentMembers: (() => Iterable<number>) | null = null
+  /** Relations-installed: synthetic pair ComponentId → RelationId (-1 = not a pair / unknown).
+   * Drives relation-level pair observer dispatch; null in a relations-free world. */
+  #pairObserverResolver: ((pairComponentId: number) => number) | null = null
   #spilledThisFrame = false
   /** True iff the write log has a consumer (a changed-flavor pointer or a change observer); else the
    * per-write push is dead (recomputed on (de)registration, not per write). */
@@ -145,6 +148,11 @@ export class Reactivity {
   /** Late-bind a "current matching members across all queries" source for the conservative path. */
   setCurrentMembersSource(fn: () => Iterable<number>): void {
     this.#currentMembers = fn
+  }
+
+  /** Late-bind the relations runtime's pairId→relationId resolver (createRelations installs it). */
+  setPairObserverResolver(fn: (pairComponentId: number) => number): void {
+    this.#pairObserverResolver = fn
   }
 
   // --- entry packing -------------------------------------------
@@ -237,15 +245,23 @@ export class Reactivity {
     }
   }
 
-  /**: carries the target index in word B/C. */
+  /**: carries the target index in word B/C. `journal: false` marks an OBSERVER-ONLY carrier entry
+   * (the exclusive valve's pair events ride the presence id) — it reaches the shape log (observers +
+   * query maintenance) but NOT the structural journal: exclusive pairs serialize through the eid
+   * column snapshot, and a presence-id pair record would corrupt the since-T delta replay. */
   trackShapePair(
     index: number,
     pairId: ComponentId,
     targetIndex: number,
     kind: ShapeKind.AddPair | ShapeKind.RemovePair,
+    journal = true,
   ): void {
+    // Observer-only carriers exist solely for pair observers — with none registered, skip the ring
+    // push entirely (the trackWrite/#writeLogActive precedent): the exclusive valve's retarget
+    // stays a zero-shape-entry write in pair-observer-free worlds, exactly its pre-carrier cost.
+    if (!journal && !this.#observers.hasPairObservers) return
     this.#shapeLog.push(this.#packShapeEntry(index, pairId as number, kind, targetIndex))
-    if (this.#structuralJournal.enabled) {
+    if (journal && this.#structuralJournal.enabled) {
       this.#structuralJournal.record(
         this.#deps.tick(),
         kind,
@@ -563,6 +579,20 @@ export class Reactivity {
             : null
       if (okind === null) return // CREATE has no per-component observer
       this.#observers.dispatchStructural(okind, index, componentId)
+      // Relation-level pair observers (onPairAdded/onPairRemoved): a pair entry ALSO dispatches on
+      // its relation, resolved from the synthetic pair id via the relations-installed resolver —
+      // core never learns relation structure (the acyclic boundary). Gated so worlds without pair
+      // observers pay one boolean per pair entry.
+      if (
+        (kind === ShapeKind.AddPair || kind === ShapeKind.RemovePair) &&
+        this.#observers.hasPairObservers &&
+        this.#pairObserverResolver !== null
+      ) {
+        const relationId = this.#pairObserverResolver(componentId)
+        if (relationId >= 0) {
+          this.#observers.dispatchPair(kind === ShapeKind.AddPair ? 'pair-add' : 'pair-remove', index, relationId, componentId)
+        }
+      }
     })
     // Change observers off the write log.
     this.#writeLog.consume(this.#observerWritePtr, (source, base) => {

@@ -120,7 +120,7 @@ export { read, write, has, without, optional, MAX_QUERY_ARITY } from '@ecsia/cor
 // ---------------------------------------------------------------------------
 // Reactivity / observers
 // ---------------------------------------------------------------------------
-export { onAdd, onRemove, onChange } from '@ecsia/core'
+export { onAdd, onRemove, onChange, onPairAdded, onPairRemoved } from '@ecsia/core'
 
 // ---------------------------------------------------------------------------
 // Stable IDs — id→entity index built on observers, re-exported from the umbrella.

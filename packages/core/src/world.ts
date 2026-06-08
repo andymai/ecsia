@@ -148,8 +148,9 @@ export interface RelationsHost {
   deferRelationOp(op: 'add' | 'remove', subject: EntityHandle, relation: RelationDef<Schema | void>, target: EntityHandle, payload?: Record<string, unknown>): boolean
   /** Push a write-log entry for a `.changed`-tracked pair-payload write. */
   trackWrite(index: number, componentId: ComponentId): void
-  /** Push an ADD_PAIR / REMOVE_PAIR shape-log entry. */
-  trackShapePair(index: number, pairId: ComponentId, targetIndex: number, add: boolean): void
+  /** Push an ADD_PAIR / REMOVE_PAIR shape-log entry. `journal: false` = observer-only carrier
+   * (the exclusive valve's pair events on the presence id) — shape log yes, structural journal no. */
+  trackShapePair(index: number, pairId: ComponentId, targetIndex: number, add: boolean, journal?: boolean): void
   /**
    * Journal a SET_PAYLOAD structural op for a non-exclusive overflow pair whose payload changed on an
    * already-live pair (overflow payload changes are explicit OP_PAIR_PAYLOAD
@@ -163,6 +164,11 @@ export interface RelationsHost {
   setPreDespawn(hook: (dying: EntityHandle) => void): void
   /** Inject the Pair(...) term resolver into the query compiler. */
   setPairResolver(resolve: (relationId: number, target: number | symbol) => ResolvedPair): void
+  /**
+   * Inject the pair-observer resolver (synthetic pair ComponentId → RelationId, -1 = not a pair)
+   * so the deferred drain can dispatch relation-level onPairAdded/onPairRemoved terms.
+   */
+  setPairObserverResolver(resolve: (pairComponentId: number) => number): void
   /** Fill the OP_ADD_PAIR / OP_REMOVE_PAIR apply seam so the scheduler can drive relations. */
   setApplyPair(
     addPair: (subject: EntityHandle, relationId: RelationId, target: EntityHandle, payload: Record<string, unknown> | undefined) => void,
@@ -1098,12 +1104,13 @@ export function createWorld(options: WorldOptions = {}): World {
           return true
         },
         trackWrite: (index, componentId) => trackWrite(index, componentId),
-        trackShapePair: (index, pairId, targetIndex, add) => {
+        trackShapePair: (index, pairId, targetIndex, add, journal = true) => {
           ;(reactivity as Reactivity).trackShapePair(
             index,
             pairId,
             targetIndex,
             add ? ShapeKind.AddPair : ShapeKind.RemovePair,
+            journal,
           )
         },
         trackShapeSetPayload: (index, pairId, targetIndex) => {
@@ -1116,6 +1123,9 @@ export function createWorld(options: WorldOptions = {}): World {
         },
         setPairResolver: (resolve) => {
           pairResolver = resolve
+        },
+        setPairObserverResolver: (resolve) => {
+          ;(reactivity as Reactivity).setPairObserverResolver(resolve)
         },
         setApplyPair: (addPair, removePair) => {
           applyAddPair = addPair

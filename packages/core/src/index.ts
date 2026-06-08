@@ -51,10 +51,15 @@ export {
   onAdd,
   onRemove,
   onChange,
+  onPairAdded,
+  onPairRemoved,
 } from './reactivity/index.js'
 export type {
   ObserverHandle,
   ObserverTerm,
+  ComponentObserverTerm,
+  PairObserverTerm,
+  PairObserverKind,
   ObserverContext,
 } from './reactivity/index.js'
 

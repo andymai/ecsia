@@ -178,6 +178,47 @@ stash, unlike the pooled accessor.
 receives the pooled accessor exactly as core observers do, so the pooling contract
 applies — read fields inside the handler, never store it.
 
+## Links between entities: `useTargets` and `useTarget`
+
+If your world uses [relations](/guide/relations) — links from one entity to another, like a
+node's parent or an attacker's victim — two hooks render them. Hand the relations runtime to the
+provider once, then read links the same way you read components:
+
+```tsx
+import { createWorld, createRelations } from 'ecsia'
+import type { EntityHandle } from 'ecsia'
+import { WorldProvider, useTarget, useTargets } from '@ecsia/react'
+
+const world = createWorld({ components: [] })
+const rel = createRelations(world)
+const ChildOf = rel.defineRelation(null, { exclusive: true })
+const Likes = rel.defineRelation(null)
+
+function Root({ children }: { children?: React.ReactNode }) {
+  return (
+    <WorldProvider world={world} relations={rel}>
+      {children}
+    </WorldProvider>
+  )
+}
+
+function Row({ handle }: { handle: EntityHandle }) {
+  const parent = useTarget(handle, ChildOf)   // EntityHandle | undefined — the one link
+  const liked = useTargets(handle, Likes)     // readonly EntityHandle[] — all of them
+  return <div>{parent === undefined ? 'root' : 'child'} · likes {liked.length}</div>
+}
+```
+
+`useTargets` returns every entity the subject points at through that relation; `useTarget`
+returns the single one (the natural fit for one-target relations like a parent link). Both
+re-render **only when the links themselves change** — one added, one removed, a one-target
+relation re-pointed, or a linked entity despawning and taking its links down. Writes to either
+entity's components never wake them, and the returned handles are stable identities, valid as
+React keys.
+
+Forgot to pass `relations` to the provider? The hooks throw a pointed error rather than
+silently rendering nothing.
+
 ## Server-side rendering
 
 Hooks render synchronously on the server — ecsia reads are plain synchronous calls, so
@@ -187,11 +228,11 @@ passes, and the HTML you emit must match the world the client hydrates against.
 
 ## What's deliberately not here
 
-- **Relation hooks** (watching an entity's links) — planned for v2; they need
-  relation-aware observer terms on core's public surface first.
 - **Declarative JSX entities** (`<Entity>` / `<Component>` components) — ecsia worlds are
   imperative and system-driven; the sanctioned shape is "mutate the world, React reacts."
 - **World construction helpers** — `WorldProvider` takes a world you already own.
+- **Link payload values** — `useTargets` tracks the links themselves; re-rendering on a link's
+  stored values is a planned follow-up.
 
 ## See also
 
