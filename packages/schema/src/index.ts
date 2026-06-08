@@ -528,6 +528,12 @@ export type ColumnViews<Specs extends readonly ColumnSpec[]> = {
 /** The per-binding meta box: identity-stable across rebinds; `count` is the live row count. */
 export interface BoundColumnsMeta {
   readonly count: number
+  /**
+   * Slots-per-row for each spec, in spec order: 1 for a scalar field, N for a `vecN`. Read ONCE
+   * outside the hot loop to index a vec view without hardcoding its arity — `const s = meta.strides[i]`,
+   * then `view[r * s + axis]`. The same value the {@link QueryChunk} cursor exposes via `stride()`.
+   */
+  readonly strides: readonly number[]
 }
 
 // One reused chunk per matched hot archetype exposing raw SoA

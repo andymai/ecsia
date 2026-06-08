@@ -132,6 +132,15 @@ const run = q.bindColumns(
 run() // call once per frame
 ```
 
+For a `vec` field the view is the raw flat array — row `r`'s axes live at `[r * stride, (r+1) * stride)`,
+where the stride is the arity you declared (`vec3` → 3). Read it once from `meta.strides[specIndex]`
+rather than hardcoding the number, so a later `vec3` → `vec4` change can't silently mis-index:
+
+```ts no-check
+const s = meta.strides[0]            // the first spec's slots-per-row
+for (let r = 0; r < meta.count; r++) pos[r * s] += dx[r] * dt
+```
+
 Two requirements make this fast, and both are part of the contract rather than style:
 
 - **Your loop must persist.** The speed comes from V8 treating the captured arrays as constants, and
