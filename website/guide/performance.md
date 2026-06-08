@@ -179,14 +179,23 @@ pnpm bench:macro:pool   # the worker-pool speedup sweep on its own, with the pri
 
 ## Regression guard
 
-CI does **not** run `bench:report`. Wall-clock time on shared CI runners is noise — a slow neighbor on
-the runner would flap the suite — so we deliberately **do not assert milliseconds in CI**. What CI
-*does* guard is correctness and behavior, with counter-based assertions: the worker-pool smoke test (a
-quick check that it compiles and runs, not a measurement) asserts every threaded configuration is
-byte-identical to single-thread (the `byte-identical` column above), and the bench builders are
-cross-checked so neither `eachChunk` nor `bindColumns` can silently diverge from `.each`. Performance
-regressions are caught by re-running `bench:report` on a fixed machine and comparing `RESULTS.json`,
-not by a CI timer.
+CI does **not** assert milliseconds — wall-clock time on a shared runner is noise. It guards
+performance two ways instead. First, correctness: the worker-pool smoke test asserts every threaded
+configuration is byte-identical to single-thread (the `byte-identical` column above), and the bench
+builders are cross-checked so neither `eachChunk` nor `bindColumns` can silently diverge from `.each`.
+Second, a dedicated bench job asserts each iteration path's ns/entity **ratio against a same-run bitECS
+control** stays under a committed ceiling — the ratio cancels runner drift, so it catches a real
+regression (say, `bindColumns` deopting) without flapping on a slow neighbor. The absolute published
+numbers still come from `bench:report` on a fixed machine.
+
+## Bundle size
+
+The kernel — typed data, systems, queries, and the scheduler — is about **40 KB min+gzip**; just a
+world and components (`@ecsia/core` alone) is ~30 KB, and importing *everything* from the umbrella is
+~55 KB. ecsia is batteries-included, so it is larger than a minimal core like bitECS (~5 KB); the
+packages are `sideEffects: false`, so a bundler ships only the subsystems you import — relations,
+serialization, and topics drop unless used. A CI budget (`pnpm size`) holds these numbers in place so
+a change can't quietly inflate the install.
 
 ## See also
 

@@ -21,6 +21,8 @@
     "smoke:runtime": "node scripts/runtime-smoke.mjs",
     "smoke:browser:bundle": "node scripts/browser-smoke/build.mjs",
     "smoke:browser": "playwright test --config scripts/browser-smoke/playwright.config.ts",
+    "size": "node scripts/size-check.mjs",
+    "size:update": "node scripts/size-check.mjs --update",
     "docs:api": "typedoc",
     "docs:check": "node scripts/check-doc-snippets.mjs",
     "docs:dev": "vitepress dev website",

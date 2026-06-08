@@ -40,6 +40,9 @@ jobs:
       - name: Test (unit + property + worker + type-level, coverage-gated)
         run: pnpm test -- --coverage
 
+      - name: Bundle-size budget (tree-shaken min+gzip)
+        run: pnpm size
+
   # ---------------------------------------------------------------------------
   # Bench regression lane: a dedicated job (noise-isolated from unit CI) asserting each ecsia
   # iteration path stays under its committed ns/entity RATIO vs a same-run bitECS control. The ratio
