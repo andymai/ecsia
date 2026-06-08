@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.11.0](https://github.com/andymai/ecsia/compare/core-v0.10.0...core-v0.11.0) (2026-06-08)
+
+
+### Features
+
+* **core:** deferred-dead-row hold closes the numeric observer-window boundary (PR2/2) ([#79](https://github.com/andymai/ecsia/issues/79)) ([8f8867d](https://github.com/andymai/ecsia/commit/8f8867d821fbfa3f8b22c983ed30e396939a28c8))
+* **core:** generation-aware numeric reads in the observer window (PR1/2) ([#77](https://github.com/andymai/ecsia/issues/77)) ([abd8ceb](https://github.com/andymai/ecsia/commit/abd8cebe1a4cbee33883bf9437ed76c1b83a87c5))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.11.0
+
 ## [0.10.0](https://github.com/andymai/ecsia/compare/core-v0.9.0...core-v0.10.0) (2026-06-08)
 
 
