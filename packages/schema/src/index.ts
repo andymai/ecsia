@@ -583,6 +583,17 @@ export interface Query<Terms extends readonly QueryTerm[]> {
     ]
   ): (ctx: Ctx) => void
   /**
+   * Compile an ergonomic `.each` body into the codegen'd column loop `bindColumns` runs — without naming
+   * columns or restating the math. It reads the callback's source, rewrites `e.<comp>.<field>` to direct
+   * typed-array indexing, and lands near `eachChunk` (~1.5 ns/entity) instead of the per-row proxy
+   * (~10 ns/entity). Unlike `bindColumns`, it PRESERVES reactivity: a written component feeds `.changed()`
+   * and observers exactly as the accessor would (free when no consumer is registered). Pure speedup — the
+   * analyzer is conservative and falls back to the unchanged proxy `.each` (identical result) for any body
+   * it cannot prove safe (non-straight-line, non-numeric-scalar field, row-filtered query, blocked
+   * `new Function`, etc.). Call ONCE and reuse the returned runner per frame.
+   */
+  compile<Ctx = void>(body: (e: QueryElement<Terms> & { handle: EntityHandle }, ctx: Ctx) => void): (ctx: Ctx) => void
+  /**
    * Derive a narrower query: the cached query for [...this query's terms, ...terms] — pure sugar
    * over `world.query` with the merged term list, riding the same canonical-hash dedup (deriving
    * is reference-identical to writing the combined query directly). Flavors are per cached query,
@@ -656,6 +667,8 @@ export interface LooseQuery {
       factory: (views: ColumnViews<Specs>, meta: BoundColumnsMeta) => (ctx: Ctx) => void,
     ]
   ): (ctx: Ctx) => void
+  /** Compile an `.each` body into the fast column loop: see {@link Query.compile}. */
+  compile<Ctx = void, EL = LooseQueryElement>(body: (e: EL & { handle: EntityHandle }, ctx: Ctx) => void): (ctx: Ctx) => void
   /** See {@link Query.derive}. Arity is already past the cap, so the result stays loose. */
   derive(...terms: QueryTerm[]): LooseQuery
   /** Flavor declarations (chainable). */

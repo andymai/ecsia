@@ -9,6 +9,8 @@ export type { QueryEngineDeps } from './engine.js'
 
 export { LiveQuery } from './live-query.js'
 export type { LiveQueryDeps, PooledElement, ReactivityQueryHooks } from './live-query.js'
+export { analyzeEachBody } from './compile-each.js'
+export type { EachPlan, EachViewSpec, EachAnalyzeDeps } from './compile-each.js'
 
 export { SparseSetU32 } from './sparse-set.js'
 

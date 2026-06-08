@@ -9,7 +9,13 @@
 import { describe, expect, test } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { makeEcsiaIter, makeEcsiaCursorIter, makeEcsiaPinnedIter, makeBitEcsIter } from '../iterate.js'
+import {
+  makeEcsiaIter,
+  makeEcsiaCursorIter,
+  makeEcsiaPinnedIter,
+  makeEcsiaCompiledIter,
+  makeBitEcsIter,
+} from '../iterate.js'
 import type { IterCase } from '../iterate.js'
 
 const ENABLED = process.env['BENCH_REGRESSION'] === '1'
@@ -51,6 +57,7 @@ describe.skipIf(!ENABLED)('bench regression — ecsia/bitECS ns/entity ratios un
 
   test.each([
     ['bindColumns', makeEcsiaPinnedIter as (n: number) => CtxIter],
+    ['compile', makeEcsiaCompiledIter as (n: number) => CtxIter],
     ['eachChunk', makeEcsiaCursorIter as (n: number) => CtxIter],
     ['each', makeEcsiaIter as (n: number) => CtxIter],
   ])('%s ratio vs bitECS stays under its ceiling', (name, make) => {

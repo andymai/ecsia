@@ -66,31 +66,44 @@ function buildBenchBuilders() {
 }
 
 // --- step 1: iterate comparison ---------------------------------------------
-async function runIterate(makeEcsiaIter, makeEcsiaCursorIter, makeEcsiaPinnedIter, makeMiniplexIter, makeBitEcsIter) {
+async function runIterate(
+  makeEcsiaIter,
+  makeEcsiaCursorIter,
+  makeEcsiaPinnedIter,
+  makeEcsiaCompiledIter,
+  makeMiniplexIter,
+  makeBitEcsIter,
+) {
   const n = CONFIG.iterEntities
   const ecsia = makeEcsiaIter(n)
   const cursor = makeEcsiaCursorIter(n)
   const pinned = makeEcsiaPinnedIter(n)
+  const compiled = makeEcsiaCompiledIter(n)
   const mini = makeMiniplexIter(n)
   const bit = makeBitEcsIter(n)
 
-  // Honesty: the cursor and pinned rows must integrate the SAME data as the accessor row at this N
-  // (crosses the 1024 column-growth boundary). Cross-validate one step before timing — a
+  // Honesty: the cursor, pinned, and compiled rows must integrate the SAME data as the accessor row at
+  // this N (crosses the 1024 column-growth boundary). Cross-validate one step before timing — a
   // fast-but-wrong loop fails here instead of silently reporting a misleading number.
   ecsia.step()
   cursor.step()
   pinned.step()
+  compiled.step()
   if (Math.abs(ecsia.sampleX() - cursor.sampleX()) > 1e-9) {
     throw new Error(`bench honesty gate: ecsia-cursor disagrees with ecsia accessor at n=${n}`)
   }
   if (Math.abs(ecsia.sampleX() - pinned.sampleX()) > 1e-9) {
     throw new Error(`bench honesty gate: ecsia-pinned disagrees with ecsia accessor at n=${n}`)
   }
+  if (Math.abs(ecsia.sampleX() - compiled.sampleX()) > 1e-9) {
+    throw new Error(`bench honesty gate: ecsia-compiled disagrees with ecsia accessor at n=${n}`)
+  }
 
   const results = []
   for (let rep = 0; rep < CONFIG.iterReps; rep++) {
     const bench = new Bench({ time: CONFIG.iterTimeMs })
     bench.add('ecsia .each', () => ecsia.step())
+    bench.add('ecsia compile', () => compiled.step())
     bench.add('ecsia eachChunk', () => cursor.step())
     bench.add('ecsia bindColumns', () => pinned.step())
     bench.add('miniplex', () => mini.step())
@@ -109,7 +122,7 @@ async function runIterate(makeEcsiaIter, makeEcsiaCursorIter, makeEcsiaPinnedIte
     const prev = best.get(r.name)
     if (!prev || r.hz > prev.hz) best.set(r.name, r)
   }
-  const order = ['ecsia .each', 'ecsia eachChunk', 'ecsia bindColumns', 'miniplex', 'bitECS']
+  const order = ['ecsia .each', 'ecsia compile', 'ecsia eachChunk', 'ecsia bindColumns', 'miniplex', 'bitECS']
   return order.map((name) => {
     const r = best.get(name)
     return { name, hz: r.hz, meanMs: r.meanMs, nsPerEntity: r.meanMs > 0 ? (r.meanMs * 1e6) / n : 0 }
@@ -273,7 +286,14 @@ async function main() {
   process.env['ECSIA_KERNEL_MODULE'] = resolve(ROOT, 'packages/scheduler/test/fixtures/heavy-bench-kernels.mjs')
   const pool = await import(resolve(ROOT, 'bench/.report-dist/worker-pool/heavy-pool.js'))
 
-  const iterate = await runIterate(iter.makeEcsiaIter, iter.makeEcsiaCursorIter, iter.makeEcsiaPinnedIter, iter.makeMiniplexIter, iter.makeBitEcsIter)
+  const iterate = await runIterate(
+    iter.makeEcsiaIter,
+    iter.makeEcsiaCursorIter,
+    iter.makeEcsiaPinnedIter,
+    iter.makeEcsiaCompiledIter,
+    iter.makeMiniplexIter,
+    iter.makeBitEcsIter,
+  )
   const trackedWrite = await runTrackedWrite()
   const poolReport = await runPool(pool.main)
 
