@@ -41,6 +41,29 @@ jobs:
         run: pnpm test -- --coverage
 
   # ---------------------------------------------------------------------------
+  # Bench regression lane: a dedicated job (noise-isolated from unit CI) asserting each ecsia
+  # iteration path stays under its committed ns/entity RATIO vs a same-run bitECS control. The ratio
+  # cancels shared-runner drift, so a failure is a real regression, not scheduling noise. Single Node
+  # version (timing, not correctness — that's build-test's job).
+  # ---------------------------------------------------------------------------
+  bench-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm build
+      - name: Bench regression (ratios vs bitECS control)
+        env:
+          BENCH_REGRESSION: '1'
+        run: pnpm vitest run --project bench bench/test/regression.bench.test.ts
+
+  # ---------------------------------------------------------------------------
   # Runtime lanes (P3): prove the SHIPPED dist actually runs on each claimed runtime.
   # Each lane builds first (the smoke imports packages/ecsia/dist), then runs the SAME
   # scripts/runtime-smoke.mjs — node, bun, deno — plus a browser lane via Playwright.

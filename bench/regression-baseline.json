@@ -1,0 +1,8 @@
+{
+  "_comment": "CI bench regression ceilings — MAX allowed ns/entity RATIO of each ecsia path vs a SAME-RUN bitECS control (so machine drift cancels). A real regression (e.g. codegen breaking → bindColumns deopts from ~0.72x to ~1.5x) trips the ceiling; ~10% run-to-run noise does not. RATCHET: when a path durably improves, lower its ceiling here. Measured 2026-06-08: bindColumns ~0.72x, eachChunk ~1.08x, each ~7.4x.",
+  "ratiosVsBitecs": {
+    "bindColumns": 0.9,
+    "eachChunk": 1.3,
+    "each": 9.0
+  }
+}
