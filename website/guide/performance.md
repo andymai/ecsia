@@ -206,6 +206,34 @@ Two things set it apart from `bindColumns`:
 Call `compile` once and reuse the returned `run` every frame, the same as `bindColumns`. Structural
 changes during `run()` follow the same collect-first, mutate-after rule as every other loop.
 
+### Inside a system
+
+A `defineSystem` has only a per-frame `run` — no separate setup step — so build the runner on the first
+frame and cache it in the system's closure (the same pattern applies to `bindColumns`). The query you
+need is the one `run` receives, so the lazy build is the natural place for it:
+
+```ts no-check
+let move: ((ctx: { dt: number }) => void) | null = null
+
+const Movement = defineSystem({
+  name: 'Movement',
+  read: [Velocity],
+  write: [Position],
+  run({ query, dt }) {
+    move ??= query(read(Velocity), write(Position)).compile<{ dt: number }>((e, ctx) => {
+      e.position.x += e.velocity.dx * ctx.dt
+      e.position.y += e.velocity.dy * ctx.dt
+    })
+    move({ dt })
+  },
+})
+```
+
+The runner is built once, on the first frame, then reused — and because `compile` preserves the write
+log, a `.changed()`/observer system later in the schedule still sees the writes. (A worker-eligible
+system runs its separately-authored kernel on worker threads; `compile` is a main-thread `run`-body
+tool, exactly like `each` and `bindColumns`.)
+
 ## Reproduce
 
 ```bash
