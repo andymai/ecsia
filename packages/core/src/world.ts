@@ -518,6 +518,14 @@ export function createWorld(options: WorldOptions = {}): World {
     dropEntity: (index) => engine?.dropEntity(index),
     tick: () => state.tick,
     handleIndex: handleIndexOf,
+    // A held deferred-dead row was evicted to keep [0,count) dense: re-point its observer-window
+    // location stash at the new row so a dead-tenant ref still resolves the surviving values.
+    relocateHeld: (handle, archId, newRow) =>
+      sidecar.updatePendingLocation(
+        handleIndexOf(handle),
+        handleGeneration(handle as EntityHandle, handleLayout) as number,
+        newRow,
+      ),
   })
 
   // --- queries: the canonical-hash dedup cache + per-archetype matching, kept
@@ -1386,6 +1394,9 @@ export function createWorld(options: WorldOptions = {}): World {
         // the dying entity's rich values are gone (RF-REMOVE-READ window closes); a recycled index reads
         // the default via the generation guard regardless.
         sidecar.flushPending()
+        // Release the held deferred-dead rows the window protected: the same post-observer point as
+        // the rich flush, so a numeric dead-tenant read survives exactly as long as a rich one.
+        storage.releaseHeldRows()
       }
     },
     flushLogs() {

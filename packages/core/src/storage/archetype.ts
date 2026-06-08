@@ -30,6 +30,14 @@ export interface Archetype {
   rowsColumn: Column | null
   rows: Uint32Array
   count: number
+  /**
+   * Deferred-dead rows held ABOVE the live region, occupying [count, count+held). A deferred
+   * despawn (a remove-observer is watching) keeps the dying row's column data alive here until the
+   * observer drain's flushPending, so a same-archetype re-mint BEFORE the drain (the load('replace')
+   * shape) cannot overwrite it. Excluded from [0,count) iteration — queries, snapshot, and workers
+   * never see them. allocRow evicts the row at the alloc slot upward to keep [0,count) dense.
+   */
+  held: number
 
   /** Lazy edge cache keyed by single ComponentId. */
   readonly edges: Map<ComponentId, { add?: Archetype; remove?: Archetype }>
@@ -79,6 +87,7 @@ export function makeArchetype(id: ArchetypeId, sig: Signature, hash: number, str
     rowsColumn: null,
     rows: new Uint32Array(0),
     count: 0,
+    held: 0,
     edges: new Map(),
     cold,
     lastAccessTick: tick,

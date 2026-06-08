@@ -8,7 +8,7 @@
 // deferred-dead-row hold (PR2) flips exactly that case and nothing else.
 
 import { describe, expect, test } from 'vitest'
-import { createWorld, defineComponent, onRemove, onAdd } from '@ecsia/core'
+import { createWorld, defineComponent, onRemove, onAdd, read } from '@ecsia/core'
 import type { ComponentDef, EntityHandle, Schema } from '@ecsia/core'
 
 const asComps = (...c: ComponentDef<Schema>[]): readonly ComponentDef<Schema>[] => c as readonly ComponentDef<Schema>[]
@@ -101,7 +101,7 @@ describe('numeric observer-window reads — generation-aware, dying-tenant corre
     expect(addedSaw).toBe(42)
   })
 
-  test('BOUNDARY (PR2): same-archetype re-mint reuses the dense row → the dying ref reads the successor', () => {
+  test('same-archetype re-mint before the drain: the deferred-dead-row HOLD preserves the dying value', () => {
     const { world, Pos } = rig()
     let saw = -999
     world.observe(onRemove(Pos), (ref) => {
@@ -112,11 +112,100 @@ describe('numeric observer-window reads — generation-aware, dying-tenant corre
     world.observerDrain()
     world.frameReset()
     world.despawn(t1)
-    world.spawnWith([Pos, { x: 99 }]) // SAME archetype: allocRow reuses t1's freed row, overwriting x=11
+    // SAME archetype, BEFORE the drain (the load('replace') shape): without the hold, allocRow would
+    // reuse t1's freed dense row and overwrite x=11. The hold keeps t1's row above the live region
+    // (relocating it on the collision) until flushPending, so the dying ref reads its own value.
+    world.spawnWith([Pos, { x: 99 }])
     world.observerDrain()
-    // The dense row is physically gone; the row-survival guard declines the stash. This is the
-    // documented remaining boundary — the per-archetype deferred-dead-row hold (PR2) flips it to 11.
-    expect(saw).toBe(99)
+    expect(saw).toBe(11)
+  })
+
+  test('held rows are excluded from iteration MID-window (the [0,count) invariant snapshot relies on)', () => {
+    const { world, Pos } = rig()
+    world.observe(onRemove(Pos), () => {})
+    const t1 = world.spawnWith([Pos, { x: 11 }])
+    const t2 = world.spawnWith([Pos, { x: 22 }])
+    world.frameReset()
+    world.observerDrain()
+
+    world.frameReset()
+    world.despawn(t1) // deferred → t1's row held above count (a dead row physically present)
+    world.spawnWith([Pos, { x: 33 }]) // collision relocates the held row upward; still above count
+    // BEFORE the drain: a query must see exactly the LIVE entities (t2 + the x=33 spawn), never the
+    // held dead t1. If the held row leaked into [0,count), this census would over-count.
+    const xs: number[] = []
+    world.query(read(Pos)).each((e) => {
+      xs.push((world.entity((e as { handle: EntityHandle }).handle).read(Pos) as { x: number }).x)
+    })
+    expect(xs.sort((a, b) => a - b)).toEqual([22, 33])
+  })
+
+  test('migration OUT of a held archetype keeps the held region intact (no cross-tenant corruption)', () => {
+    // The critical case: a live entity migrates out of an archetype that holds a deferred-dead row.
+    // A non-deferred removeRow lowers count without adding a held row, so the held region must slide
+    // down to stay abutting count — else the next allocRow eviction clobbers the dying tenant's data.
+    const { world, Pos, Vel } = rig()
+    let saw = -999
+    world.observe(onRemove(Pos), (ref) => {
+      saw = (ref.read(Pos) as { x: number }).x
+    })
+    const t1 = world.spawnWith([Pos, { x: 11 }])
+    const t2 = world.spawnWith([Pos, { x: 22 }])
+    world.frameReset()
+    world.observerDrain()
+
+    world.frameReset()
+    world.despawn(t1) // Pos-arch held = 1 (t1 held with x=11)
+    world.add(t2, Vel) // migrate t2 OUT of Pos-arch — non-deferred removeRow, must slide held down
+    world.spawnWith([Pos, { x: 44 }]) // allocRow eviction — must NOT clobber t1's held row
+    world.observerDrain()
+    expect(saw).toBe(11) // t1's own value, not 44
+  })
+
+  test('held >= 2: a multi-despawn replace-load preserves every dying tenant (eviction chain)', () => {
+    const { world, Pos } = rig()
+    const seen: number[] = []
+    world.observe(onRemove(Pos), (ref) => {
+      seen.push((ref.read(Pos) as { x: number }).x)
+    })
+    const e = [
+      world.spawnWith([Pos, { x: 1 }]),
+      world.spawnWith([Pos, { x: 2 }]),
+      world.spawnWith([Pos, { x: 3 }]),
+    ]
+    world.frameReset()
+    world.observerDrain()
+
+    world.frameReset()
+    for (const h of e) world.despawn(h) // held grows to 3
+    world.spawnWith([Pos, { x: 91 }]) // three evictions across these spawns
+    world.spawnWith([Pos, { x: 92 }])
+    world.spawnWith([Pos, { x: 93 }])
+    world.observerDrain()
+    expect(seen.sort((a, b) => a - b)).toEqual([1, 2, 3]) // each dying tenant read its own value
+  })
+
+  test('the hold releases at flushPending: the next frame reuses the row normally (no leak)', () => {
+    const { world, Pos } = rig()
+    world.observe(onRemove(Pos), () => {})
+    const t1 = world.spawnWith([Pos, { x: 11 }])
+    world.frameReset()
+    world.observerDrain()
+    world.frameReset()
+    world.despawn(t1)
+    world.spawnWith([Pos, { x: 99 }]) // collision → t1's row held above count this window
+    world.observerDrain() // flushPending releases the held row
+    // Next frame: a fresh spawn reuses the released region — the live set is exactly the two live
+    // entities, no held rows linger (the dense count is back to its natural high-water).
+    const a = world.spawnWith([Pos, { x: 1 }])
+    world.frameReset()
+    world.observerDrain()
+    let n = 0
+    world.query(read(Pos)).each(() => {
+      n += 1
+    })
+    expect(n).toBe(2) // the x=99 entity + a; t1 is gone
+    expect(world.isAlive(a)).toBe(true)
   })
 
   test('rich-free world with no remove-observer: the window stays inert (no behavior change, no cost)', () => {

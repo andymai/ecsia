@@ -59,6 +59,8 @@ export interface StorageConfig {
   dropEntity(index: number): void
   tick(): number
   handleIndex(handle: EntityHandle): number
+  /** A held deferred-dead row moved (allocRow eviction) — update the observer-window location stash. */
+  relocateHeld?(handle: number, archId: number, newRow: number): void
 }
 
 export class Storage {
@@ -81,7 +83,13 @@ export class Storage {
       tick: cfg.tick,
       defOf: (c) => cfg.registry.defOf(c),
       handleIndex: (h) => cfg.handleIndex(h as EntityHandle),
+      ...(cfg.relocateHeld !== undefined ? { relocateHeld: cfg.relocateHeld } : {}),
     })
+  }
+
+  /** Release every archetype's held deferred-dead rows (flushPending, after the observer drain). */
+  releaseHeldRows(): void {
+    this.archetypes.releaseHeldRows()
   }
 
   /** Subscribe to archetypeCreated; forwarded from the ArchetypeStore. */

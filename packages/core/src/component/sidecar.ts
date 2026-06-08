@@ -15,12 +15,10 @@
 // The window arms whenever any remove-observer exists (not only when rich columns do), so the numeric
 // leg works in rich-free worlds. The divert is PER-READ + per-component (the world's resolver shim):
 // it fires only for a component the dying archetype holds whose row still survives, so a read of a
-// never-held component keeps the prior rich-default / not-held behavior.
-//
-// Remaining boundary (PR2): a SAME-archetype spawn into the freed row before the drain (the
-// load(…, 'replace') free-then-remint shape) physically overwrites the dense numeric row — the
-// row-survival guard then declines the stash and the prior behavior stands. Closing it needs the
-// per-archetype deferred-dead-row HOLD (storage, follow-up).
+// never-held component keeps the prior rich-default / not-held behavior. Storage's per-archetype
+// deferred-dead-row HOLD (store.ts: rows held above count until flushPending) keeps the dying dense
+// row alive through the window even when a same-archetype re-mint would otherwise reuse it (the
+// load(…, 'replace') free-then-remint shape), so the row-survival guard serves the stash there too.
 
 const FIELD_BITS = 8 // up to 256 fields per component; schema arity is far below.
 
@@ -242,6 +240,21 @@ export class SidecarStore {
     if (entry !== undefined && entry.archId === -1) {
       entry.archId = archId
       entry.row = row
+    }
+  }
+
+  /**
+   * Update a stashed location's row after storage relocated the dying tenant's held dead row
+   * (allocRow eviction keeping [0,count) dense). Keyed by (index, gen); same archetype, new row.
+   */
+  updatePendingLocation(index: number, gen: number, row: number): void {
+    const list = this.#pending.get(index)
+    if (list === undefined) return
+    for (const pend of list) {
+      if (pend.gen === gen && pend.archId !== -1) {
+        pend.row = row
+        return
+      }
     }
   }
 
