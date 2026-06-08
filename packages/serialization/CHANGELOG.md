@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.11.0](https://github.com/andymai/ecsia/compare/serialization-v0.10.0...serialization-v0.11.0) (2026-06-08)
+
+
+### Features
+
+* **core:** deferred-dead-row hold closes the numeric observer-window boundary (PR2/2) ([#79](https://github.com/andymai/ecsia/issues/79)) ([8f8867d](https://github.com/andymai/ecsia/commit/8f8867d821fbfa3f8b22c983ed30e396939a28c8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.11.0
+    * @ecsia/schema bumped to 0.11.0
+  * devDependencies
+    * @ecsia/relations bumped to 0.11.0
+
 ## [0.10.0](https://github.com/andymai/ecsia/compare/serialization-v0.9.0...serialization-v0.10.0) (2026-06-08)
 
 
