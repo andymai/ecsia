@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.12.0](https://github.com/andymai/ecsia/compare/core-v0.11.0...core-v0.12.0) (2026-06-08)
+
+
+### Features
+
+* **core:** expose per-spec strides on bindColumns meta ([#80](https://github.com/andymai/ecsia/issues/80)) ([a690bff](https://github.com/andymai/ecsia/commit/a690bffbd421c9d168f7aec30c5eeadd3cb8bff0))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.12.0
+
 ## [0.11.0](https://github.com/andymai/ecsia/compare/core-v0.10.0...core-v0.11.0) (2026-06-08)
 
 
