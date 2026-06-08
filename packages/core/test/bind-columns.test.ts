@@ -156,13 +156,19 @@ describe('bindColumns iteration', () => {
     const n = 8
     for (let i = 0; i < n; i++) world.spawnWith(Transform)
     const q = world.query(write(Transform))
-    const run = q.bindColumns([Transform, 'pos'], [Transform, 'w'], ([pos, w], meta) => () => {
-      const count = meta.count
-      for (let r = 0; r < count; r++) {
-        pos[r * 3] = r
-        pos[r * 3 + 1] = r * 10
-        pos[r * 3 + 2] = r * 100
-        w[r] = -r
+    const run = q.bindColumns([Transform, 'pos'], [Transform, 'w'], ([pos, w], meta) => {
+      // meta.strides[i] is the slots-per-row for spec i: 3 for the vec3 `pos`, 1 for the scalar `w`.
+      // Read ONCE outside the runner so the hot loop never repeats the lookup.
+      const s = meta.strides[0]!
+      expect(meta.strides).toEqual([3, 1])
+      return () => {
+        const count = meta.count
+        for (let r = 0; r < count; r++) {
+          pos[r * s] = r
+          pos[r * s + 1] = r * 10
+          pos[r * s + 2] = r * 100
+          w[r] = -r
+        }
       }
     })
     run()

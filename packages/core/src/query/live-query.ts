@@ -10,6 +10,7 @@
 
 import type {
   ArchetypeId,
+  BoundColumnsMeta,
   ComponentDef,
   ComponentId,
   EntityHandle,
@@ -408,7 +409,9 @@ export class LiveQuery {
    * bind is free.
    *
    * Vec fields hand their raw view through: row `r` occupies `[r*stride, (r+1)*stride)` where the
-   * stride is the declared vec arity (`vec3()` → 3) — a compile-time constant in the caller's loop.
+   * stride is the declared vec arity (`vec3()` → 3). Hardcode it, or read `meta.strides[specIndex]`
+   * ONCE outside the hot loop (`const s = meta.strides[0]`) so the loop never repeats the lookup —
+   * the same value the `eachChunk` cursor exposes via `stride()`, def-invariant across archetypes.
    * Rich fields (`'string'`/`object<T>`) carry no column and throw at bind time, as do row-filtered
    * queries (a pinned runner cannot skip rows; `eachChunk` silently skips, but a silently-skipping
    * pinned runner is a footgun) and specs naming a component the query does not REQUIRE (an
@@ -421,13 +424,10 @@ export class LiveQuery {
   bindColumns(
     ...args: [
       ...specs: ReadonlyArray<readonly [ComponentDef<Schema>, string]>,
-      factory: (views: readonly TypedArray[], meta: { readonly count: number }) => () => void,
+      factory: (views: readonly TypedArray[], meta: BoundColumnsMeta) => () => void,
     ]
   ): () => void {
-    const factory = args[args.length - 1] as (
-      views: readonly TypedArray[],
-      meta: { readonly count: number },
-    ) => () => void
+    const factory = args[args.length - 1] as (views: readonly TypedArray[], meta: BoundColumnsMeta) => () => void
     const specs = args.slice(0, -1) as ReadonlyArray<readonly [ComponentDef<Schema>, string]>
     if (this.compiled.rowFilters.length !== 0) {
       throw new Error('bindColumns: row-filtered queries are not supported (a pinned runner cannot skip rows); use each()')
@@ -470,7 +470,7 @@ export class LiveQuery {
       readonly cols: readonly Column[]
       views: readonly TypedArray[]
       runner: () => void
-      readonly meta: { readonly count: number }
+      readonly meta: BoundColumnsMeta
     }
 
     // Bindings are keyed by archetype id and PRESERVED across rebuilds: a rebuild only mints
@@ -500,10 +500,17 @@ export class LiveQuery {
         return col
       })
       const views = cols.map((c) => c.view)
-      const meta = {
+      // Per-spec slots-per-row (1 scalar, N for vecN), in spec order — the same value the eachChunk
+      // cursor exposes via `c.stride(def, field)`. Def-invariant across archetypes (the vec arity is
+      // a property of the field), so every binding's array is equal; read it ONCE outside the hot
+      // loop (`const s = meta.strides[0]`) to index a vec view without hardcoding the arity, keeping
+      // the loop specialization-friendly.
+      const strides: readonly number[] = cols.map((c) => c.layout.stride)
+      const meta: BoundColumnsMeta = {
         get count(): number {
           return arch.count
         },
+        strides,
       }
       return { arch, cols, views, runner: factory(views, meta), meta }
     }
