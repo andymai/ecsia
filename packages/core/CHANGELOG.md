@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.12.1](https://github.com/andymai/ecsia/compare/core-v0.12.0...core-v0.12.1) (2026-06-08)
+
+
+### Performance
+
+* **core:** codegen bindColumns runners — beat bitECS, no post-growth penalty ([#82](https://github.com/andymai/ecsia/issues/82)) ([ec50962](https://github.com/andymai/ecsia/commit/ec509621958d5b9b5383e45936caabadb668ec5b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.12.1
+
 ## [0.12.0](https://github.com/andymai/ecsia/compare/core-v0.11.0...core-v0.12.0) (2026-06-08)
 
 
