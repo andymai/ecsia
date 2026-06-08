@@ -104,9 +104,14 @@ for (const e of world.query(read(Velocity), write(Position))) {
 Other query terms — `has(C)`, `without(C)`, and `optional(C)` — refine which entities
 match without (or optionally) binding accessors.
 
-For the rare loop that needs every nanosecond, queries also offer a bind-once fast path,
-[`bindColumns`](/guide/performance#bind-your-loop-once-bindcolumns) — the
-[performance page](/guide/performance) covers it.
+When a hot loop matters, keep this exact ergonomic body and hand it to
+[`query.compile`](/guide/performance#compile-the-ergonomic-path-compile): it rewrites your
+`e.position.x += …` callback into a specialized column loop — roughly **6× faster than the plain
+`.each`**, on par with raw column access, and it still feeds `.changed()`/observers. It is a pure
+speedup that falls back to the normal loop for anything it can't compile, so there's no syntax to
+learn and no result to second-guess. (For the last nanosecond on a loop you're willing to write
+against raw typed arrays, [`bindColumns`](/guide/performance#bind-your-loop-once-bindcolumns) drops
+the reactivity bookkeeping too — the [performance page](/guide/performance) covers both.)
 ### Deriving narrower queries
 
 `query.derive(...terms)` builds the query for *this query's terms plus the new ones*.

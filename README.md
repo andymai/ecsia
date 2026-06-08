@@ -177,6 +177,13 @@ specialized loop per archetype — which is what lets it beat bitECS, and it hol
 edge as the world grows (no pre-sizing required; it falls back to a plain loop where a
 strict CSP or sandbox forbids dynamic compilation).
 
+You don't have to choose between the readable `.each` body and that speed:
+[`query.compile`](https://github.com/andymai/ecsia/blob/main/website/guide/performance.md#compile-the-ergonomic-path-compile)
+takes the same `e.position.x += …` callback, rewrites it into the `bindColumns`-shape loop, and lands
+near `eachChunk` — roughly 6× faster than the plain `.each` it's written like — while still feeding
+`.changed()`/observers. It's a pure speedup that falls back to the normal loop for anything it can't
+compile.
+
 Worker-thread speedup on a compute-heavy simulation (8,192 entities, 512 physics
 steps per frame, 60 frames), with every threaded run byte-identical to the
 single-threaded result:
