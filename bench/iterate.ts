@@ -109,23 +109,28 @@ export function makeEcsiaPinnedIter(n: number): IterCase {
     v.dy = 0.5
   }
   const q = world.query(write(Position), write(Velocity))
+  // The factory is SELF-CONTAINED (closes over nothing): per-frame dt arrives via the runner's ctx,
+  // hoisted to a local const before the loop. This is the shape the codegen path requires — each
+  // archetype's runner is recompiled into a specialized singleton, no post-growth penalty.
   const run = q.bindColumns(
     [Position, 'x'],
     [Position, 'y'],
     [Velocity, 'dx'],
     [Velocity, 'dy'],
-    ([px, py, dx, dy], meta) => () => {
+    ([px, py, dx, dy], meta) => (ctx: { dt: number }) => {
+      const dt = ctx.dt
       const count = meta.count
       for (let i = 0; i < count; i++) {
-        px[i] = px[i]! + dx[i]! * DT
-        py[i] = py[i]! + dy[i]! * DT
+        px[i] = px[i]! + dx[i]! * dt
+        py[i] = py[i]! + dy[i]! * dt
       }
     },
   )
+  const ctx = { dt: DT } // hoisted so step() allocates nothing
   return {
     name: 'ecsia-pinned',
     step() {
-      run()
+      run(ctx)
     },
     sampleX() {
       return (world.entity(first).read(Position) as { x: number }).x

@@ -65,17 +65,18 @@ number.
 - **bitECS wins the default-path comparison.** Its flat SoA loop out-iterates both `.each` and
   `eachChunk`, and we do not pretend otherwise. If your entire workload is one tight integrate loop
   on a single thread and you never reach for `bindColumns`, bitECS is the fastest tool here.
-- **ecsia `bindColumns` edges ahead of bitECS** on this bench. Once the loop is bound, it is the same
-  raw-typed-array shape bitECS uses with one less indirection — ecsia walks its rows densely where
-  bitECS indexes through an entity list. The edge comes with homework: keep the loop closure
-  persistent and pre-size before binding. See
-  [Bind your loop once](#bind-your-loop-once-bindcolumns).
+- **ecsia `bindColumns` beats bitECS** on this bench (~0.7×). It compiles a specialized loop per
+  matched archetype — the same raw-typed-array shape bitECS uses with one less indirection (ecsia
+  walks its rows densely where bitECS indexes through an entity list), kept on V8's fast path by
+  re-evaluating your factory into a fresh function per archetype. Because that recompiles on growth,
+  the edge holds with no pre-sizing and no after-growth penalty; the one rule is a self-contained
+  factory (deps via `ctx`). See [Bind your loop once](#bind-your-loop-once-bindcolumns).
 - **ecsia `.each` beats miniplex.** The ergonomic accessor path — proxies, write-log awareness, and
   all — still out-iterates miniplex's array-of-objects walk. You do not pay for ecsia's ergonomics by
   dropping below the closest ergonomic competitor.
 - **ecsia `eachChunk` lands within ~1.1× of bitECS on a modern V8.** The column cursor re-resolves
   its columns every call — that re-resolution is what keeps it safe under storage growth with zero
-  setup, and what `bindColumns` trades away for the last third.
+  setup; `bindColumns` is the version that compiles the loop and pulls ahead of bitECS.
 - **The tracked-write row is the cost you opt into.** Attaching a `.changed()` filter and draining it
   each frame is markedly more expensive than the bare integrate loop — that is the write-log doing
   real work so reactivity, deltas, and change observers are available. You pay it only when you ask
@@ -103,10 +104,13 @@ number.
 `eachChunk` looks its columns up again on every call. That re-lookup is the safe default — a column's
 array can be replaced when storage grows — but it stops V8 from compiling your loop with the arrays
 baked in as constants, and that compilation is worth about 30% on the iteration bench. `bindColumns`
-gets it back without giving up the safety: you hand the query the columns you want and a factory
-function; ecsia resolves the columns once, calls your factory with them, and keeps the loop your
-factory returns. Each `run()` then runs your loop directly — ecsia re-binds it only when storage
-actually moved.
+gets it back: you hand the query the columns you want and a factory function; ecsia resolves the
+columns once and **compiles a specialized loop per matched archetype** (it re-evaluates your factory
+into a fresh function so V8 keeps each loop on its fast path). The result lands at **~0.7× bitECS** on
+the iteration bench — faster than bitECS — and stays there even after storage grows, with no pre-sizing
+required. Where a runtime forbids dynamic compilation (a strict Content-Security-Policy, a locked
+sandbox), it transparently falls back to a plain interpreted loop; the codegen path is used only when
+it provably matches that interpreted result, so it can never change what your loop computes.
 
 ```ts
 import { createWorld, defineComponent, write } from 'ecsia'
@@ -116,11 +120,11 @@ const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
 const world = createWorld({ components: [Position, Velocity], maxEntities: 1 << 16 })
 
 const q = world.query(write(Position), write(Velocity))
-const dt = 1 / 60
 
 const run = q.bindColumns(
   [Position, 'x'], [Position, 'y'], [Velocity, 'dx'], [Velocity, 'dy'],
-  ([px, py, dx, dy], meta) => () => {
+  ([px, py, dx, dy], meta) => (ctx: { dt: number }) => {
+    const dt = ctx.dt        // per-frame inputs arrive via ctx — hoist them out of the loop
     const count = meta.count // the live entity count — read it inside the loop
     for (let i = 0; i < count; i++) {
       px[i] = px[i]! + dx[i]! * dt
@@ -129,7 +133,7 @@ const run = q.bindColumns(
   },
 )
 
-run() // call once per frame
+run({ dt: 1 / 60 }) // call once per frame
 ```
 
 For a `vec` field the view is the raw flat array — row `r`'s axes live at `[r * stride, (r+1) * stride)`,
@@ -141,27 +145,19 @@ const s = meta.strides[0]            // the first spec's slots-per-row
 for (let r = 0; r < meta.count; r++) pos[r * s] += dx[r] * dt
 ```
 
-Two requirements make this fast, and both are part of the contract rather than style:
+One rule makes the codegen path kick in, and it is the natural shape anyway:
 
-- **Your loop must persist.** The speed comes from V8 treating the captured arrays as constants, and
-  it only does that for a closure created once and then reused. The API shape makes that the natural
-  thing: ecsia calls your factory, keeps the returned loop, and re-invokes the factory only when a
-  bound column's storage was replaced or a new group of entities starts matching the query. Entities
-  spawning and despawning never re-invoke it — the loop reads the live count from `meta.count`.
-- **The returned loop takes no arguments.** Passing the count in as a parameter measured about 2×
-  slower; reading `meta.count` inside the loop is free.
+- **Your factory must be self-contained** — it may close over nothing from the surrounding scope.
+  ecsia re-evaluates your factory's own source to compile each archetype's loop, and that fresh copy
+  only sees globals. So pass per-frame inputs through the runner's `ctx` argument (hoist them to a
+  local before the loop, as above) and define fixed constants inside the factory body. A factory that
+  reaches outside itself still works — it just runs the plain interpreted loop instead of the compiled
+  one. `meta.count` is read inside the loop (the live entity count); spawning and despawning never
+  re-invoke the factory.
 
 The trade-offs are the same as `eachChunk`: writes through the bound arrays bypass the write log, so
 `.changed()` filters and observers will not see them, and structural changes during `run()` follow
 the same collect-first, mutate-after rule as every other loop.
-
-::: tip Pre-size before you bind
-The first time a bound column grows *after* you have bound, V8 permanently stops specializing that
-loop — it keeps working, just slower (about 1.7 ns per entity in our profiling, instead of the
-steady-state number in the table). Growth *before* the bind costs nothing. So spawn, or reserve, up
-to your peak entity count first — the world's `maxEntities` is a natural guide — and bind once the
-world is at size.
-:::
 
 ## Reproduce
 

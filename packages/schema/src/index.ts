@@ -573,15 +573,15 @@ export interface Query<Terms extends readonly QueryTerm[]> {
    * raw typed column views + a row span. Bypasses the per-row accessor AND the reactivity write log. */
   eachChunk(fn: (chunk: QueryChunk) => void): void
   /** Pinned columns: resolve each `[ComponentDef, field]` spec's column views ONCE per matched hot
-   * archetype, invoke `factory(views, meta)` to mint a persistent zero-argument runner, and return a
-   * `run()` that re-checks the bindings and runs each archetype's runner. See the runtime doc on the
-   * core LiveQuery for the full contract (zero-arg runner, `meta.count`, invalidation, caveats). */
-  bindColumns<const Specs extends readonly ColumnSpec[]>(
+   * archetype, invoke `factory(views, meta)` to mint a persistent runner (per-frame inputs via the runner's
+   * `ctx` argument), and return a `run(ctx)` that re-checks the bindings and runs each archetype's runner. See the runtime doc on the
+   * core LiveQuery for the full contract (self-contained factory, `ctx` deps, `meta.count`, codegen + CSP fallback). */
+  bindColumns<const Specs extends readonly ColumnSpec[], const Ctx = void>(
     ...args: [
       ...specs: { [I in keyof Specs]: ColumnSpecFor<Specs[I]> },
-      factory: (views: ColumnViews<Specs>, meta: BoundColumnsMeta) => () => void,
+      factory: (views: ColumnViews<Specs>, meta: BoundColumnsMeta) => (ctx: Ctx) => void,
     ]
-  ): () => void
+  ): (ctx: Ctx) => void
   /**
    * Derive a narrower query: the cached query for [...this query's terms, ...terms] — pure sugar
    * over `world.query` with the merged term list, riding the same canonical-hash dedup (deriving
@@ -650,12 +650,12 @@ export interface LooseQuery {
   /** Opt-in SoA fast path: see {@link Query.eachChunk}. */
   eachChunk(fn: (chunk: QueryChunk) => void): void
   /** Pinned columns: see {@link Query.bindColumns}. */
-  bindColumns<const Specs extends readonly ColumnSpec[]>(
+  bindColumns<const Specs extends readonly ColumnSpec[], const Ctx = void>(
     ...args: [
       ...specs: { [I in keyof Specs]: ColumnSpecFor<Specs[I]> },
-      factory: (views: ColumnViews<Specs>, meta: BoundColumnsMeta) => () => void,
+      factory: (views: ColumnViews<Specs>, meta: BoundColumnsMeta) => (ctx: Ctx) => void,
     ]
-  ): () => void
+  ): (ctx: Ctx) => void
   /** See {@link Query.derive}. Arity is already past the cap, so the result stays loose. */
   derive(...terms: QueryTerm[]): LooseQuery
   /** Flavor declarations (chainable). */

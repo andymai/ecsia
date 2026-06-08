@@ -24,6 +24,8 @@ import type { Column, TypedArray } from '../memory/index.js'
 import { decodeEid } from '../memory/index.js'
 import type { CompiledQuery, CompiledValueTerm, RowFilterTerm } from './compile.js'
 import type { SparseSetU32 } from './sparse-set.js'
+import { buildPinnedRunner } from './codegen.js'
+import type { PinnedFactory } from './codegen.js'
 
 const NO_HANDLE = 0xffffffff as EntityHandle
 
@@ -377,36 +379,44 @@ export class LiveQuery {
   }
 
   /**
-   * Pinned columns (the persistent-closure fast path). Where {@link eachChunk} re-resolves column
-   * views every call, `bindColumns` resolves each `[ComponentDef, fieldName]` spec ONCE per matched
-   * hot archetype and invokes `factory(views, meta)` to mint that archetype's runner — a persistent
-   * closure capturing the views as constants, which V8 context-specializes. The returned `run()`
-   * walks the bindings (matching `eachChunk` iteration order: cold archetypes never visited, empty
-   * ones skipped) with one cheap safety check per binding per call.
+   * Pinned columns — the fastest iteration path, ~0.7× bitECS on the canonical bench (measured).
+   * Where {@link eachChunk} re-resolves column views every call, `bindColumns` resolves each
+   * `[ComponentDef, fieldName]` spec ONCE per matched hot archetype and mints that archetype's runner
+   * — a persistent closure capturing the views as constants, which V8 embeds into optimized code. The
+   * returned `run(ctx)` walks the bindings (matching `eachChunk` iteration order: cold archetypes
+   * never visited, empty ones skipped) with one cheap safety check per binding per call.
    *
-   * The two load-bearing contract points:
-   * 1. The runner takes ZERO arguments (a `count` parameter measures 2× slower).
-   * 2. `meta` is identity-stable across rebinds; read `meta.count` (the archetype's live row count)
-   * inside the runner — population churn (spawn/despawn) never re-invokes the factory.
+   * Per-archetype runners are CODEGEN'D (each recompiled into a distinct function so it stays a
+   * specialized V8 singleton) where the runtime allows `new Function`; under strict CSP / a locked
+   * sandbox it transparently falls back to the interpreted factory call. The codegen path is gated on
+   * a pre-flight equality check against the interpreted runner, so it is a pure speed win that can
+   * never change results. Because codegen recompiles fresh on growth, there is **NO post-growth
+   * penalty** — the loop holds ~1.0 ns/entity even after columns re-back, with no pre-sizing required.
+   *
+   * Contract:
+   * 1. The factory must be **self-contained** — it may close over NOTHING from its outer scope (the
+   *    recompiled copy only sees globals). Pass per-frame inputs through the runner's `ctx` argument
+   *    (hoist them to a local const before the loop: `const dt = ctx.dt`); define fixed constants
+   *    inside the factory body. A factory that closes over outer scope fails the pre-flight and falls
+   *    back to interpreted (correct, just unspecialized).
+   * 2. `meta` is identity-stable; read `meta.count` (the live row count) inside the runner — population
+   *    churn (spawn/despawn) never re-invokes the factory.
    *
    * ```ts
-   * const run = q.bindColumns(
-   * [Position, 'x'], [Velocity, 'dx'],
-   * ([px, dx], meta) => () => {
-   * const count = meta.count
-   * for (let i = 0; i < count; i++) px[i] += dx[i] * dt
-   * },
+   * const run = q.bindColumns<{ dt: number }>(
+   *   [Position, 'x'], [Velocity, 'dx'],
+   *   ([px, dx], meta) => (ctx) => {
+   *     const dt = ctx.dt           // hoist per-frame inputs out of the loop
+   *     const count = meta.count
+   *     for (let i = 0; i < count; i++) px[i] += dx[i] * dt
+   *   },
    * )
-   * run() // per frame
+   * run({ dt: 1 / 60 }) // per frame
    * ```
    *
-   * The factory is re-invoked ONLY when a bound column re-backs (growth replaced its view) or when
-   * the matched-archetype set changes (a new archetype matched, or a matched cold archetype was
-   * warm-promoted) — never on population change. V8 only context-specializes SINGLETON closures, so
-   * the first re-invocation after binding disables specialization for that binding permanently
-   * (~1.7 ns/entity vs ~1.0 steady-state on the canonical bench): pre-size to peak capacity (spawn
-   * or reserve rows BEFORE binding) so growth never lands in a hot phase — growth before the first
-   * bind is free.
+   * The factory is re-invoked ONLY when a bound column re-backs (growth) or the matched-archetype set
+   * changes (a new archetype matched, or a matched cold archetype was warm-promoted) — never on
+   * population change.
    *
    * Vec fields hand their raw view through: row `r` occupies `[r*stride, (r+1)*stride)` where the
    * stride is the declared vec arity (`vec3()` → 3). Hardcode it, or read `meta.strides[specIndex]`
@@ -421,13 +431,13 @@ export class LiveQuery {
    * observe the write. Structural changes during `run()` follow the `eachChunk` discipline: collect,
    * then mutate after the loop (despawn swap-removes rows under the runner's feet).
    */
-  bindColumns(
+  bindColumns<Ctx = void>(
     ...args: [
       ...specs: ReadonlyArray<readonly [ComponentDef<Schema>, string]>,
-      factory: (views: readonly TypedArray[], meta: BoundColumnsMeta) => () => void,
+      factory: PinnedFactory<Ctx>,
     ]
-  ): () => void {
-    const factory = args[args.length - 1] as (views: readonly TypedArray[], meta: BoundColumnsMeta) => () => void
+  ): (ctx: Ctx) => void {
+    const factory = args[args.length - 1] as PinnedFactory<Ctx>
     const specs = args.slice(0, -1) as ReadonlyArray<readonly [ComponentDef<Schema>, string]>
     if (this.compiled.rowFilters.length !== 0) {
       throw new Error('bindColumns: row-filtered queries are not supported (a pinned runner cannot skip rows); use each()')
@@ -469,8 +479,9 @@ export class LiveQuery {
       readonly arch: Archetype
       readonly cols: readonly Column[]
       views: readonly TypedArray[]
-      runner: () => void
+      runner: (ctx: Ctx) => void
       readonly meta: BoundColumnsMeta
+      readonly strides: readonly number[]
     }
 
     // Bindings are keyed by archetype id and PRESERVED across rebuilds: a rebuild only mints
@@ -485,8 +496,10 @@ export class LiveQuery {
     let boundMatchCount = -1
 
     const reinvoke = (b: PinnedBinding): void => {
+      // Re-build through codegen on growth: a FRESH recompiled factory keeps the new runner a
+      // specialized singleton (re-invoking the same factory would forfeit specialization).
       b.views = b.cols.map((c) => c.view)
-      b.runner = factory(b.views, b.meta)
+      b.runner = buildPinnedRunner(factory, b.views, b.meta, b.strides)
     }
 
     const makeBinding = (arch: Archetype): PinnedBinding => {
@@ -512,7 +525,7 @@ export class LiveQuery {
         },
         strides,
       }
-      return { arch, cols, views, runner: factory(views, meta), meta }
+      return { arch, cols, views, runner: buildPinnedRunner(factory, views, meta, strides), meta, strides }
     }
 
     // Builds into locals and commits at the end so a makeBinding throw (defensive backstop; the
@@ -542,7 +555,7 @@ export class LiveQuery {
 
     rebuild()
 
-    return () => {
+    return (ctx: Ctx) => {
       // Archetype-set check: matchingArchetypes is append-only (lastMatchTick is never bumped), so
       // a length change is the complete new-match signal; the cold flags cover warm promotion.
       if (this.matchingArchetypes.length !== boundMatchCount) {
@@ -569,7 +582,7 @@ export class LiveQuery {
             break
           }
         }
-        if (b.arch.count !== 0) b.runner()
+        if (b.arch.count !== 0) b.runner(ctx)
       }
     }
   }

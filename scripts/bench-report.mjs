@@ -237,7 +237,7 @@ function genTables(report) {
 
 ### Single-thread iteration
 
-Each loop adds every entity's velocity to its position, over ${fmtInt(report.config.iterEntities)} entities per op. \`ns per entity\` is mean op time divided by entity count (nanoseconds per entity — lower is faster); \`ratio vs bitECS\` is bitECS ops/s ÷ this row's ops/s. The \`ecsia bindColumns\` row binds its loop to the storage once, up front; if storage grows after that binding the loop runs slower from then on (roughly 1.7 ns per entity instead of ~1.0), so pre-size the world to peak capacity — spawn or reserve before binding.
+Each loop adds every entity's velocity to its position, over ${fmtInt(report.config.iterEntities)} entities per op. \`ns per entity\` is mean op time divided by entity count (nanoseconds per entity — lower is faster); \`ratio vs bitECS\` is bitECS ops/s ÷ this row's ops/s. The \`ecsia bindColumns\` row compiles a specialized loop per matched archetype (re-evaluating the factory into a fresh function so V8 keeps it on the fast path), which holds through storage growth with no pre-sizing; where dynamic compilation is forbidden (strict CSP / locked sandbox) it falls back to a plain interpreted loop.
 
 | loop | ops/s | ms/op | ns per entity | ratio vs bitECS |
 | --- | ---: | ---: | ---: | ---: |
