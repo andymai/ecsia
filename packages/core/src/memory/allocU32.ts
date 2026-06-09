@@ -50,7 +50,9 @@ const sabCtor = (): ResizableCtor<SharedArrayBuffer> | undefined =>
 const plainSabCtor = (): (new (byteLength: number) => SharedArrayBuffer) | undefined =>
   typeof SharedArrayBuffer === 'undefined' ? undefined : SharedArrayBuffer
 const missingSab = (): never => {
-  throw new Error('shared backing requested but SharedArrayBuffer is unavailable (page not cross-origin isolated)')
+  throw new Error(
+    'shared memory needs SharedArrayBuffer, which is unavailable here — a browser page must be cross-origin isolated (serve it with COOP: same-origin and COEP: require-corp headers); otherwise run the world with threaded: false',
+  )
 }
 const ResizableAb = ArrayBuffer as unknown as ResizableCtor<ArrayBuffer>
 

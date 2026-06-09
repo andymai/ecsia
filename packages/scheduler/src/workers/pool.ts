@@ -213,7 +213,10 @@ export class WorkerPool {
   async ready(): Promise<void> {
     const deadline = Date.now() + 5000
     while (this.#slots.some((s) => !s.ready)) {
-      if (Date.now() > deadline) throw new Error('worker pool bootstrap timed out')
+      if (Date.now() > deadline)
+        throw new Error(
+          'worker pool bootstrap timed out — a worker did not report ready within 5s (it likely threw while importing its kernel module; check the worker console for the real error)',
+        )
       await new Promise<void>((r) => setTimeout(r, 1))
     }
   }

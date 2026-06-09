@@ -71,6 +71,6 @@ describe('RICH — version gating', () => {
     new DataView(bytes.buffer, bytes.byteOffset).setUint16(4, 99, true) // forge a future version
     const R = defineComponent({ x: 'f32' }, { name: 'p' })
     const dst = createWorld({ components: asComps(R) })
-    expect(() => createSnapshotDeserializer(dst).load(bytes)).toThrow(/unsupported format version 99/)
+    expect(() => createSnapshotDeserializer(dst).load(bytes)).toThrow(/snapshot format version 99 can't be read/)
   })
 })

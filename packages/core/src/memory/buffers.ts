@@ -43,7 +43,9 @@ const plainSab = (): (new (n: number) => SharedArrayBuffer) | undefined =>
 export const isSharedBacking = (b: ArrayBufferLike): b is SharedArrayBuffer =>
   typeof SharedArrayBuffer !== 'undefined' && b instanceof SharedArrayBuffer
 const missingSharedBacking = (): never => {
-  throw new Error('shared backing requested but SharedArrayBuffer is unavailable (page not cross-origin isolated)')
+  throw new Error(
+    'shared memory needs SharedArrayBuffer, which is unavailable here — a browser page must be cross-origin isolated (serve it with COOP: same-origin and COEP: require-corp headers); otherwise run the world with threaded: false',
+  )
 }
 const ResizableAb = ArrayBuffer as unknown as ResizableCtor<ArrayBuffer>
 interface Growable {
@@ -73,7 +75,9 @@ export function selectBacking(
       return resizableAb ? 'resizable-ab' : 'grow-patch-ab'
     case 'sab':
       if (!sabAvailable) {
-        throw new Error("workers:'sab' requires SharedArrayBuffer + cross-origin isolation")
+        throw new Error(
+          "shared-memory threading (workers:'sab') needs SharedArrayBuffer — cross-origin isolate the page (COOP: same-origin + COEP: require-corp headers), or run with threaded: false",
+        )
       }
       return resizableSab ? 'resizable-sab' : 'grow-patch-sab'
     case 'no-sab':
