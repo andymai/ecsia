@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.17.0](https://github.com/andymai/ecsia/compare/core-v0.16.0...core-v0.17.0) (2026-06-09)
+
+
+### Features
+
+* dev guards for stale pooled views — pair accessors and topic events ([#100](https://github.com/andymai/ecsia/issues/100)) ([960ceea](https://github.com/andymai/ecsia/commit/960ceeafc98d9c9378aeb418cccdcdbc66b55cc3))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.17.0
+
 ## [0.16.0](https://github.com/andymai/ecsia/compare/core-v0.15.1...core-v0.16.0) (2026-06-09)
 
 
