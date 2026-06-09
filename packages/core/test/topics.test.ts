@@ -119,7 +119,7 @@ describe('world.publish + cursors', () => {
     expect(stored[0]).toBe(stored[1]) // same pooled view object each yield
     // The view is rebound per event, so a stored reference would silently read the LAST event.
     // The dev guard turns that footgun into a loud throw instead.
-    expect(() => (stored[0] as { n: number }).n).toThrow(/event view is pooled/)
+    expect(() => (stored[0] as { n: number }).n).toThrow(/is pooled and rebound/)
   })
 
   test('duplicate topic NAMES in one world are rejected; re-registration of the same def is idempotent', () => {

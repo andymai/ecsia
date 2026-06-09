@@ -222,14 +222,20 @@ export class Topics {
       guardedView: view,
     }
     if (this.#dev) {
+      const stale = (prop: string | symbol): never => {
+        throw new Error(
+          `topic '${def.name}': the consume() event view (.${String(prop)}) is pooled and rebound on the next ` +
+            `event — read its fields inside the loop, never store the view and use it after. Copy the values you need.`,
+        )
+      }
       rt.guardedView = new Proxy(view, {
         get(target, prop) {
-          if (rt.consuming <= 0)
-            throw new Error(
-              `topic '${def.name}': the consume() event view is pooled and rebound on the next event — ` +
-                `read its fields inside the loop, never store the view and read it after. Copy the values you need.`,
-            )
+          if (rt.consuming <= 0) stale(prop)
           return Reflect.get(target, prop, target)
+        },
+        set(target, prop, value) {
+          if (rt.consuming <= 0) stale(prop)
+          return Reflect.set(target, prop, value, target)
         },
       })
     }
