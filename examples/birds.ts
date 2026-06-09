@@ -12,8 +12,8 @@ import {
   createScheduler,
   read,
   write,
-} from 'ecsia'
-import type { EntityHandle } from 'ecsia'
+} from '@ecsia/kit'
+import type { EntityHandle } from '@ecsia/kit'
 
 export interface BirdsOptions {
   /** Number of birds to simulate. Default 256. */

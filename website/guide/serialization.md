@@ -31,7 +31,7 @@ world's serial phase — a point where no systems are mid-run.
 import {
   createWorld, defineComponent,
   createSnapshotSerializer, createSnapshotDeserializer,
-} from 'ecsia'
+} from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 
@@ -62,8 +62,8 @@ remap)`, passing the remap that ties producer handles to this world's handles.
 import {
   createWorld, defineComponent,
   createDeltaSerializer, applyDelta,
-} from 'ecsia'
-import type { EntityHandle } from 'ecsia'
+} from '@ecsia/kit'
+import type { EntityHandle } from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const world = createWorld({ components: [Position], maxEntities: 1 << 16 })
@@ -133,7 +133,7 @@ import {
   createWorld, defineComponent,
   createReplicationStream, createReplicationReceiver,
   encodeReplicationMessage, decodeReplicationMessage,
-} from 'ecsia'
+} from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 declare function broadcast(bytes: Uint8Array): void
@@ -177,7 +177,7 @@ counters. Mark a field — or a whole component — `persist: false` at definiti
 snapshot/delta writers skip it; on load it takes its declared default.
 
 ```ts
-import { createWorld, defineComponent, field } from 'ecsia'
+import { createWorld, defineComponent, field } from '@ecsia/kit'
 
 // One transient field inside an otherwise-persisted component:
 const Body = defineComponent(
@@ -285,7 +285,7 @@ To carry a reference that survives the wire, either:
 2. store a **stable application id** and resolve it after load with `createStableIndex`.
 
 ```ts
-import { createWorld, defineComponent, createStableIndex } from 'ecsia'
+import { createWorld, defineComponent, createStableIndex } from '@ecsia/kit'
 
 // A stable, app-meaningful id lives in a 'string' field; build an id → entity index over it.
 const Identity = defineComponent({ uid: 'string' }, { name: 'identity' })

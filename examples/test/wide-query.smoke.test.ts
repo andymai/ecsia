@@ -5,8 +5,8 @@
 // that escape hatch.
 
 import { describe, expect, test } from 'vitest'
-import { createWorld, defineComponent, read, write, MAX_QUERY_ARITY } from 'ecsia'
-import type { ComponentDef, Has, HasWrite, Schema } from 'ecsia'
+import { createWorld, defineComponent, read, write, MAX_QUERY_ARITY } from '@ecsia/kit'
+import type { ComponentDef, Has, HasWrite, Schema } from '@ecsia/kit'
 
 // Nine single-field components → a 9-term query, one past the typing cap. Literal `name`s so
 // each component shows up as a property key (CompKey<C> = the name literal) on the typed element.

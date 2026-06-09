@@ -14,8 +14,8 @@ import {
   onRemove,
   read,
   write,
-} from 'ecsia'
-import type { EntityHandle } from 'ecsia'
+} from '@ecsia/kit'
+import type { EntityHandle } from '@ecsia/kit'
 
 export interface MobSpec {
   /** Starting hit points. */

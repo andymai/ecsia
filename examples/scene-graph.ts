@@ -5,8 +5,8 @@
 // all through the ecsia umbrella. The thing to notice: re-parenting is a cheap in-place write —
 // entities never move between archetypes (the groups of entities sharing the same component set).
 
-import { createWorld, defineComponent, createRelations } from 'ecsia'
-import type { EntityHandle } from 'ecsia'
+import { createWorld, defineComponent, createRelations } from '@ecsia/kit'
+import type { EntityHandle } from '@ecsia/kit'
 
 export interface SceneNodeSpec {
   readonly local: { x: number; y: number }

@@ -129,7 +129,7 @@ async function main() {
       jsx: 'react-jsx',
       types: ['node', 'three'],
       paths: {
-        'ecsia': ['../../packages/ecsia/src/index.ts'],
+        '@ecsia/kit': ['../../packages/ecsia/src/index.ts'],
         '@ecsia/core': ['../../packages/core/src/index.ts'],
         '@ecsia/schema': ['../../packages/schema/src/index.ts'],
         '@ecsia/relations': ['../../packages/relations/src/index.ts'],

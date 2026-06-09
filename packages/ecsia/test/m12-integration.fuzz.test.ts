@@ -18,7 +18,7 @@
 // SER (serialize↔deserialize identity) — at checkpoints, snapshotCopy → load into a fresh world
 // reproduces the live component values, membership, and relations bit-faithfully (eids remapped).
 //
-// Everything below imports from 'ecsia' — that is the integration surface under test.
+// Everything below imports from '@ecsia/kit' — that is the integration surface under test.
 
 import fc from 'fast-check'
 import { describe, expect, test } from 'vitest'
@@ -32,8 +32,8 @@ import {
   createRelations,
   createSnapshotSerializer,
   createSnapshotDeserializer,
-} from 'ecsia'
-import type { ComponentDef, EntityHandle, RelationDef, Schema, World } from 'ecsia'
+} from '@ecsia/kit'
+import type { ComponentDef, EntityHandle, RelationDef, Schema, World } from '@ecsia/kit'
 
 // ---------------------------------------------------------------------------
 // Fixed component/relation universe. Built fresh per world so a producer and a deserialize-receiver

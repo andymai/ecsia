@@ -97,7 +97,7 @@ jobs:
       # Authenticates via npm OIDC trusted publishers (configured per package on
       # npmjs.com for this exact workflow filename); provenance is automatic.
       # Recursive publish skips private packages and already-published versions.
-      # TODO: drop the '!ecsia' filter when npm support grants the unscoped name
-      # (currently rejected by the registry's similarity check vs "elysia").
+      # The '@ecsia/kit' umbrella is excluded until its first manual publish + trusted
+      # publisher are set up on npmjs.com; drop this filter once that's done.
       - name: Publish to npm
-        run: pnpm --filter '!ecsia' -r publish --access public --no-git-checks
+        run: pnpm --filter '!@ecsia/kit' -r publish --access public --no-git-checks

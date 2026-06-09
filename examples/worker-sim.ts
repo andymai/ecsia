@@ -11,8 +11,8 @@ import {
   defineSystem,
   createScheduler,
   write,
-} from 'ecsia'
-import type { EntityHandle, RoundDispatcher, World, SystemDef, SystemContext, Tick } from 'ecsia'
+} from '@ecsia/kit'
+import type { EntityHandle, RoundDispatcher, World, SystemDef, SystemContext, Tick } from '@ecsia/kit'
 
 export interface WorkerSimOptions {
   /** Particles per group (two groups total). Default 512. */

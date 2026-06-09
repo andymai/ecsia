@@ -23,7 +23,7 @@ const ENTRIES = [
   {
     name: 'kernel',
     note: 'typed data + systems + scheduler (the typical app)',
-    code: `import { createWorld, defineComponent, defineSystem, createScheduler, read, write } from 'ecsia'
+    code: `import { createWorld, defineComponent, defineSystem, createScheduler, read, write } from '@ecsia/kit'
            console.log(createWorld, defineComponent, defineSystem, createScheduler, read, write)`,
   },
   {
@@ -35,13 +35,13 @@ const ENTRIES = [
   {
     name: 'full-umbrella',
     note: 'everything re-exported from the umbrella (the upper bound)',
-    code: `import * as ecsia from 'ecsia'
+    code: `import * as ecsia from '@ecsia/kit'
            console.log(ecsia)`,
   },
 ]
 
 const alias = {
-  ecsia: resolve(ROOT, 'packages/ecsia/dist/index.js'),
+  '@ecsia/kit': resolve(ROOT, 'packages/ecsia/dist/index.js'),
   '@ecsia/core': resolve(ROOT, 'packages/core/dist/index.js'),
   '@ecsia/schema': resolve(ROOT, 'packages/schema/dist/index.js'),
   '@ecsia/scheduler': resolve(ROOT, 'packages/scheduler/dist/index.js'),

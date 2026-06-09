@@ -26,7 +26,7 @@ renderer, including react-three-fiber.
 or disposes a world — your simulation loop owns that.
 
 ```tsx
-import { createWorld, defineComponent } from 'ecsia'
+import { createWorld, defineComponent } from '@ecsia/kit'
 import { WorldProvider } from '@ecsia/react'
 
 const Health = defineComponent({ hp: 'u32' }, { name: 'health' })
@@ -59,8 +59,8 @@ Value writes inside matching entities never re-render the list — render per-en
 values with `useComponent` in a child component, keyed by the handle:
 
 ```tsx
-import { defineComponent, defineTag, read, has, without } from 'ecsia'
-import type { EntityHandle } from 'ecsia'
+import { defineComponent, defineTag, read, has, without } from '@ecsia/kit'
+import type { EntityHandle } from '@ecsia/kit'
 import { useQuery, useComponent } from '@ecsia/react'
 
 const Health = defineComponent({ hp: 'u32' }, { name: 'health' })
@@ -108,8 +108,8 @@ Hooks are read-only by design. Writes go through the world exactly like they do 
 systems — resolve the entity at the moment you need it, inside the event handler:
 
 ```tsx
-import { defineComponent } from 'ecsia'
-import type { EntityHandle } from 'ecsia'
+import { defineComponent } from '@ecsia/kit'
+import type { EntityHandle } from '@ecsia/kit'
 import { useWorld, useComponent } from '@ecsia/react'
 
 const Health = defineComponent({ hp: 'u32' }, { name: 'health' })
@@ -155,8 +155,8 @@ animation, log. `useComponentEffect` fires a callback on every add, remove, or c
 one component on one entity:
 
 ```tsx
-import { defineComponent } from 'ecsia'
-import type { EntityHandle } from 'ecsia'
+import { defineComponent } from '@ecsia/kit'
+import type { EntityHandle } from '@ecsia/kit'
 import { useComponentEffect } from '@ecsia/react'
 
 const Health = defineComponent({ hp: 'u32' }, { name: 'health' })
@@ -185,8 +185,8 @@ node's parent or an attacker's victim — two hooks render them. Hand the relati
 provider once, then read links the same way you read components:
 
 ```tsx
-import { createWorld, createRelations } from 'ecsia'
-import type { EntityHandle } from 'ecsia'
+import { createWorld, createRelations } from '@ecsia/kit'
+import type { EntityHandle } from '@ecsia/kit'
 import { WorldProvider, useTarget, useTargets } from '@ecsia/react'
 
 const world = createWorld({ components: [] })

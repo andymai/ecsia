@@ -26,8 +26,8 @@ import {
   decodeReplicationMessage,
   read,
   write,
-} from 'ecsia'
-import type { EntityHandle, World } from 'ecsia'
+} from '@ecsia/kit'
+import type { EntityHandle, World } from '@ecsia/kit'
 
 export interface ReplicationOptions {
   /** Total simulation ticks. Default 30. */

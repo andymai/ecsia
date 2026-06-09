@@ -7,7 +7,7 @@ that runs over every entity that has the components it asks for. This page takes
 from install to your first running simulation.
 
 ::: warning Not published yet
-ecsia is **0.x and unpublished**. There is no `ecsia` on npm to `pnpm add` today — the install
+ecsia is **0.x and unpublished**. There is no `@ecsia/kit` on npm to `pnpm add` today — the install
 command below is the shape it will take **once published**. Until then, consume it from the local
 workspace (see [Use it today](#use-it-today)).
 :::
@@ -21,7 +21,7 @@ workspace (see [Use it today](#use-it-today)).
 ## Install (when published)
 
 ```sh
-pnpm add ecsia   # not yet published — local workspace for now
+pnpm add @ecsia/kit   # not yet published — local workspace for now
 ```
 
 ## Use it today {#use-it-today}
@@ -47,7 +47,7 @@ can store, then spawn (create) entities with whatever combination of those compo
 each one needs.
 
 ```ts
-import { createWorld, defineComponent } from 'ecsia'
+import { createWorld, defineComponent } from '@ecsia/kit'
 
 // A component is a small schema of typed fields ('f32' = 32-bit float).
 // Each field becomes its own contiguous array in memory — that's what makes loops fast.
@@ -69,7 +69,7 @@ won't notice, but it's why queries are fast.
 You can also set component values right at spawn time, in one call:
 
 ```ts
-import { createWorld, defineComponent } from 'ecsia'
+import { createWorld, defineComponent } from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
@@ -91,7 +91,7 @@ you ask for — and update fields through the same typed accessors.
 ```ts
 import {
   createWorld, defineComponent, defineSystem, createScheduler, read, write,
-} from 'ecsia'
+} from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })

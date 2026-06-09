@@ -5,8 +5,8 @@
 // math objects only, never a renderer. The thing to notice: the bridge systems are ordinary
 // systems, so the scheduler orders them after Movement from their read/write declarations alone.
 
-import { createWorld, defineComponent, defineSystem, createScheduler, read, write } from 'ecsia'
-import type { EntityHandle } from 'ecsia'
+import { createWorld, defineComponent, defineSystem, createScheduler, read, write } from '@ecsia/kit'
+import type { EntityHandle } from '@ecsia/kit'
 import {
   createThreeBindings,
   makeTransformSyncSystem,

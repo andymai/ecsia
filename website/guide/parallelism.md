@@ -9,7 +9,7 @@ across a pool of worker threads where the host allows it — and the parallel re
 never change shape; going parallel is a scheduler option, not a rewrite.
 
 ```ts
-import { createWorld, defineComponent } from 'ecsia'
+import { createWorld, defineComponent } from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 
@@ -33,7 +33,7 @@ components they touch, keyed by component name — workers align ids through it)
 
 ```js
 // kernels.js — imported by every worker thread.
-import { defineComponent } from 'ecsia'
+import { defineComponent } from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 
@@ -59,7 +59,7 @@ dispatch list from its own plan, and runs each round's worker-eligible systems o
 `dispose()` shuts the pool down.
 
 ```ts
-import { createWorld, defineComponent, defineSystem, createScheduler } from 'ecsia'
+import { createWorld, defineComponent, defineSystem, createScheduler } from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const world = createWorld({ components: [Position], threaded: true, scheduler: { workers: 4 } })
@@ -159,7 +159,7 @@ Read it top to bottom:
 ## Two systems that write different components share a wave
 
 ```ts
-import { defineComponent, defineSystem, write } from 'ecsia'
+import { defineComponent, defineSystem, write } from '@ecsia/kit'
 
 const PositionA = defineComponent({ x: 'f32', y: 'f32' }, { name: 'positionA' })
 const PositionB = defineComponent({ x: 'f32', y: 'f32' }, { name: 'positionB' })

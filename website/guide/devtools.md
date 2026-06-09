@@ -50,7 +50,7 @@ why).
 
 ```ts
 import { createWorld } from '@ecsia/core'
-import { createScheduler } from 'ecsia'
+import { createScheduler } from '@ecsia/kit'
 import { explainPlan, componentNameMap } from '@ecsia/devtools'
 
 const world = createWorld()
@@ -73,7 +73,7 @@ a string — no world access, no side effects.
 
 ```ts
 import { createWorld } from '@ecsia/core'
-import { createScheduler } from 'ecsia'
+import { createScheduler } from '@ecsia/kit'
 import { inspectWorld, explainPlan, renderText, componentNameMap } from '@ecsia/devtools'
 
 const world = createWorld()

@@ -21,7 +21,7 @@ across workers.
 `world.observe(term, handler)`, which returns a handle with `dispose()`.
 
 ```ts
-import { createWorld, defineComponent, onRemove } from 'ecsia'
+import { createWorld, defineComponent, onRemove } from '@ecsia/kit'
 
 const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
 const world = createWorld({ components: [Health], maxEntities: 1 << 16 })
@@ -48,7 +48,7 @@ apply at the next serial flush, the start of the next drain. That deferral is wh
 reactivity bit-identical between the single-threaded and parallel executors.
 
 ```ts
-import { createWorld, defineComponent, onAdd, onChange } from 'ecsia'
+import { createWorld, defineComponent, onAdd, onChange } from '@ecsia/kit'
 
 const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
 const world = createWorld({ components: [Health], maxEntities: 1 << 16 })
@@ -68,7 +68,7 @@ drain it with `.eachChanged(...)`. This is the pull side: ecsia keeps a log of w
 the filter reads it.
 
 ```ts
-import { createWorld, defineComponent, read, write } from 'ecsia'
+import { createWorld, defineComponent, read, write } from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const world = createWorld({ components: [Position], maxEntities: 1 << 16 })
@@ -94,7 +94,7 @@ is the same change-version mechanism the delta serializer rides — the one that
 the changes since a known point.
 
 ```ts
-import { createWorld, defineComponent } from 'ecsia'
+import { createWorld, defineComponent } from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const world = createWorld({ components: [Position], maxEntities: 1 << 16 })

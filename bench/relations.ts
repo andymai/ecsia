@@ -3,8 +3,8 @@
 // topology: N subjects each related to one of K targets via a non-exclusive `LinkedTo` relation,
 // then times a wildcard subjectsOf walk (the O(1)-presence-bit wildcard path) across all targets.
 
-import { createWorld, defineComponent, createRelations } from 'ecsia'
-import type { EntityHandle } from 'ecsia'
+import { createWorld, defineComponent, createRelations } from '@ecsia/kit'
+import type { EntityHandle } from '@ecsia/kit'
 
 export interface RelCase {
   readonly name: string

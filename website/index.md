@@ -57,7 +57,7 @@ entity that has the components it asks for.
 ```ts
 import {
   createWorld, defineComponent, defineSystem, createScheduler, read, write,
-} from 'ecsia'
+} from '@ecsia/kit'
 
 // Each field ('f32' = 32-bit float) becomes its own typed-array column in memory.
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
@@ -90,7 +90,7 @@ columns shared backings, and the scheduler dispatches worker-eligible systems to
 it creates and owns:
 
 ```ts
-import { createWorld, defineComponent, defineSystem, createScheduler } from 'ecsia'
+import { createWorld, defineComponent, defineSystem, createScheduler } from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const world = createWorld({ components: [Position], threaded: true, scheduler: { workers: 4 } })

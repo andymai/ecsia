@@ -115,7 +115,7 @@ sandbox), it transparently falls back to a plain interpreted loop; the codegen p
 it provably matches that interpreted result, so it can never change what your loop computes.
 
 ```ts
-import { createWorld, defineComponent, write } from 'ecsia'
+import { createWorld, defineComponent, write } from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
@@ -170,7 +170,7 @@ indexing, and codegens the same specialized per-archetype loop. The result lands
 roughly **6× faster than the proxy `.each`** — while you keep writing `e.position.x += …`.
 
 ```ts
-import { createWorld, defineComponent, write, read } from 'ecsia'
+import { createWorld, defineComponent, write, read } from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })

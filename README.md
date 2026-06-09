@@ -34,7 +34,7 @@ straight through memory the way CPUs like. On top of that sits a fully typed API
 ```ts
 import {
   createWorld, defineComponent, defineSystem, createScheduler, read, write,
-} from 'ecsia'
+} from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
@@ -67,7 +67,7 @@ those at the same time on worker threads. Going parallel is one flag, with no ch
 to any system, query, or accessor code:
 
 ```ts
-import { createWorld } from 'ecsia'
+import { createWorld } from '@ecsia/kit'
 
 const world = createWorld({ components: [/* ... */], threaded: true })
 ```
@@ -108,10 +108,10 @@ Runs on Node 22+, Bun, Deno, and modern browsers.
 ## Install
 
 ```sh
-pnpm add ecsia
+pnpm add @ecsia/kit
 ```
 
-> **Not yet published.** `ecsia@0.1.0` is staged but not on npm yet — the command above
+> **Not yet published.** `@ecsia/kit` is staged but not on npm yet — the command above
 > will not resolve until first publish. For now, consume it from the workspace.
 
 The umbrella package is the intended entry point. The layers underneath

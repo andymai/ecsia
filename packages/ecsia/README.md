@@ -12,7 +12,7 @@ from one import, and tree-shakes whatever you don't touch. (The scoped packages
 underneath — `@ecsia/core`, `@ecsia/schema`, `@ecsia/relations`, `@ecsia/scheduler`,
 `@ecsia/serialization` — remain available if you want to compose the layers by hand.)
 
-> **Status:** 0.1.0, not yet on npm — a local workspace package for now.
+> **Status:** not yet on npm — a local workspace package for now.
 
 Full documentation — guides and a generated API reference — at
 **[andymai.github.io/ecsia](https://andymai.github.io/ecsia/)**.
@@ -20,7 +20,7 @@ Full documentation — guides and a generated API reference — at
 ## Install
 
 ```sh
-pnpm add ecsia   # not yet published — local workspace for now
+pnpm add @ecsia/kit   # not yet published — local workspace for now
 ```
 
 ## Quick start
@@ -33,7 +33,7 @@ marking which ones the loop touches.
 ```ts
 import {
   createWorld, defineComponent, defineSystem, createScheduler, read, write,
-} from 'ecsia'
+} from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
@@ -63,7 +63,7 @@ scheduler.update(dt) // run one frame
 ### Go parallel — same user code
 
 ```ts
-import { createWorld } from 'ecsia'
+import { createWorld } from '@ecsia/kit'
 
 // One flag — no changes to any system, query, or accessor code. Results are
 // bit-identical to the single-threaded run: each worker queues its changes,
