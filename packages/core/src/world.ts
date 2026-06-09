@@ -528,6 +528,16 @@ export function createWorld(options: WorldOptions = {}): World {
       ),
   })
 
+  // Dev-only re-entrancy guard: > 0 while a query iteration (each/eachChunk/iterator) is running.
+  // The immediate structural mutators throw if it's armed — mutating the set you're iterating
+  // swap-pops rows and silently skips/double-visits entities. Zero cost in production (IS_DEV gate).
+  let iterating = 0
+  const iterationMutationError = (op: string): Error =>
+    new Error(
+      `world.${op}() ran during query iteration — restructuring entities mid-iteration swap-pops rows and ` +
+        `silently skips or double-visits them. Collect the handles in the loop, then ${op} them after it.`,
+    )
+
   // --- queries: the canonical-hash dedup cache + per-archetype matching, kept
   // current by the archetypeCreated hook. fixedBitCount = stride*32 (ids below it pack into the
   // signature words; larger pair ids are residual — ).
@@ -553,6 +563,12 @@ export function createWorld(options: WorldOptions = {}): World {
     resolveLocation: (index) => entities.locationOfIndex(index),
     handleOf: (index) => entities.handleOfIndex(index),
     indexOfHandle: handleIndexOf,
+    beginIteration: () => {
+      iterating += 1
+    },
+    endIteration: () => {
+      iterating -= 1
+    },
     coldResidentsOf: (archetypeId) => storage.coldResidentsOf(archetypeId),
     coldColumnSet: (componentId) => storage.coldColumnSet(componentId),
     coldRowOf: (index, componentId) => storage.coldRowOf(index, componentId),
@@ -1276,6 +1292,7 @@ export function createWorld(options: WorldOptions = {}): World {
         observerCommands.stageAdd(handle, def)
         return
       }
+      if (IS_DEV && iterating > 0) throw iterationMutationError('add')
       storage.add(handle, def)
     },
     remove(handle, def) {
@@ -1283,6 +1300,7 @@ export function createWorld(options: WorldOptions = {}): World {
         observerCommands.stageRemove(handle, def)
         return
       }
+      if (IS_DEV && iterating > 0) throw iterationMutationError('remove')
       storage.remove(handle, def)
     },
     warm(...defs) {
@@ -1293,6 +1311,7 @@ export function createWorld(options: WorldOptions = {}): World {
         observerCommands.stageDespawn(handle)
         return
       }
+      if (IS_DEV && iterating > 0) throw iterationMutationError('despawn')
       entities.despawn(handle)
     },
     isAlive(handle) {

@@ -22,6 +22,7 @@ import type { ColumnSet } from '../component/index.js'
 import type { Archetype } from '../storage/index.js'
 import type { Column, TypedArray } from '../memory/index.js'
 import { decodeEid } from '../memory/index.js'
+import { IS_DEV } from '../env.js'
 import type { CompiledQuery, CompiledValueTerm, RowFilterTerm } from './compile.js'
 import type { SparseSetU32 } from './sparse-set.js'
 import { buildPinnedRunner } from './codegen.js'
@@ -126,6 +127,12 @@ export interface LiveQueryDeps {
   resolveLocation(index: number): { archetypeId: number; row: number }
   /** index → its full EntityHandle (generation from the entity layer). */
   handleOf(index: number): EntityHandle
+  /**
+   * Dev-only re-entrancy guard: the world arms a flag for the duration of an each/eachChunk/iterator
+   * run so its structural mutators can throw on a mutation that would corrupt the live iteration.
+   */
+  beginIteration(): void
+  endIteration(): void
   /**
    * The entity indices currently resident in cold archetype `archetypeId`. Backed by the
    * ColdStore's per-archetype membership so cold iteration is O(rows in that archetype), NOT
@@ -350,6 +357,16 @@ export class LiveQuery {
 
   /** The hot loop: walk matchingArchetypes contiguous rows, poke the accessor singletons, call fn. */
   each(fn: (e: PooledElement) => void): void {
+    if (!IS_DEV) return this.#eachImpl(fn)
+    this.#deps.beginIteration()
+    try {
+      this.#eachImpl(fn)
+    } finally {
+      this.#deps.endIteration()
+    }
+  }
+
+  #eachImpl(fn: (e: PooledElement) => void): void {
     const binding = this.#hotBinding()
     const hasRowFilters = this.compiled.rowFilters.length !== 0
     const archs = this.matchingArchetypes
@@ -393,6 +410,16 @@ export class LiveQuery {
    * returned view across iterations.
    */
   eachChunk(fn: (chunk: QueryChunk) => void): void {
+    if (!IS_DEV) return this.#eachChunkImpl(fn)
+    this.#deps.beginIteration()
+    try {
+      this.#eachChunkImpl(fn)
+    } finally {
+      this.#deps.endIteration()
+    }
+  }
+
+  #eachChunkImpl(fn: (chunk: QueryChunk) => void): void {
     const chunk = this.#chunk ?? (this.#chunk = new QueryChunk())
     const hasRowFilters = this.compiled.rowFilters.length !== 0
     const archs = this.matchingArchetypes
@@ -821,6 +848,19 @@ export class LiveQuery {
   }
 
   *[Symbol.iterator](): Iterator<PooledElement> {
+    if (!IS_DEV) {
+      yield* this.#iterateImpl()
+      return
+    }
+    this.#deps.beginIteration()
+    try {
+      yield* this.#iterateImpl()
+    } finally {
+      this.#deps.endIteration()
+    }
+  }
+
+  *#iterateImpl(): Generator<PooledElement> {
     // A simple eager collection of (archetype,row) snapshots would allocate; instead drive `each`
     // through a buffered generator that yields the SAME pooled element per archetype. Single active
     // iteration is the contract — do not store the element across yields.

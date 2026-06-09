@@ -291,6 +291,8 @@ function buildEngine(byId: Archetype[], fixedBitCount: number): QueryEngine {
     compileContext: { idOf: (d) => ((d as { __id?: number }).__id ?? 0) as ComponentId, fixedBitCount },
     resolveLocation: () => ({ archetypeId: 0, row: 0 }),
     handleOf: (i) => i as unknown as EntityHandle,
+    beginIteration: () => {},
+    endIteration: () => {},
     indexOfHandle: (h) => h, // rows hold bare indices in this harness
     signatureOf: () => canonicalize([]) as Signature,
     coldResidentsOf: () => [],
