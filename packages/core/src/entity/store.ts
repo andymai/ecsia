@@ -165,7 +165,10 @@ export class EntityStore {
     if (!this.#index.isAlive(handle)) {
       // Dead handles throw unless the caller opts into lenient resolution (it then binds
       // the stale handle anyway; the location words are whatever the slot last held).
-      if (opts?.lenient !== true) throw new Error(`entity(${handle}): handle is not alive`)
+      if (opts?.lenient !== true)
+        throw new Error(
+          `entity(${handle}): this entity is no longer alive — it was despawned, or the handle is stale (held from before a despawn). pass { lenient: true } to bind it anyway`,
+        )
     }
     return this.#ref.__bind(handle, opts?.lenient === true)
   }

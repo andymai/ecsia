@@ -113,7 +113,7 @@ describe('EntityStore — range guards / lenient resolution / dead isAlive / wra
     const store = new EntityStore(cfg)
     const h = store.spawn()
     store.despawn(h)
-    expect(() => store.entity(h)).toThrow(/is not alive/)
+    expect(() => store.entity(h)).toThrow(/no longer alive/)
     // Lenient binds the stale handle anyway (the ref carries the dead handle).
     const ref = store.entity(h, { lenient: true })
     expect(ref.handle).toBe(h)

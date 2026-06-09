@@ -64,7 +64,7 @@ describe('access.ts: idOf unregistered guard (lines 24-28)', () => {
     expect((Loose as unknown as { id: number }).id).toBe(-1) // precondition: truly unregistered
     const sys = defineSystem({ name: 'usesLoose', read: [Loose], run() {} })
     expect(() => lowerSystems([sys], 4)).toThrow(
-      /system declares access to component 'unregistered_comp' which is not registered/,
+      /reads or writes component 'unregistered_comp', but it isn't registered/,
     )
   })
 

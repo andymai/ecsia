@@ -578,7 +578,10 @@ export function createRelations(world: World): RelationsApi {
     if (rt.exclusive) {
       const bind = (): Record<string, unknown> => {
         const view = bindPresenceAccessor(rt, subject)
-        if (view === null) throw new Error('getPair: subject does not hold the exclusive relation')
+        if (view === null)
+          throw new Error(
+            `getPair: entity ${subject} does not hold the exclusive relation '${rt.def.name}' — addPair(...) it first, or check hasPair(...) before reading the pair`,
+          )
         return view
       }
       return { read: bind, write: bind }
@@ -670,7 +673,10 @@ export function createRelations(world: World): RelationsApi {
 
   function targetOf(subject: EntityHandle, relation: RelationDef<Schema | void>): EntityHandle | null {
     const rt = requireRuntime(relation)
-    if (!rt.exclusive) throw new Error('targetOf: only valid for exclusive (single-target) relations')
+    if (!rt.exclusive)
+      throw new Error(
+        `targetOf: relation '${rt.def.name}' is not exclusive (one target per entity) — use targetsOf(...) to read its many targets, or define it with { exclusive: true }`,
+      )
     if (!host.isAlive(subject)) return null
     return readExclusiveTarget(rt, subject)
   }
@@ -683,7 +689,10 @@ export function createRelations(world: World): RelationsApi {
 
   function depthOf(subject: EntityHandle, relation: RelationDef<Schema | void>): number {
     const rt = requireRuntime(relation)
-    if (!rt.exclusive) throw new Error('depthOf: only valid for exclusive (single-parent) relations')
+    if (!rt.exclusive)
+      throw new Error(
+        `depthOf: relation '${rt.def.name}' is not exclusive (one parent per entity), so depth is undefined — define it with { exclusive: true } to use depthOf`,
+      )
     if (rt.depth === null)
       rt.depth = {
         depth: new Int32Array(host.maxEntities).fill(-1),
@@ -708,7 +717,10 @@ export function createRelations(world: World): RelationsApi {
       visited.push(host.handleIndex(cur))
       d += 1
       cur = parent
-      if (d > host.maxEntities) throw new Error('depthOf: hierarchy cycle detected')
+      if (d > host.maxEntities)
+        throw new Error(
+          `depthOf: relation '${rt.def.name}' has a cycle in its parent chain (an entity is its own ancestor) — an exclusive parent relation must form a tree; check your addPair(...) calls`,
+        )
     }
     let depthFromTop = d
     for (const v of visited) {
@@ -863,7 +875,8 @@ export function createRelations(world: World): RelationsApi {
     options: RelationOptions | undefined,
     fixedName: string | undefined,
   ): RelationDef<Schema | void> {
-    if (nextRelationId > 65535) throw new Error('defineRelation: numRelations exceeds the u16 ceiling (65535)')
+    if (nextRelationId > 65535)
+      throw new Error('defineRelation: too many relations — a world supports at most 65535 distinct relations')
     const relationId = nextRelationId++ as RelationId
     const exclusive = options?.exclusive ?? false
     const cascade = options?.cascade ?? 'none'
@@ -907,7 +920,10 @@ export function createRelations(world: World): RelationsApi {
 
   function requireRuntime(relation: RelationDef<Schema | void>): RelationRuntime {
     const rt = byDef.get(relation) ?? byRelationId.get(relation.id as number)
-    if (rt === undefined) throw new Error(`relation '${relation.name}' is not registered with this world`)
+    if (rt === undefined)
+      throw new Error(
+        `relation '${relation.name}' is not registered with this world — define it with the same createRelations(world) runtime you're calling here`,
+      )
     return rt
   }
 

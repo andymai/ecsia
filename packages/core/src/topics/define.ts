@@ -87,12 +87,12 @@ export function defineTopic<const S extends Schema, const N extends string>(name
     const token = isFieldSpec(raw) ? raw.token : raw
     if (typeof token === 'object' && token !== null && (token as { kind?: string }).kind === 'object') {
       throw new Error(
-        `defineTopic('${name}'): field '${fieldName}' is an object<T> field — object fields cannot live in a topic ring or cross the worker boundary (v1)`,
+        `defineTopic('${name}'): field '${fieldName}' is an object<T> field, but topic events must be fixed-width and serializable — use a scalar, vec, or staticString(...) field instead`,
       )
     }
     if (token === 'string') {
       throw new Error(
-        `defineTopic('${name}'): field '${fieldName}' is a free-form 'string' field — rich fields are sidecar-backed and cannot live in a topic ring (v1); use staticString(...) for enumerated strings`,
+        `defineTopic('${name}'): field '${fieldName}' is a free-form 'string' field, but topic events must be fixed-width and serializable — use staticString([...]) for a known set of values`,
       )
     }
     const descriptor = isFieldSpec(raw)

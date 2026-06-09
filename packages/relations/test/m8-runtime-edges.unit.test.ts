@@ -29,7 +29,7 @@ describe('targetOf — exclusive-only, dead-safe', () => {
     const rel = createRelations(world)
     const Likes = rel.defineRelation(null) // non-exclusive
     const s = world.spawn()
-    expect(() => rel.targetOf(s, Likes)).toThrow(/only valid for exclusive/)
+    expect(() => rel.targetOf(s, Likes)).toThrow(/not exclusive/)
   })
 
   it('returns null for a despawned subject (dead-endpoint guard)', () => {
@@ -73,7 +73,7 @@ describe('depthOf — chain walk + cache backfill', () => {
     const rel = createRelations(world)
     const Likes = rel.defineRelation(null)
     const s = world.spawn()
-    expect(() => rel.depthOf(s, Likes)).toThrow(/only valid for exclusive/)
+    expect(() => rel.depthOf(s, Likes)).toThrow(/not exclusive/)
   })
 
   it('detects a cycle in the parent chain', () => {
@@ -84,7 +84,7 @@ describe('depthOf — chain walk + cache backfill', () => {
     const y = world.spawn()
     rel.addPair(x, ChildOf, y)
     rel.addPair(y, ChildOf, x) // 2-cycle
-    expect(() => rel.depthOf(x, ChildOf)).toThrow(/cycle detected/)
+    expect(() => rel.depthOf(x, ChildOf)).toThrow(/cycle in its parent chain/)
   })
 })
 

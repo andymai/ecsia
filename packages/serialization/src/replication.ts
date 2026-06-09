@@ -168,8 +168,8 @@ export function createReplicationReceiver(world: World): ReplicationReceiver {
     apply(msg: ReplicationMessage): ReplicationApplyResult {
       if (msg.schemaHash !== s.schemaHash()) {
         throw new Error(
-          'serialization: replication schemaHash mismatch — refusing to apply. The message was produced by a ' +
-            'different component schema; both sides must register the same components.',
+          `serialization: replication schemaHash mismatch — refusing to apply (receiver ${s.schemaHash()}, message ${msg.schemaHash}). ` +
+            'The message was produced by a different set of component schemas; register the same components, in the same order, on both sides.',
         )
       }
       if (msg.kind === 'baseline') {

@@ -169,7 +169,7 @@ describe('RICH — reset-to-default propagates (T-RT-RESET, v4 wire)', () => {
     ;(src.entity(e).write(Label) as { text: string }).text = 'y'
     const bytes = ser.deltaCopy()
     new DataView(bytes.buffer, bytes.byteOffset).setUint16(4, 3, true) // forge a v3 stamp
-    expect(() => applyDelta(dst, bytes, remap)).toThrow(/unsupported delta format version 3/)
+    expect(() => applyDelta(dst, bytes, remap)).toThrow(/delta format version 3 can't be read/)
   })
 })
 

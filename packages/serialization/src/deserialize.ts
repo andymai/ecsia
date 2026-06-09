@@ -115,7 +115,10 @@ export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
       cur.u8() // storage strategy (unused — code on both sides)
       producerComponents.push({ id, name, fieldCount })
       const local = s.componentIdByName(name)
-      if (local === undefined) throw new Error(`serialization: component '${name}' not registered on receiver`)
+      if (local === undefined)
+        throw new Error(
+          `serialization: the snapshot has a component '${name}' that this world doesn't register — pass '${name}' to createWorld({ components: [...] }) so both sides share the same schema`,
+        )
       const localFields = s.fieldsOf(local)
       if (localFields !== undefined && localFields.length !== fieldCount) {
         throw new Error(
