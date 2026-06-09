@@ -244,7 +244,9 @@ export function decodeReplicationMessage(bytes: Uint8Array): ReplicationMessage 
   if (magic !== REPLICATION_MAGIC) throw new Error('serialization: bad magic (not an ecsia replication envelope)')
   const version = cur.u16()
   if (version !== REPLICATION_ENVELOPE_VERSION) {
-    throw new Error(`serialization: unsupported replication envelope version ${version} (this build reads ${REPLICATION_ENVELOPE_VERSION})`)
+    throw new Error(
+      `serialization: replication envelope version ${version} can't be read by this build (it reads ${REPLICATION_ENVELOPE_VERSION}) — upgrade both peers to the same @ecsia/serialization version`,
+    )
   }
   const kindOrdinal = cur.u8()
   if (kindOrdinal !== 0 && kindOrdinal !== 1) throw new Error(`serialization: unknown replication message kind ${kindOrdinal}`)

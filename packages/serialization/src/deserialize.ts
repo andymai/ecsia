@@ -76,8 +76,8 @@ export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
     const version = cur.u16()
     if (version < MIN_SUPPORTED_VERSION || version > SERIALIZATION_FORMAT_VERSION) {
       throw new Error(
-        `serialization: unsupported format version ${version} (this build reads ` +
-          `${MIN_SUPPORTED_VERSION}..${SERIALIZATION_FORMAT_VERSION})`,
+        `serialization: snapshot format version ${version} can't be read by this build (it reads ` +
+          `${MIN_SUPPORTED_VERSION}..${SERIALIZATION_FORMAT_VERSION}) — upgrade the reader to match the writer, or re-export the snapshot from a build in this range`,
       )
     }
     const endian = cur.u8()

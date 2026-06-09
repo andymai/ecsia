@@ -108,7 +108,9 @@ function fieldCodec(d: FieldDescriptor): FieldCodec {
   if (kind === 'staticString') {
     return scalarCodec('u32', d)
   }
-  throw new Error(`command-buffer: field '${d.name}' (object token) is not encodable in a command buffer`)
+  throw new Error(
+    `command-buffer: field '${d.name}' is an object<T> field, which can't be carried in a worker's command buffer (queued structural writes must be fixed-width) — set '${d.name}' from a main-thread (serial) system instead`,
+  )
 }
 
 export function buildFieldCodec(def: ComponentDef<Schema>): ComponentFieldCodec {

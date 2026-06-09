@@ -98,7 +98,7 @@ describe('deserialize — header validation gates', () => {
     const bytes = createSnapshotSerializer(world).snapshotCopy()
     const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
     dv.setUint16(4, 999, true) // version field at offset 4
-    expect(() => createSnapshotDeserializer(world).load(bytes)).toThrow(/unsupported format version 999/)
+    expect(() => createSnapshotDeserializer(world).load(bytes)).toThrow(/snapshot format version 999 can't be read/)
   })
 
   it('rejects a big-endian image', () => {
