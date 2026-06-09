@@ -51,7 +51,7 @@ describe('bindColumns bind-time errors', () => {
       hash: 'bc-rf',
       unsatisfiable: false,
     } as unknown as CompiledQuery
-    const lq = new LiveQuery(cq, [], current, [], {} as LiveQueryDeps)
+    const lq = new LiveQuery(cq, [], current, [], { beginIteration() {}, endIteration() {} } as LiveQueryDeps)
     expect(() => lq.bindColumns([Position, 'x'], () => () => {})).toThrow(/row-filtered/)
   })
 

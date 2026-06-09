@@ -73,6 +73,8 @@ function harness(componentCount: number): Harness {
     indexOfHandle: (h) => h & 0xffff,
     resolveLocation: (index) => ({ archetypeId: recordArch.get(index) ?? 0, row: recordRow.get(index) ?? 0 }),
     handleOf: (index) => (index & 0xffff) as unknown as EntityHandle,
+    beginIteration: () => {},
+    endIteration: () => {},
     coldResidentsOf: function* () {},
     coldColumnSet: () => undefined,
     coldRowOf: () => -1,
