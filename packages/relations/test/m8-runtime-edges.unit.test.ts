@@ -231,3 +231,34 @@ describe('requireRuntime — unregistered relation throws', () => {
     expect(() => relB.hasPair(s, bogus, t)).toThrow(/not registered with this world/)
   })
 })
+
+describe('exclusive relations on a COLD-resident subject', () => {
+  // maxHotArchetypes: 1 fills the single hot slot with the empty-spawn archetype, so the archetype
+  // that holds the exclusive relation's presence component is COLD. fieldLocationFor must resolve the
+  // cold subject's target column; columnSetFor (hot-only) silently dropped the read AND the write.
+
+  it('first-attach and re-target both land on a cold subject (not silently dropped)', () => {
+    const world = createWorld({ maxHotArchetypes: 1 })
+    const rel = createRelations(world)
+    const ChildOf = rel.defineRelation(null, { exclusive: true })
+    const child = world.spawn()
+    const p1 = world.spawn()
+    const p2 = world.spawn()
+    rel.addPair(child, ChildOf, p1) // subject migrates to a COLD presence archetype
+    expect(rel.targetOf(child, ChildOf)).toBe(p1) // pre-fix: null (write dropped)
+    rel.addPair(child, ChildOf, p2) // re-target the cold subject
+    expect(rel.targetOf(child, ChildOf)).toBe(p2) // pre-fix: stale (kept p1 / null)
+  })
+
+  it('a payload-bearing exclusive pair reads back on a cold subject', () => {
+    const world = createWorld({ maxHotArchetypes: 1 })
+    const rel = createRelations(world)
+    const Owes = rel.defineRelation({ amount: 'i32' }, { exclusive: true })
+    const debtor = world.spawn()
+    const creditor = world.spawn()
+    rel.addPair(debtor, Owes, creditor, { amount: 42 })
+    // bindPresenceAccessor must resolve the cold subject's payload columns.
+    const pair = rel.getPair(debtor, Owes, creditor).read() as { amount: number }
+    expect(pair.amount).toBe(42)
+  })
+})

@@ -379,12 +379,10 @@ export function createRelations(world: World): RelationsApi {
   // --- exclusive subject target column access -------------------------
 
   function exclusiveTargetCol(rt: RelationRuntime, subject: EntityHandle): { col: Column; row: number } | null {
-    // TODO: route through host.fieldLocationFor when exclusive relations get cold-archetype
-    // coverage — columnSetFor is hot-only, so an exclusive target read/re-target on a COLD subject
-    // silently no-ops today (the same hole the prefab copy path had before fieldLocationFor).
-    // Same scope: addPairExclusive's "first attach" branch also double-increments pairCount for a
-    // cold subject (the null read masks an existing target).
-    const r = host.columnSetFor(subject, rt.presenceDef)
+    // fieldLocationFor (not columnSetFor): a COLD-resident subject must still resolve its target
+    // column. columnSetFor is hot-only — using it here silently dropped the target read on a cold
+    // subject, which masked an existing target (double-counting pairCount) and no-op'd re-targets.
+    const r = host.fieldLocationFor(subject, rt.presenceDef)
     if (r === null) return null
     const col = r.set.columns[rt.subjectTargetFieldIndex]
     if (col === undefined) return null
@@ -402,7 +400,8 @@ export function createRelations(world: World): RelationsApi {
   }
 
   function bindPresenceAccessor(rt: RelationRuntime, subject: EntityHandle): Record<string, unknown> | null {
-    const r = host.columnSetFor(subject, rt.presenceDef)
+    // fieldLocationFor (cold-capable) so getPair's accessor resolves a cold-resident subject too.
+    const r = host.fieldLocationFor(subject, rt.presenceDef)
     if (r === null) return null
     return bindAccessorRow(r.set, r.row, subject) as unknown as Record<string, unknown>
   }
