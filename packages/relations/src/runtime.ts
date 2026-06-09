@@ -403,7 +403,43 @@ export function createRelations(world: World): RelationsApi {
     // fieldLocationFor (cold-capable) so getPair's accessor resolves a cold-resident subject too.
     const r = host.fieldLocationFor(subject, rt.presenceDef)
     if (r === null) return null
-    return bindAccessorRow(r.set, r.row, subject) as unknown as Record<string, unknown>
+    const acc = bindAccessorRow(r.set, r.row, subject) as unknown as Record<string, unknown>
+    return IS_DEV ? guardPairView(acc, subject, rt.presenceDef, r.set, r.row) : acc
+  }
+  // Dev-only stale-view guard for the pooled pair accessor, mirroring core's component-accessor
+  // guard: the object getPair().read()/write() returns is the per-archetype accessor SINGLETON, so a
+  // held view silently re-points when a later getPair()/entity() resolve re-pokes it, or the subject
+  // dies/moves. Re-validate on every property access via the subject's live location.
+  function guardPairView(
+    acc: Record<string, unknown>,
+    subject: EntityHandle,
+    presenceDef: ComponentDef<Schema>,
+    set: ColumnSet,
+    row: number,
+  ): Record<string, unknown> {
+    const expected = (subject as number) >>> 0
+    const fail = (prop: string | symbol): never => {
+      throw new Error(
+        `stale pair view (.${String(prop)}) for entity ${expected} — the pooled accessor was re-pointed by a ` +
+          `later getPair()/entity() resolve, or the subject died or moved since. Read the fields you need before ` +
+          `the next resolve, or call getPair(...) again. (Dev-mode guard; production reads the pooled view directly.)`,
+      )
+    }
+    const fresh = (): boolean => {
+      if (((acc as { __eid: number }).__eid >>> 0) !== expected) return false
+      const loc = host.fieldLocationFor(subject, presenceDef)
+      return loc !== null && loc.set === set && loc.row === row
+    }
+    return new Proxy(acc, {
+      get(target, prop) {
+        if (!fresh()) fail(prop)
+        return Reflect.get(target, prop, target)
+      },
+      set(target, prop, value) {
+        if (!fresh()) fail(prop)
+        return Reflect.set(target, prop, value, target)
+      },
+    })
   }
   function bindOverflowAccessor(ov: OverflowTable, row: number, subject: EntityHandle): Record<string, unknown> {
     return bindAccessorRow(ov.columnSet, row, subject) as unknown as Record<string, unknown>

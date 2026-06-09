@@ -109,15 +109,17 @@ describe('world.publish + cursors', () => {
     expect(vals(world.__topics.consume(erased(T), 'r'))).toEqual([2, 3])
   })
 
-  test('the consume view is pooled — storing it across iterations reads the latest event', () => {
+  test('the consume view is pooled — reading a stored view after the loop throws in dev', () => {
     const T = defineTopic('Pooled', { n: 'i32' })
     const world = createWorld({})
     world.publish(T, { n: 1 })
     world.publish(T, { n: 2 })
     const stored: unknown[] = []
     for (const ev of world.__topics.consume(erased(T), 'r')) stored.push(ev)
-    expect(stored[0]).toBe(stored[1]) // same pooled object
-    expect((stored[0] as { n: number }).n).toBe(2) // rebound to the last row
+    expect(stored[0]).toBe(stored[1]) // same pooled view object each yield
+    // The view is rebound per event, so a stored reference would silently read the LAST event.
+    // The dev guard turns that footgun into a loud throw instead.
+    expect(() => (stored[0] as { n: number }).n).toThrow(/event view is pooled/)
   })
 
   test('duplicate topic NAMES in one world are rejected; re-registration of the same def is idempotent', () => {
