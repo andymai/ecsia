@@ -1,7 +1,7 @@
 {
   "packages/core": "0.17.0",
   "packages/devtools": "0.17.0",
-  "packages/ecsia": "0.17.0",
+  "packages/ecsia": "0.18.0",
   "packages/react": "0.17.0",
   "packages/relations": "0.17.0",
   "packages/scheduler": "0.17.0",
