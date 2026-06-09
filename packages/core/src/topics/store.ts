@@ -106,6 +106,10 @@ interface TopicRuntime {
   bind(words: ArrayLike<number>, base: number): void
   scratchRow: Uint32Array
   overflowWarned: boolean
+  /** Dev-only: > 0 while a consume() loop over this topic is running; gates {@link guardedView}. */
+  consuming: number
+  /** Dev-only membrane around {@link view} that throws if a field is read outside the consume loop. */
+  guardedView: Record<string, unknown>
 }
 
 export interface TopicsConfig {
@@ -214,6 +218,26 @@ export class Topics {
       },
       scratchRow: new Uint32Array(Math.max(codec.fieldWords, 1)),
       overflowWarned: false,
+      consuming: 0,
+      guardedView: view,
+    }
+    if (this.#dev) {
+      const stale = (prop: string | symbol): never => {
+        throw new Error(
+          `topic '${def.name}': the consume() event view (.${String(prop)}) is pooled and rebound on the next ` +
+            `event — read its fields inside the loop, never store the view and use it after. Copy the values you need.`,
+        )
+      }
+      rt.guardedView = new Proxy(view, {
+        get(target, prop) {
+          if (rt.consuming <= 0) stale(prop)
+          return Reflect.get(target, prop, target)
+        },
+        set(target, prop, value) {
+          if (rt.consuming <= 0) stale(prop)
+          return Reflect.set(target, prop, value, target)
+        },
+      })
     }
     this.#byDef.set(def, rt)
     this.#byId.set(id, rt)
@@ -495,18 +519,26 @@ export class Topics {
     const end = rt.head
     rt.cursors.set(readerKey, cursor)
     this.#mirrorCursor(rt, readerKey, cursor) // the retention snap must reach the SAB slot too
-    for (let seq = cursor; seq < end; seq++) {
-      // Advance BEFORE the yield: a consumer that breaks out of the loop has still observed the
-      // yielded event, and exactly-once means it must not be redelivered next consume. The SAB
-      // mirror tracks in lockstep so a re-plan that moves this reader onto a worker resumes right.
-      rt.cursors.set(readerKey, seq + 1)
-      this.#mirrorCursor(rt, readerKey, seq + 1)
-      if (seq >= rt.spillStartSeq) {
-        rt.bind(rt.spill, (seq - rt.spillStartSeq) * rt.rowWords + TOPIC_HEADER_WORDS)
-      } else {
-        rt.bind(rt.ring, (seq - rt.baseSeq) * rt.rowWords + TOPIC_HEADER_WORDS)
+    // Dev: arm the pooled-view guard for the loop's duration (try/finally so an early break or throw
+    // disarms it). The yielded view then throws if a stored reference is read after the loop.
+    const view = this.#dev ? rt.guardedView : rt.view
+    if (this.#dev) rt.consuming += 1
+    try {
+      for (let seq = cursor; seq < end; seq++) {
+        // Advance BEFORE the yield: a consumer that breaks out of the loop has still observed the
+        // yielded event, and exactly-once means it must not be redelivered next consume. The SAB
+        // mirror tracks in lockstep so a re-plan that moves this reader onto a worker resumes right.
+        rt.cursors.set(readerKey, seq + 1)
+        this.#mirrorCursor(rt, readerKey, seq + 1)
+        if (seq >= rt.spillStartSeq) {
+          rt.bind(rt.spill, (seq - rt.spillStartSeq) * rt.rowWords + TOPIC_HEADER_WORDS)
+        } else {
+          rt.bind(rt.ring, (seq - rt.baseSeq) * rt.rowWords + TOPIC_HEADER_WORDS)
+        }
+        yield view
       }
-      yield rt.view
+    } finally {
+      if (this.#dev) rt.consuming -= 1
     }
   }
 

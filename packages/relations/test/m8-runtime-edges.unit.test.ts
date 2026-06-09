@@ -262,3 +262,45 @@ describe('exclusive relations on a COLD-resident subject', () => {
     expect(pair.amount).toBe(42)
   })
 })
+
+describe('getPair view — dev stale-view guard', () => {
+  // The object getPair().read()/write() returns is the pooled accessor singleton; holding it across a
+  // later resolve silently reads another subject's row. The dev guard turns that into a loud throw.
+
+  it('reading the view immediately works', () => {
+    const world = createWorld()
+    const rel = createRelations(world)
+    const Owes = rel.defineRelation({ amount: 'i32' }, { exclusive: true })
+    const a = world.spawn()
+    const b = world.spawn()
+    rel.addPair(a, Owes, b, { amount: 42 })
+    expect((rel.getPair(a, Owes, b).read() as { amount: number }).amount).toBe(42)
+  })
+
+  it('throws when a held view is re-pointed by a later getPair() resolve', () => {
+    const world = createWorld()
+    const rel = createRelations(world)
+    const Owes = rel.defineRelation({ amount: 'i32' }, { exclusive: true })
+    const a = world.spawn()
+    const b = world.spawn()
+    const c = world.spawn()
+    const d = world.spawn()
+    rel.addPair(a, Owes, b, { amount: 1 })
+    rel.addPair(c, Owes, d, { amount: 2 })
+    const viewA = rel.getPair(a, Owes, b).read() // pooled singleton bound to a
+    rel.getPair(c, Owes, d).read() // re-pokes the same singleton to c
+    expect(() => (viewA as { amount: number }).amount).toThrow(/stale pair view/)
+  })
+
+  it('throws when the subject is despawned after the view is taken', () => {
+    const world = createWorld()
+    const rel = createRelations(world)
+    const Owes = rel.defineRelation({ amount: 'i32' }, { exclusive: true })
+    const a = world.spawn()
+    const b = world.spawn()
+    rel.addPair(a, Owes, b, { amount: 7 })
+    const viewA = rel.getPair(a, Owes, b).read()
+    world.despawn(a)
+    expect(() => (viewA as { amount: number }).amount).toThrow(/stale pair view/)
+  })
+})
