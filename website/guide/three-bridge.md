@@ -25,7 +25,7 @@ with a THREE object; `objectOf(handle)` resolves it back. `autoUnbindOn(anchor)`
 component into auto-teardown when the entity despawns.
 
 ```ts
-import { createWorld, defineComponent } from 'ecsia'
+import { createWorld, defineComponent } from '@ecsia/kit'
 import { createThreeBindings } from '@ecsia/three'
 import { Object3D, Scene } from 'three'
 
@@ -51,7 +51,7 @@ read-after-write conflict does the ordering, so you never sequence them by hand:
 - `makeInstancedSyncSystem({ mesh, position })` — writes a `THREE.InstancedMesh`'s `instanceMatrix`.
 
 ```ts
-import { createWorld, createScheduler, defineComponent } from 'ecsia'
+import { createWorld, createScheduler, defineComponent } from '@ecsia/kit'
 import { createThreeBindings, makeTransformSyncSystem, makeInstancedSyncSystem } from '@ecsia/three'
 import { BufferGeometry, InstancedMesh, MeshBasicMaterial, Scene } from 'three'
 
@@ -74,7 +74,7 @@ scheduler.update(1 / 60)
 or manual `.tick(dt)` stepping in Node (no rAF). A fixed-timestep option is available.
 
 ```ts
-import { createWorld, createScheduler } from 'ecsia'
+import { createWorld, createScheduler } from '@ecsia/kit'
 import { createThreeDriver } from '@ecsia/three'
 
 const world = createWorld()

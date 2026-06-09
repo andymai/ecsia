@@ -30,7 +30,7 @@ This example also opts into **cascade** — automatic cleanup of linked entities
 parent (remove it from the world) and its children go too. More on the directions below.
 
 ```ts
-import { createWorld, defineComponent, createRelations } from 'ecsia'
+import { createWorld, defineComponent, createRelations } from '@ecsia/kit'
 
 const Node = defineComponent({ x: 'f32' }, { name: 'node' })
 const world = createWorld({ components: [Node], maxEntities: 1 << 16 })
@@ -49,7 +49,7 @@ the way a child has one parent — re-pairing a subject is an in-place write, wi
 the entity between tables.
 
 ```ts
-import { createWorld, defineComponent, createRelations } from 'ecsia'
+import { createWorld, defineComponent, createRelations } from '@ecsia/kit'
 
 const Node = defineComponent({ x: 'f32' }, { name: 'node' })
 const world = createWorld({ components: [Node], maxEntities: 1 << 16 })
@@ -67,8 +67,8 @@ For a non-exclusive relation, a subject can hold many targets; iterate them with
 and read the parent chain depth with `depthOf`:
 
 ```ts
-import { createWorld, defineComponent, createRelations } from 'ecsia'
-import type { EntityHandle } from 'ecsia'
+import { createWorld, defineComponent, createRelations } from '@ecsia/kit'
+import type { EntityHandle } from '@ecsia/kit'
 
 const Node = defineComponent({ x: 'f32' }, { name: 'node' })
 const world = createWorld({ components: [Node], maxEntities: 1 << 16 })
@@ -89,7 +89,7 @@ const depth = rel.depthOf(a, ChildOf)   // root = 0
 The first argument is the payload schema; `addPair` then carries the values.
 
 ```ts
-import { createWorld, defineComponent, createRelations } from 'ecsia'
+import { createWorld, defineComponent, createRelations } from '@ecsia/kit'
 
 const Person = defineComponent({ id: 'i32' }, { name: 'person' })
 const world = createWorld({ components: [Person], maxEntities: 1 << 16 })
@@ -110,7 +110,7 @@ any target — "every entity that has *some* parent" — and the lookup stays fa
 many entities exist (`O(archetypes)`).
 
 ```ts
-import { createWorld, defineComponent, createRelations, Wildcard } from 'ecsia'
+import { createWorld, defineComponent, createRelations, Wildcard } from '@ecsia/kit'
 
 const Node = defineComponent({ x: 'f32' }, { name: 'node' })
 const world = createWorld({ components: [Node], maxEntities: 1 << 16 })
@@ -138,7 +138,7 @@ pairs (despawn, `removePair`, exclusive re-target), snapshot first —
 `[...rel.subjectsOf(Wildcard, t)]` — then mutate, matching the cascade discipline.
 
 ```ts
-import { createWorld, defineComponent, createRelations, Wildcard } from 'ecsia'
+import { createWorld, defineComponent, createRelations, Wildcard } from '@ecsia/kit'
 
 const Mob = defineComponent({ hp: 'i32' }, { name: 'mob' })
 const world = createWorld({ components: [Mob], maxEntities: 1 << 16 })
@@ -175,7 +175,7 @@ Despawning a **subject** always just removes its own outgoing pairs — it never
 target.
 
 ```ts
-import { createWorld, defineComponent, createRelations } from 'ecsia'
+import { createWorld, defineComponent, createRelations } from '@ecsia/kit'
 
 const Mob = defineComponent({ hp: 'i32' }, { name: 'mob' })
 const world = createWorld({ components: [Mob], maxEntities: 1 << 16 })

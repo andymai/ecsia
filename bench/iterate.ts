@@ -4,8 +4,8 @@
 // step() in the runner. Kept allocation-free in the loop so the measurement is the storage/iteration
 // cost, not GC.
 
-import { createWorld, defineComponent, write } from 'ecsia'
-import type { QueryChunk } from 'ecsia'
+import { createWorld, defineComponent, write } from '@ecsia/kit'
+import type { QueryChunk } from '@ecsia/kit'
 import { World as MiniplexWorld } from 'miniplex'
 import {
   createWorld as bitCreateWorld,

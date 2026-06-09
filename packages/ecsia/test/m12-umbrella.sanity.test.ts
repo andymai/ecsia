@@ -1,4 +1,4 @@
-// umbrella sanity: importing 'ecsia' gives the documented cohesive
+// umbrella sanity: importing '@ecsia/kit' gives the documented cohesive
 // surface — a user assembles a whole world (component/tag/relation/query/system/serialization) from the
 // ONE import, never reaching into a sub-package. This file double-duties as a type-check gate: the named
 // imports below resolve to real values/types through the umbrella's re-exports, so if a re-export is
@@ -6,7 +6,7 @@
 // assertions below make the runtime surface explicit too).
 
 import { describe, expect, test } from 'vitest'
-import * as ecsia from 'ecsia'
+import * as ecsia from '@ecsia/kit'
 import {
   // world
   createWorld,
@@ -47,7 +47,7 @@ import {
   NO_ENTITY,
   NULL_ENTITY,
   isNoEntity,
-} from 'ecsia'
+} from '@ecsia/kit'
 // Type-only surface: if any of these is not re-exported, this import fails to compile.
 import type {
   World,
@@ -73,7 +73,7 @@ import type {
   SystemDef,
   SystemContext,
   Schema,
-} from 'ecsia'
+} from '@ecsia/kit'
 
 describe('umbrella — the documented public surface is importable from ecsia', () => {
   test('every documented runtime export is a present binding of the right kind', () => {

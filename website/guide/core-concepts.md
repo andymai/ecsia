@@ -18,7 +18,7 @@ That group is called an **archetype**, and it's the reason queries don't have to
 entities one by one.
 
 ```ts
-import { createWorld, defineComponent } from 'ecsia'
+import { createWorld, defineComponent } from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
@@ -40,7 +40,7 @@ memory, which CPUs are very good at, and the same arrays can be shared with work
 threads.
 
 ```ts
-import { defineComponent, vec3 } from 'ecsia'
+import { defineComponent, vec3 } from '@ecsia/kit'
 
 const Transform = defineComponent(
   { position: vec3(), scale: 'f32' },
@@ -60,7 +60,7 @@ If your strings come from a fixed set of choices, use `staticString(...)` instea
 stores a small number under the hood, so it keeps all the numeric-storage benefits.
 
 ```ts
-import { defineComponent, object, staticString } from 'ecsia'
+import { defineComponent, object, staticString } from '@ecsia/kit'
 
 const Label = defineComponent(
   {
@@ -87,7 +87,7 @@ access to their fields. Wrap each component in `read(C)` or `write(C)` to say wh
 intend to do with it — reads come back deeply readonly, writes are mutable.
 
 ```ts
-import { createWorld, defineComponent, read, write } from 'ecsia'
+import { createWorld, defineComponent, read, write } from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
@@ -120,7 +120,7 @@ their term set, so deriving hands you the exact same object as writing the combi
 query directly — no extra matching work, and derived queries chain.
 
 ```ts
-import { createWorld, defineComponent, read, write } from 'ecsia'
+import { createWorld, defineComponent, read, write } from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
@@ -149,7 +149,7 @@ isn't busywork: the scheduler uses it to order systems and — when threading is
 decide which systems can safely run at the same time.
 
 ```ts
-import { defineComponent, defineSystem, read, write } from 'ecsia'
+import { defineComponent, defineSystem, read, write } from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
@@ -182,8 +182,8 @@ The idiomatic pattern: collect targets while you iterate, mutate after the loop 
 way you never restructure the very table you're walking.
 
 ```ts
-import { defineComponent, defineSystem, read } from 'ecsia'
-import type { EntityHandle } from 'ecsia'
+import { defineComponent, defineSystem, read } from '@ecsia/kit'
+import type { EntityHandle } from '@ecsia/kit'
 
 const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
 
@@ -211,7 +211,7 @@ first.
 :::
 
 ```ts
-import { createWorld, defineComponent } from 'ecsia'
+import { createWorld, defineComponent } from '@ecsia/kit'
 
 const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
 const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })

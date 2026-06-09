@@ -21,7 +21,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import { Bench } from 'tinybench'
-import { createWorld, defineComponent, defineSystem, createScheduler, write, read } from 'ecsia'
+import { createWorld, defineComponent, defineSystem, createScheduler, write, read } from '@ecsia/kit'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(HERE, '..')

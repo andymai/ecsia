@@ -3,8 +3,8 @@
 // hand-rolling the 0xffffffff cast.
 
 import { describe, expect, test } from 'vitest'
-import { NO_ENTITY, NULL_ENTITY, isNoEntity, createWorld, defineComponent } from 'ecsia'
-import type { EntityHandle } from 'ecsia'
+import { NO_ENTITY, NULL_ENTITY, isNoEntity, createWorld, defineComponent } from '@ecsia/kit'
+import type { EntityHandle } from '@ecsia/kit'
 
 describe('sentinel surface (umbrella)', () => {
   test('NO_ENTITY / NULL_ENTITY are exported and alias the same value', () => {

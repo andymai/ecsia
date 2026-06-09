@@ -20,8 +20,8 @@ import {
   defineSystem,
   createScheduler,
   write,
-} from 'ecsia'
-import type { EntityHandle, RoundDispatcher, SystemContext, SystemDef, Tick, World } from 'ecsia'
+} from '@ecsia/kit'
+import type { EntityHandle, RoundDispatcher, SystemContext, SystemDef, Tick, World } from '@ecsia/kit'
 import { main as workerSim } from '../worker-sim.js'
 
 function seededRandom(seed: number): () => number {
