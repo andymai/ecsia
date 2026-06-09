@@ -21,7 +21,7 @@ describe('edges.ts: resolveOrdering unregistered before/after (lines 62-63, bran
     // A declares `before: [Stranger]` but only A is registered → Stranger has no id.
     const B = defineSystem({ name: 'A', before: [Stranger], run() {} })
     expect(() => resolveOrdering(lowerSystems([B], 4), [B])).toThrow(
-      /system 'A' references an unregistered system in before\/after/,
+      /system 'A' lists a system in its before\/after that isn't in this scheduler/,
     )
     // Sanity: the same set WITH the referenced def registered does not throw.
     expect(() => resolveOrdering(lowerSystems([A, Stranger], 4), [A, Stranger])).not.toThrow()
@@ -31,7 +31,7 @@ describe('edges.ts: resolveOrdering unregistered before/after (lines 62-63, bran
     const Ghost = defineSystem({ name: 'Ghost', run() {} })
     const Real = defineSystem({ name: 'Real', after: [Ghost], run() {} })
     expect(() => resolveOrdering(lowerSystems([Real], 4), [Real])).toThrow(
-      /system 'Real' references an unregistered system in before\/after/,
+      /system 'Real' lists a system in its before\/after that isn't in this scheduler/,
     )
   })
 

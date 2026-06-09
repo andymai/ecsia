@@ -118,7 +118,7 @@ export function defineComponent<
   validateSchema(schema)
   validateOptions(options)
   if (options?.brand === undefined && options?.name === undefined) {
-    throw new Error("defineComponent: a 'name' (or 'brand') option is required — it keys the element surface (e.entity.<name>) and prevents anonymous defs from colliding")
+    throw new Error("defineComponent: a 'name' (or 'brand') option is required — it's the key you read the component by (entity.<name>) and keeps separate components from colliding")
   }
 
   // Component-level persist:false makes EVERY field non-persisted; a per-field FieldSpec

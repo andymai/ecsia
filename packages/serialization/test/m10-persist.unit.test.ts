@@ -323,7 +323,7 @@ describe('delta header — schemaHash gate', () => {
     const patch = createDeltaSerializer(src, src.currentTick()).deltaCopy()
     new DataView(patch.buffer, patch.byteOffset).setUint16(4, 2, true) // forge an old version
     const dst = createWorld({ components: [defineComponent({ x: 'f32' }, { name: 'c' }) as ComponentDef<Schema>] })
-    expect(() => applyDelta(dst, patch, new Map())).toThrow(/unsupported delta format version 2/)
+    expect(() => applyDelta(dst, patch, new Map())).toThrow(/delta format version 2 can't be read/)
   })
 })
 

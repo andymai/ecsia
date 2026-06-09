@@ -475,8 +475,8 @@ export function applyDelta(world: World, bytes: Uint8Array, remap: ReadonlyMap<E
   const version = cur.u16()
   if (version < DELTA_MIN_SUPPORTED_VERSION || version > SERIALIZATION_FORMAT_VERSION) {
     throw new Error(
-      `serialization: unsupported delta format version ${version} (this build reads ` +
-        `${DELTA_MIN_SUPPORTED_VERSION}..${SERIALIZATION_FORMAT_VERSION})`,
+      `serialization: delta format version ${version} can't be read by this build (it reads ` +
+        `${DELTA_MIN_SUPPORTED_VERSION}..${SERIALIZATION_FORMAT_VERSION}) — upgrade the receiver to match the sender, or have the sender start a fresh stream with a new baseline snapshot`,
     )
   }
   cur.u8() // endian

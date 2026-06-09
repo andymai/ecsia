@@ -71,7 +71,9 @@ function membershipComponents(terms: readonly QueryTerm[]): readonly ComponentDe
       if (term.__term === 'optional') continue
       const c = (term as { c: unknown }).c
       if (!isComponentDef(c)) {
-        throw new Error('@ecsia/react useQuery: relation Pair(...) terms are not supported in v1')
+        throw new Error(
+          '@ecsia/react useQuery: relation Pair(...) terms are not supported in v1 — filter on components, and read relations with useTarget/useTargets',
+        )
       }
       out.push(c)
       continue

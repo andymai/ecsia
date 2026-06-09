@@ -24,7 +24,7 @@ function idOf(def: ComponentDef<Schema>): ComponentId {
   const id = def.id as unknown as number
   if (id === UNREGISTERED) {
     throw new Error(
-      `system declares access to component '${def.name}' which is not registered with this world`,
+      `a system reads or writes component '${def.name}', but it isn't registered with this world — pass '${def.name}' to createWorld({ components: [...] })`,
     )
   }
   return id as unknown as ComponentId
