@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.14.0](https://github.com/andymai/ecsia/compare/relations-v0.13.0...relations-v0.14.0) (2026-06-09)
+
+
+### Features
+
+* clearer, actionable error messages across the public API ([#92](https://github.com/andymai/ecsia/issues/92)) ([58e1cd1](https://github.com/andymai/ecsia/commit/58e1cd13e0069d94139753517a19d9d773051d15))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.14.0
+    * @ecsia/schema bumped to 0.14.0
+
 ## [0.13.0](https://github.com/andymai/ecsia/compare/relations-v0.12.1...relations-v0.13.0) (2026-06-08)
 
 
