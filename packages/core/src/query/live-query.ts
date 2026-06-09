@@ -860,7 +860,7 @@ export class LiveQuery {
     }
   }
 
-  *#iterateImpl(): Generator<PooledElement> {
+  *#iterateImpl(): Generator<PooledElement, void, unknown> {
     // A simple eager collection of (archetype,row) snapshots would allocate; instead drive `each`
     // through a buffered generator that yields the SAME pooled element per archetype. Single active
     // iteration is the contract — do not store the element across yields.
