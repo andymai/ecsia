@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.16.0](https://github.com/andymai/ecsia/compare/core-v0.15.1...core-v0.16.0) (2026-06-09)
+
+
+### Features
+
+* dev guard for structural mutation during query iteration ([#98](https://github.com/andymai/ecsia/issues/98)) ([cb00a8f](https://github.com/andymai/ecsia/commit/cb00a8fb8de9e4846125e0c0d9cd90ead40e32ff))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.16.0
+
 ## [0.15.1](https://github.com/andymai/ecsia/compare/core-v0.15.0...core-v0.15.1) (2026-06-09)
 
 
