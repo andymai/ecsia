@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.15.0](https://github.com/andymai/ecsia/compare/core-v0.14.0...core-v0.15.0) (2026-06-09)
+
+
+### Features
+
+* actionable error messages, wave 2 (threading, workers, versions) ([#94](https://github.com/andymai/ecsia/issues/94)) ([4a642ca](https://github.com/andymai/ecsia/commit/4a642ca0e3848e653631febf93729fb4b43df53e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.15.0
+
 ## [0.14.0](https://github.com/andymai/ecsia/compare/core-v0.13.0...core-v0.14.0) (2026-06-09)
 
 
