@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.15.1](https://github.com/andymai/ecsia/compare/relations-v0.15.0...relations-v0.15.1) (2026-06-09)
+
+
+### Bug Fixes
+
+* exclusive relations on a cold-archetype subject silently corrupted ([#96](https://github.com/andymai/ecsia/issues/96)) ([ae629f4](https://github.com/andymai/ecsia/commit/ae629f46e5ebef174da10e142b168bd490c35858))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.15.1
+    * @ecsia/schema bumped to 0.15.1
+
 ## [0.15.0](https://github.com/andymai/ecsia/compare/relations-v0.14.0...relations-v0.15.0) (2026-06-09)
 
 
