@@ -1,4 +1,4 @@
-// umbrella sanity: importing 'ecsia' gives the documented cohesive
+// umbrella sanity: importing '@ecsia/kit' gives the documented cohesive
 // surface — a user assembles a whole world (component/tag/relation/query/system/serialization) from the
 // ONE import, never reaching into a sub-package. This file double-duties as a type-check gate: the named
 // imports below resolve to real values/types through the umbrella's re-exports, so if a re-export is

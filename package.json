@@ -29,6 +29,7 @@
     "docs:build": "pnpm docs:api && vitepress build website && pnpm docs:check"
   },
   "devDependencies": {
+    "@ecsia/kit": "workspace:*",
     "@ecsia/scheduler": "workspace:*",
     "@ecsia/schema": "workspace:*",
     "@playwright/test": "1.60.0",
@@ -40,7 +41,6 @@
     "@types/three": "^0.184.1",
     "@vitest/coverage-v8": "4.1.8",
     "bitecs": "^0.4.0",
-    "ecsia": "workspace:*",
     "esbuild": "0.28.0",
     "fast-check": "^4.8.0",
     "jsdom": "^29.1.1",
