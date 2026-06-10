@@ -368,9 +368,19 @@ export function createRelations(world: World): RelationsApi {
     const row = ov.rowByPairKey.get(key)
     if (row !== undefined) return row
     if (!create) return -1
-    const r = ov.freeRows.pop() ?? ov.count++
+    const reused = ov.freeRows.pop()
+    const r = reused ?? ov.count++
     // grow the columns if needed (length-tracking views auto-widen on grow)
     for (const col of ov.columnSet.columns) if (ov.count > col.capacity()) host.buffers.grow(col, ov.count)
+    // A recycled row still holds the previous tenant's bytes — grow default-fills only never-used
+    // rows. Re-default a reused row (the same uniform fillOnInit a fresh row gets) so a partial
+    // addPair payload can't read the prior pair's values in the fields it doesn't write.
+    if (reused !== undefined) {
+      for (const col of ov.columnSet.columns) {
+        const base = r * col.layout.stride
+        for (let a = 0; a < col.layout.stride; a++) col.view[base + a] = col.layout.fillOnInit
+      }
+    }
     ov.rowByPairKey.set(key, r)
     ov.pairByRow.set(r, { subjectIndex: sIdx, targetIndex: tIdx })
     return r
