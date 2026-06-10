@@ -29,12 +29,12 @@ features:
 
 ## Status {#status}
 
-::: warning 0.x · unpublished · experimental
-ecsia is **feature-complete and API-frozen**, but **not yet published to npm** and pre-1.0. Treat it
-as experimental: the surface is frozen and the test suite is green, but the package has not been
-released and the API may still shift before 1.0.
+::: warning 0.x · experimental
+ecsia is **published on npm**, **feature-complete and API-frozen**, but pre-1.0. Treat it as
+experimental: the surface is frozen and the test suite is green, but the API may still shift
+before 1.0.
 
-- **Not on npm yet** — consume it from the local workspace (see [Getting started](/guide/getting-started)).
+- **On npm** — `pnpm add @ecsia/kit` (see [Getting started](/guide/getting-started)).
 - **Node `>=22.13`** — the engine floor. ESM-only, strict TypeScript.
 - **Browser multithreading needs two HTTP headers** — threads share memory through
   `SharedArrayBuffer`, which browsers only allow on cross-origin-isolated pages (a server-side

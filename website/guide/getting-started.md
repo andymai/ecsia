@@ -6,32 +6,16 @@ world; a **component** is typed data attached to an entity; a **system** is a fu
 that runs over every entity that has the components it asks for. This page takes you
 from install to your first running simulation.
 
-::: warning Not published yet
-ecsia is **0.x and unpublished**. There is no `@ecsia/kit` on npm to `pnpm add` today — the install
-command below is the shape it will take **once published**. Until then, consume it from the local
-workspace (see [Use it today](#use-it-today)).
-:::
-
 ## Requirements
 
 - **Node `>=22.13`** — the engine floor.
 - **ESM-only** — `"type": "module"`. ecsia ships no CommonJS build.
 - **TypeScript (strict)** — the typed API is the point; plain JS works but loses the surface.
 
-## Install (when published)
+## Install
 
 ```sh
-pnpm add @ecsia/kit   # not yet published — local workspace for now
-```
-
-## Use it today {#use-it-today}
-
-Until the package is on npm, work inside the monorepo. Clone it and build the workspace:
-
-```sh
-pnpm install
-pnpm build              # compile all packages
-pnpm test               # run the full test suite
+pnpm add @ecsia/kit
 ```
 
 Then write your program against `@ecsia/kit` exactly as the snippets here do. The examples in

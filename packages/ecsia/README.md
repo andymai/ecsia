@@ -12,7 +12,7 @@ from one import, and tree-shakes whatever you don't touch. (The scoped packages
 underneath — `@ecsia/core`, `@ecsia/schema`, `@ecsia/relations`, `@ecsia/scheduler`,
 `@ecsia/serialization` — remain available if you want to compose the layers by hand.)
 
-> **Status:** not yet on npm — a local workspace package for now.
+> **Status:** 0.x, API-frozen.
 
 Full documentation — guides and a generated API reference — at
 **[andymai.github.io/ecsia](https://andymai.github.io/ecsia/)**.
@@ -20,7 +20,7 @@ Full documentation — guides and a generated API reference — at
 ## Install
 
 ```sh
-pnpm add @ecsia/kit   # not yet published — local workspace for now
+pnpm add @ecsia/kit
 ```
 
 ## Quick start

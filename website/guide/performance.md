@@ -305,5 +305,5 @@ a change can't quietly inflate the install.
 ## See also
 
 - [Parallelism](/guide/parallelism) — how the auto-parallel scheduler decides what can run concurrently.
-- The [status banner](/#status) — the broader "0.x, unpublished, experimental" caveat this page lives
+- The [status banner](/#status) — the broader "0.x, experimental" caveat this page lives
   under.

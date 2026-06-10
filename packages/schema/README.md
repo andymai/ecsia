@@ -11,14 +11,14 @@ fully typed — ask for a position and a velocity, and TypeScript knows `e.posit
 is a `number`. It is almost entirely compile-time machinery; very little of it exists
 at runtime.
 
-> **Status:** 0.1.0, unpublished. You normally get all of this through the umbrella
+> **Status:** 0.x, API-frozen. You normally get all of this through the umbrella
 > package [`@ecsia/kit`](https://www.npmjs.com/package/@ecsia/kit) — start there. This package
 > is pulled in transitively; you rarely depend on it directly.
 
 ## Install
 
 ```sh
-pnpm add @ecsia/schema   # not yet published — local workspace for now
+pnpm add @ecsia/schema
 ```
 
 ## Links

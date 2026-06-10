@@ -102,17 +102,14 @@ thing is ESM-only.
 
 ## Status
 
-0.1.0 — feature-complete, API-frozen, not yet on npm. Young; expect rough edges.
-Runs on Node 22+, Bun, Deno, and modern browsers.
+0.x and API-frozen — feature-complete but pre-1.0; young, expect rough edges. Runs on
+Node 22+, Bun, Deno, and modern browsers.
 
 ## Install
 
 ```sh
 pnpm add @ecsia/kit
 ```
-
-> **Not yet published.** `@ecsia/kit` is staged but not on npm yet — the command above
-> will not resolve until first publish. For now, consume it from the workspace.
 
 The umbrella package is the intended entry point. The layers underneath
 (`@ecsia/core`, `@ecsia/scheduler`, …) publish separately for anyone who wants to

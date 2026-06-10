@@ -13,7 +13,7 @@ dependency — pulling it into the umbrella would tax every non-React consumer. 
 explicitly:
 
 ```sh
-pnpm add @ecsia/react react   # @ecsia/react is unpublished today — workspace-local for now
+pnpm add @ecsia/react react   # react is a peer dependency
 ```
 
 `react` 18 or 19 is required. There is no `react-dom` dependency — the hooks work under any

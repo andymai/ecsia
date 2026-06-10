@@ -13,7 +13,7 @@ those hooks), driven with `@ecsia/scheduler` + `@ecsia/relations` directly — t
 devtools consumer uses, and the same wiring `examples/devtools-tour.ts` shows.
 
 ```sh
-pnpm add @ecsia/devtools   # unpublished today — workspace-local for now
+pnpm add @ecsia/devtools @ecsia/core
 ```
 :::
 

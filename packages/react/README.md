@@ -11,14 +11,13 @@ re-render with surgical granularity — `useQuery` only when membership changes,
 not** re-exported from the umbrella, because `react` is a peer dependency — you opt in
 explicitly.
 
-> **Status:** unpublished. New to ecsia? Start with the umbrella package
+> **Status:** 0.x, API-frozen. New to ecsia? Start with the umbrella package
 > [`@ecsia/kit`](https://www.npmjs.com/package/@ecsia/kit), then add this binding when you're
 > ready to render UI from it.
 
 ## Install
 
 ```sh
-# not yet published — local workspace for now
 pnpm add @ecsia/react @ecsia/core react
 ```
 

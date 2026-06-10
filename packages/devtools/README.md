@@ -12,14 +12,14 @@ plain data or an HTML report. It is **deliberately not** re-exported from the
 umbrella, and nothing in the framework imports it — so it never lands in a consumer
 bundle unless you pull it in yourself.
 
-> **Status:** 0.1.0, unpublished. New to ecsia? Start with the umbrella package
+> **Status:** 0.x, API-frozen. New to ecsia? Start with the umbrella package
 > [`@ecsia/kit`](https://www.npmjs.com/package/@ecsia/kit); reach for devtools when you want to
 > see inside a running world.
 
 ## Install
 
 ```sh
-pnpm add @ecsia/devtools @ecsia/core   # not yet published — local workspace for now
+pnpm add @ecsia/devtools @ecsia/core
 ```
 
 ## Use
