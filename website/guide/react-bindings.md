@@ -236,6 +236,9 @@ passes, and the HTML you emit must match the world the client hydrates against.
 
 ## See also
 
+- [`examples/react-dashboard.tsx`](https://github.com/andymai/ecsia/blob/main/examples/react-dashboard.tsx) —
+  a runnable fleet dashboard putting `useQuery`, `useComponent`, and `useHas` together, with
+  write-back from event handlers and a world that ticks on `requestAnimationFrame`.
 - [Reacting to changes](/guide/reactivity) — the observer layer the hooks ride on.
 - [THREE.js bridge](/guide/three-bridge) — composes with this package: `useFrame` runs the
   simulation, `@ecsia/react` renders UI from it; neither imports the other.

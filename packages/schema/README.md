@@ -12,7 +12,7 @@ is a `number`. It is almost entirely compile-time machinery; very little of it e
 at runtime.
 
 > **Status:** 0.1.0, unpublished. You normally get all of this through the umbrella
-> package [`ecsia`](https://www.npmjs.com/package/ecsia) — start there. This package
+> package [`@ecsia/kit`](https://www.npmjs.com/package/@ecsia/kit) — start there. This package
 > is pulled in transitively; you rarely depend on it directly.
 
 ## Install
@@ -24,7 +24,7 @@ pnpm add @ecsia/schema   # not yet published — local workspace for now
 ## Links
 
 - Repository & full docs: https://github.com/andymai/ecsia
-- Umbrella package: [`ecsia`](https://github.com/andymai/ecsia)
+- Umbrella package: [`@ecsia/kit`](https://github.com/andymai/ecsia)
 
 ## License
 

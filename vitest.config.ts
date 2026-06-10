@@ -50,6 +50,18 @@ export default defineConfig({
         },
       },
       {
+        // The @ecsia/react example renders into a DOM, so its smoke test is .tsx under jsdom —
+        // same harness as the `react` project, reusing its act()/cleanup setup.
+        esbuild: { jsx: 'automatic' },
+        test: {
+          name: 'examples-react',
+          include: ['examples/test/**/*.test.tsx'],
+          environment: 'jsdom',
+          setupFiles: ['packages/react/test/setup.ts'],
+          alias,
+        },
+      },
+      {
         // Bench self-check: the full suite runs on demand (pnpm bench:macro), but a tiny smoke test
         // keeps the harness compiling + runnable in CI without paying the measurement cost.
         test: {

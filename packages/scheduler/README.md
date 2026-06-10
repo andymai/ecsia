@@ -14,7 +14,7 @@ thread: each worker queues its changes, and the queues are merged in a fixed ord
 the outcome never depends on thread timing.
 
 > **Status:** 0.1.0, unpublished. New to ecsia? Start with the umbrella package
-> [`ecsia`](https://www.npmjs.com/package/ecsia), which re-exports `defineSystem`,
+> [`@ecsia/kit`](https://www.npmjs.com/package/@ecsia/kit), which re-exports `defineSystem`,
 > `createScheduler`, and `WorkerPool`.
 >
 > **Known limitation (worker pool):** the pool is `node:worker_threads`-based and
@@ -30,7 +30,7 @@ pnpm add @ecsia/scheduler @ecsia/core   # not yet published — local workspace 
 ## Links
 
 - Repository & full docs: https://github.com/andymai/ecsia
-- Umbrella package: [`ecsia`](https://github.com/andymai/ecsia)
+- Umbrella package: [`@ecsia/kit`](https://github.com/andymai/ecsia)
 
 ## License
 

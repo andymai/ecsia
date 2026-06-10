@@ -1,0 +1,22 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node", "react", "react-dom"],
+    "paths": {
+      "@ecsia/kit": ["../packages/ecsia/src/index.ts"],
+      "@ecsia/core": ["../packages/core/src/index.ts"],
+      "@ecsia/schema": ["../packages/schema/src/index.ts"],
+      "@ecsia/relations": ["../packages/relations/src/index.ts"],
+      "@ecsia/scheduler": ["../packages/scheduler/src/index.ts"],
+      "@ecsia/react": ["../packages/react/src/index.ts"]
+    }
+  },
+  "include": ["react-dashboard.tsx", "test/react-dashboard.smoke.test.tsx"]
+}
