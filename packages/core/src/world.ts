@@ -1105,8 +1105,14 @@ export function createWorld(options: WorldOptions = {}): World {
         allocSyntheticId: () => registry.allocSyntheticId(),
         registerSynthetic: (def, id) => registry.registerSynthetic(def, id),
         defOf: (id) => registry.defOf(id),
-        migrateAddingMany: (handle, defs) => storage.addMany(handle, defs),
-        migrateRemovingMany: (handle, defs) => storage.removeMany(handle, defs),
+        migrateAddingMany: (handle, defs) => {
+          if (IS_DEV && iterating > 0) throw iterationMutationError('addPair')
+          storage.addMany(handle, defs)
+        },
+        migrateRemovingMany: (handle, defs) => {
+          if (IS_DEV && iterating > 0) throw iterationMutationError('removePair')
+          storage.removeMany(handle, defs)
+        },
         bitmaskHas: (index, id) => bitmask.bitmaskHas(index, id),
         columnSetFor: (handle, def) => {
           if (!entities.isAlive(handle)) return null
