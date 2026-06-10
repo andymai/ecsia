@@ -143,6 +143,13 @@ interface RelationsApi {
   targetOf(subject: EntityHandle, relation: RelationDef<Schema | void>): EntityHandle | null
   depthOf(subject: EntityHandle, relation: RelationDef<Schema | void>): number
   /**
+   * The component handle that represents `relation` in a system's `read`/`write` set. A relation
+   * isn't a component, so to make the scheduler serialize systems that touch it — a system that
+   * adds/removes pairs vs. one that queries the relation — declare `rel.access(R)`, not `R` itself.
+   * It resolves to the relation's presence id, the plan-time proxy for "touches R".
+   */
+  access(relation: RelationDef<Schema | void>): ComponentDef<Schema>
+  /**
    * Build a relation-pair query term usable directly in `query(...)`: `query(rel.Pair(ChildOf, parent))`
    * or `query(rel.Pair(ChildOf, Wildcard))`. Returns a typed `PairDef<R>` — the query compiler resolves
    * its concrete (presence/pair) ComponentId via the relations resolver at compile time.
@@ -1405,6 +1412,7 @@ export function createRelations(world: World): RelationsApi {
     targetsOf,
     targetOf,
     depthOf,
+    access: (relation) => requireRuntime(relation).presenceDef,
     Pair,
     get IsA(): RelationDef<void> {
       if (isaDef === null) {
