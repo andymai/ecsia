@@ -613,12 +613,18 @@ function writeRowField(
   if (descriptor === undefined) return
   const col = dst.columns[localColIndex]
   if (col === undefined) return
+  // Untrusted-input guard: stride comes off the wire. base must use the LOCAL column stride so a
+  // schema-matched peer lands on the right row; a mismatch is a corrupt stream, not a silent misalign.
+  if (stride !== col.layout.stride)
+    throw new Error(
+      `serialization: corrupt delta stream — field stride ${stride} does not match the receiver's ${col.layout.stride}`,
+    )
   const view = col.view as unknown as { [i: number]: number }
   // Reinterpret the raw native-width bytes as the column's typed array (copied to a zero-offset buffer
   // so the typed-array view is validly aligned regardless of the source subarray's byteOffset).
   const copy = raw.slice()
   const values = reinterpret(element, copy.buffer, copy.byteOffset, stride)
-  const base = dst.row * stride
+  const base = dst.row * stride // guarded equal to col.layout.stride above
   for (let lane = 0; lane < stride; lane++) {
     const value = values[lane] as number
     if (descriptor.token === 'eid') {
