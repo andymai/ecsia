@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.18.3](https://github.com/andymai/ecsia/compare/core-v0.18.2...core-v0.18.3) (2026-06-10)
+
+
+### Bug Fixes
+
+* apply row filters on cold archetypes so each/count/has agree ([#116](https://github.com/andymai/ecsia/issues/116)) ([3691e8a](https://github.com/andymai/ecsia/commit/3691e8a1d51f2a59f85e55bc54d38ad050145738))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.18.3
+
 ## [0.18.2](https://github.com/andymai/ecsia/compare/core-v0.18.1...core-v0.18.2) (2026-06-10)
 
 
