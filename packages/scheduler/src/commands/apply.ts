@@ -56,6 +56,8 @@ export interface WorldApply {
   /** Relation apply (best-effort; relations land at ). */
   addPair?(subject: EntityHandle, relationId: RelationId, target: EntityHandle, payload: Record<string, unknown> | undefined): void
   removePair?(subject: EntityHandle, relationId: RelationId, target: EntityHandle): void
+  /** Field codec for a relation's payload schema (pair-payload decode); undefined for a tag relation. */
+  relationCodecOf?(relationId: RelationId): ComponentFieldCodec | undefined
   /**
    * Topic publish staging (OP_PUBLISH): hand the raw payload field words to the world's topic
    * store, keyed by topicId + publishing SystemId, for the wave's serial-slot canonical merge.
@@ -221,6 +223,7 @@ function applyBuffer(world: WorldApply, cb: CommandBuffer, newlyCreated: Set<num
         const s = words[at + 1] as unknown as EntityHandle
         const rid = words[at + 2] as unknown as RelationId
         const t = words[at + 3] as unknown as EntityHandle
+        const payloadWords = words[at + 4] as number
         // ADD_PAIR drops if EITHER subject or target is dead (a relation to a
         // destroyed target is meaningless). Both go through the drop-if-dead gate.
         if (
@@ -229,11 +232,19 @@ function applyBuffer(world: WorldApply, cb: CommandBuffer, newlyCreated: Set<num
         ) {
           drain(s)
           if (world.addPair !== undefined) {
-            // Worker-path pair PAYLOADS are deferred — the worker encoder
-            // emits payloadWordCount=0 (no relation-schema replication yet), so there are no payload
-            // words to decode and the pair is applied with an undefined payload. recordLen() still skips
-            // the (zero) payload words correctly. The pair/presence/back-ref/mint are all applied.
-            world.addPair(s, rid, t, undefined)
+            // Decode the pair payload the worker encoded (payloadWordCount>0), rebuilt from the
+            // relation's replicated payload schema — so a worker-issued payloaded addPair matches a
+            // serial one. A tag relation carries no payload words (payloadWords===0) → undefined.
+            let payload: Record<string, unknown> | undefined
+            if (payloadWords > 0) {
+              const codec = world.relationCodecOf?.(rid)
+              if (codec !== undefined) payload = codec.decode(words, at + 5)
+              // Payload words present but no codec registered (a relation unaligned to the manifest, or
+              // a wiring gap) — surface it rather than silently apply a payload-less pair, mirroring the
+              // topics path's misalignment diagnostic.
+              else world.warn(`ADD_PAIR carries ${payloadWords} payload word(s) for relation ${rid as number} but no codec is registered; payload dropped`)
+            }
+            world.addPair(s, rid, t, payload)
           } else {
             world.warn('ADD_PAIR encountered but relations are not wired')
           }

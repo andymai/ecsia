@@ -23,7 +23,7 @@ import type { WorkerReservationSab } from './reservation.js'
 import type { WorkerBootstrap, ColumnsAddedMessage } from './manifest.js'
 import type { WorkerSystemKernel } from './worker-system.js'
 import type { ComponentDef, ComponentId, Schema } from '@ecsia/schema'
-import { NO_ENTITY, buildTopicCodec, TOPIC_HEADER_WORDS, TOPIC_HDR_HEAD_REL, TOPIC_HDR_BASE_REL } from '@ecsia/core'
+import { NO_ENTITY, buildTopicCodec, defineComponent, TOPIC_HEADER_WORDS, TOPIC_HDR_HEAD_REL, TOPIC_HDR_BASE_REL } from '@ecsia/core'
 import type { TopicCodec, TopicDef } from '@ecsia/core'
 import type { WaveCounter } from '../executor/seams.js'
 
@@ -97,6 +97,15 @@ async function main(): Promise<void> {
   // can canonicalize the stream independent of which worker carried the bytes. Set per dispatch.
   let currentSystemId = 0
   const topicCodecCache = new Map<number, TopicCodec>()
+  // Rebuild a pair-payload codec per relationId from the replicated payload SCHEMA — defineComponent
+  // resolves the live encode/decode descriptors locally (functions can't cross the worker boundary),
+  // and buildFieldCodec filters by `shareable` exactly as the main side does, so totalWords + field
+  // order match byte-for-byte. Tag relations (payloadSchema===null) get no entry → payloadWordCount=0.
+  const relationCodecById = new Map<number, ComponentFieldCodec>()
+  for (const r of boot.relations ?? []) {
+    if (r.payloadSchema === null) continue
+    relationCodecById.set(r.id, buildFieldCodec(defineComponent(r.payloadSchema, { brand: `rel$${r.id}$payload` })))
+  }
   const encoder = makeEncoder({
     cb,
     infoOf(def) {
@@ -116,11 +125,9 @@ async function main(): Promise<void> {
     publisherSystemId() {
       return currentSystemId
     },
-    relationCodec() {
-      // Relation payload schemas are not yet replicated into the worker
-      // boot manifest, so no payload codec is available here → setRelation emits payloadWordCount=0. The
-      // pair add itself still flows (subject, relationId, target); only the payload leg is deferred.
-      return undefined
+    relationCodec(relationId) {
+      // Resolved from the replicated relation manifest; undefined for tag relations (no payload words).
+      return relationCodecById.get(relationId as unknown as number)
     },
     warn(message) {
       parentPort?.postMessage({ kind: 'diagnostic', message })
