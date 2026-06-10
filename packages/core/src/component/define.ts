@@ -94,9 +94,6 @@ function validateOptions(options?: ComponentOptions): void {
   if (options?.storage !== undefined && options.storage !== 'packed' && options.storage !== 'sparse') {
     throw new Error(`defineComponent: storage must be 'packed' or 'sparse'`)
   }
-  if (options?.maxHistory !== undefined && (!Number.isInteger(options.maxHistory) || options.maxHistory < 0)) {
-    throw new Error('defineComponent: maxHistory must be a non-negative integer')
-  }
   if (options?.persist !== undefined && typeof options.persist !== 'boolean') {
     throw new Error('defineComponent: persist must be a boolean')
   }
@@ -137,7 +134,6 @@ export function defineComponent<
   const isTag = fields.length === 0
   const resolvedOptions: Required<ComponentOptions> = {
     storage: options?.storage ?? (isTag ? 'sparse' : 'packed'),
-    maxHistory: options?.maxHistory ?? 0,
     persist: componentPersist,
   }
 

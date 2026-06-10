@@ -56,13 +56,11 @@ describe('defineComponent — fail-fast validation (define.ts )', () => {
     expect(() => defineComponent({ x: { kind: 'mystery' } } as unknown as Schema, { name: 'c14' })).toThrow(/unknown token kind/)
   })
 
-  test('options validation: storage enum + non-negative integer maxHistory (define.ts:83-88)', () => {
+  test('options validation: storage enum is checked; valid options resolve', () => {
     expect(() => defineComponent({ x: 'f32' }, { storage: 'weird' } as never)).toThrow(/storage must be 'packed' or 'sparse'/)
-    expect(() => defineComponent({ x: 'f32' }, { maxHistory: -1 } as never)).toThrow(/maxHistory must be a non-negative integer/)
-    expect(() => defineComponent({ x: 'f32' }, { maxHistory: 2.5 } as never)).toThrow(/maxHistory must be a non-negative integer/)
     // Valid options resolve.
-    const C = defineComponent({ x: 'f32' }, { name: 'cValid', storage: 'sparse', maxHistory: 4 })
-    expect(C.options).toEqual({ storage: 'sparse', maxHistory: 4, persist: true })
+    const C = defineComponent({ x: 'f32' }, { name: 'cValid', storage: 'sparse' })
+    expect(C.options).toEqual({ storage: 'sparse', persist: true })
   })
 
   test('registerComponentId throws on a second registration (define.ts:166-168)', () => {
