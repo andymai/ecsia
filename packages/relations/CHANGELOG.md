@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.21.0](https://github.com/andymai/ecsia/compare/relations-v0.20.0...relations-v0.21.0) (2026-06-10)
+
+
+### Features
+
+* export RelationsApi (the createRelations return type) ([#133](https://github.com/andymai/ecsia/issues/133)) ([06e6b87](https://github.com/andymai/ecsia/commit/06e6b87f2dcd66da7ee93f84fb184201da2002db))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.21.0
+    * @ecsia/schema bumped to 0.21.0
+
 ## [0.20.0](https://github.com/andymai/ecsia/compare/relations-v0.19.0...relations-v0.20.0) (2026-06-10)
 
 

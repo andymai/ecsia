@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.21.0](https://github.com/andymai/ecsia/compare/kit-v0.18.8...kit-v0.21.0) (2026-06-10)
+
+
+### Features
+
+* export RelationsApi (the createRelations return type) ([#133](https://github.com/andymai/ecsia/issues/133)) ([06e6b87](https://github.com/andymai/ecsia/commit/06e6b87f2dcd66da7ee93f84fb184201da2002db))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.21.0
+    * @ecsia/schema bumped to 0.21.0
+    * @ecsia/relations bumped to 0.21.0
+    * @ecsia/scheduler bumped to 0.21.0
+    * @ecsia/serialization bumped to 0.21.0
+
 ## [0.18.8](https://github.com/andymai/ecsia/compare/kit-v0.18.7...kit-v0.18.8) (2026-06-10)
 
 
