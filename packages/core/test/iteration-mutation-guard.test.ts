@@ -52,6 +52,16 @@ describe('structural mutation during query iteration throws in dev', () => {
     ).toThrow(/remove\(\) ran during query iteration/)
   })
 
+  test('warm inside each() throws', () => {
+    const { world, Position } = seeded()
+    const q = world.query(read(Position))
+    expect(() =>
+      q.each(() => {
+        world.warm(Position)
+      }),
+    ).toThrow(/warm\(\) ran during query iteration/)
+  })
+
   test('despawn inside eachChunk() throws', () => {
     const { world, Position } = seeded()
     const q = world.query(read(Position))
@@ -84,6 +94,11 @@ describe('the guard does not fire on supported patterns', () => {
     }).not.toThrow()
     expect(dead.length).toBe(2)
     expect(world.isAlive(handles[4]!)).toBe(false)
+  })
+
+  test('warm outside iteration does NOT throw', () => {
+    const { world, Position } = seeded()
+    expect(() => world.warm(Position)).not.toThrow()
   })
 
   test('nested read-only iteration does not throw (the counter is balanced)', () => {

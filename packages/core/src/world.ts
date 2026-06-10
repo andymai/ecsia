@@ -1319,6 +1319,7 @@ export function createWorld(options: WorldOptions = {}): World {
       storage.remove(handle, def)
     },
     warm(...defs) {
+      if (IS_DEV && iterating > 0) throw iterationMutationError('warm')
       storage.warm(defs)
     },
     despawn(handle) {
