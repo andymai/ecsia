@@ -36,8 +36,9 @@ describe('relations — iteration-mutation guard on pair ops', () => {
       threw = true
     }
     expect(threw).toBe(true)
-    // It threw on the FIRST attempted mutation — never ran the body the 10 times a swap-pop would.
-    expect(visits).toBeLessThanOrEqual(5)
+    // It threw on the FIRST attempted mutation (one visit recorded), never running the body the 10
+    // times a swap-pop would.
+    expect(visits).toBe(1)
   })
 
   it('removePair during a live query iteration throws', () => {
