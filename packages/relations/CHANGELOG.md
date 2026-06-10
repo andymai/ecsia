@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.18.2](https://github.com/andymai/ecsia/compare/relations-v0.18.1...relations-v0.18.2) (2026-06-10)
+
+
+### Bug Fixes
+
+* guard relation pair-ops mid-iteration + re-default reused overflow rows ([#114](https://github.com/andymai/ecsia/issues/114)) ([d66d65a](https://github.com/andymai/ecsia/commit/d66d65a21c934a0c045fe66a6b41fcc4df66a227))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.18.2
+    * @ecsia/schema bumped to 0.18.2
+
 ## [0.18.1](https://github.com/andymai/ecsia/compare/relations-v0.18.0...relations-v0.18.1) (2026-06-10)
 
 
