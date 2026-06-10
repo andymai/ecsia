@@ -96,8 +96,37 @@ jobs:
       - run: pnpm build
       # Authenticates via npm OIDC trusted publishers (configured per package on
       # npmjs.com for this exact workflow filename); provenance is automatic.
-      # Recursive publish skips private packages and already-published versions, so the
-      # whole suite — including the '@ecsia/kit' umbrella — rides automated releases now
-      # that every package has a trusted publisher and a first publish on npm.
+      # Published per-package rather than via `pnpm -r publish` so one package
+      # without a trusted publisher can't abort the run and silently strand every
+      # package after it — each is attempted, and the job fails at the end if any did.
       - name: Publish to npm
-        run: pnpm -r publish --access public --no-git-checks
+        shell: bash
+        run: |
+          set -uo pipefail
+          failed=()
+          for pj in packages/*/package.json; do
+            if ! meta=$(node -p "const p=require('./$pj'); [p.name, p.version, !!p.private].join(' ')"); then
+              echo "::error::Could not read $pj"
+              failed+=("$pj")
+              continue
+            fi
+            read -r name version private <<<"$meta"
+            if [ "$private" = "true" ]; then
+              echo "↷ $name is private; skipping"
+              continue
+            fi
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "↷ $name@$version already on registry; skipping"
+              continue
+            fi
+            echo "📦 Publishing $name@$version"
+            if ! pnpm --filter "$name" publish --access public --no-git-checks; then
+              echo "::error::Failed to publish $name@$version"
+              failed+=("$name@$version")
+            fi
+          done
+          if [ ${#failed[@]} -gt 0 ]; then
+            echo "::error::Publish failed for: ${failed[*]}"
+            exit 1
+          fi
+          echo "All publishable packages are on the registry."

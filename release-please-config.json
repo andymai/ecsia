@@ -65,7 +65,7 @@
       "type": "linked-versions",
       "groupName": "ecsia",
       "components": [
-        "ecsia",
+        "kit",
         "core",
         "devtools",
         "react",
