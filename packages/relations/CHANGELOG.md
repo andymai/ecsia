@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.18.4](https://github.com/andymai/ecsia/compare/relations-v0.18.3...relations-v0.18.4) (2026-06-10)
+
+
+### Bug Fixes
+
+* maintain row-filter query membership when an exclusive relation writes its eid ([#118](https://github.com/andymai/ecsia/issues/118)) ([0677a1a](https://github.com/andymai/ecsia/commit/0677a1a5d27ad84893ca95c76522954924eed817))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.18.4
+    * @ecsia/schema bumped to 0.18.4
+
 ## [0.18.3](https://github.com/andymai/ecsia/compare/relations-v0.18.2...relations-v0.18.3) (2026-06-10)
 
 
