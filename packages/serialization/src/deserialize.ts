@@ -318,6 +318,12 @@ function writeColumnSlice(
   rowCount: number,
   destRow: number,
 ): void {
+  // Untrusted-input guard: stride comes off the wire. A schema-matched honest peer always agrees with
+  // the receiver's column; a mismatch would misalign rows (smaller) or overrun the column (larger).
+  if (stride !== col.layout.stride)
+    throw new Error(
+      `serialization: corrupt snapshot stream — column stride ${stride} does not match the receiver's ${col.layout.stride}`,
+    )
   const elems = rowCount * stride
   const src = reinterpret(element, raw, elems)
   col.view.set(src as unknown as ArrayLike<number>, destRow * col.layout.stride)

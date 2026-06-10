@@ -289,6 +289,12 @@ function applyComponentAdd(
     const entry = colByName.get(w.name)
     if (entry === undefined) continue
     const { col, field } = entry
+    // Untrusted-input guard: lane comes off the wire. For a schema-matched honest peer it's always
+    // 0..stride-1; a malformed/corrupt stream could otherwise write into an adjacent row.
+    if (w.lane < 0 || w.lane >= col.layout.stride)
+      throw new Error(
+        `serialization: corrupt structural stream — field '${w.name}' lane ${w.lane} is out of range for stride ${col.layout.stride}`,
+      )
     const slot = dst.row * col.layout.stride + w.lane
     if (field.token === 'eid') {
       const stored = w.value | 0
