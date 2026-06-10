@@ -1,6 +1,9 @@
 # Weekly dependency updates. Dev-dep minors/patches arrive grouped as one PR; majors
 # get individual PRs so each carries its own evaluation. Runtime deps are few and
 # workspace-internal — anything external that appears later gets a PR per update.
+#
+# `cooldown` holds proposals back until a release has aged, so a fresh malicious
+# upload (the npm supply-chain attack pattern) isn't suggested the moment it lands.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -8,6 +11,9 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     groups:
       dev-minor-patch:
         applies-to: version-updates
@@ -26,5 +32,9 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # Note: Dependabot supports only `default-days` for the github-actions ecosystem —
+    # `semver-major-days` is npm-only and fails config validation here.
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: ci
