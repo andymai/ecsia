@@ -167,7 +167,7 @@ export type {
   ColumnLayout,
 } from './memory/index.js'
 
-export { buildColumnSet, bindAccessorRow } from './component/index.js'
+export { buildColumnSet, bindAccessorRow, initColumnSetRow } from './component/index.js'
 export type { ColumnSet } from './component/index.js'
 
 export type { StorageStrategy } from '@ecsia/schema'

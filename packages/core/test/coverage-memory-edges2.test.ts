@@ -28,12 +28,12 @@ const newBuffers = (): Buffers => new Buffers({ capabilities: probeCapabilities(
 
 describe('layout — tokenToColumnLayout / fieldToColumnLayout branches', () => {
   test('an unknown scalar token throws (layout.ts:127)', () => {
-    expect(() => tokenToColumnLayout('nope' as unknown as FieldToken)).toThrow(/unknown scalar token/)
+    expect(() => tokenToColumnLayout('nope' as unknown as FieldToken)).toThrow(/unsupported scalar field type/)
   })
 
   test('an unknown vec element token throws (layout.ts:132)', () => {
     expect(() => tokenToColumnLayout({ kind: 'vec', elem: 'bogus', len: 2 } as unknown as FieldToken)).toThrow(
-      /unknown vec element token/,
+      /unsupported vec element type/,
     )
   })
 

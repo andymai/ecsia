@@ -126,12 +126,12 @@ export function tokenToColumnLayout(token: FieldToken, fillOnInit = 0): ColumnLa
     // The 'string' rich token projects to no column, like object<T>.
     if (token === 'string') return null
     const element = SCALAR_ELEMENT[token]
-    if (element === undefined) throw new Error(`unknown scalar token: ${token}`)
+    if (element === undefined) throw new Error(`internal: unsupported scalar field type '${token}'`)
     return makeColumnLayout(element, 1, fillOnInit)
   }
   if (isVecToken(token)) {
     const element = SCALAR_ELEMENT[token.elem as unknown as string]
-    if (element === undefined) throw new Error(`unknown vec element token: ${String(token.elem)}`)
+    if (element === undefined) throw new Error(`internal: unsupported vec element type '${String(token.elem)}'`)
     return makeColumnLayout(element, token.len, fillOnInit)
   }
   if (isStaticStringToken(token)) {

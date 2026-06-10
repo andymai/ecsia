@@ -8,6 +8,7 @@ import type { ComponentId, ComponentDef, Schema } from '@ecsia/schema'
 import type { ArchetypeId } from '@ecsia/schema'
 import type { Buffers, Column } from '../memory/index.js'
 import type { AccessorWorld, ColumnSet, ComponentRuntime } from '../component/index.js'
+import { initColumnSetRow } from '../component/index.js'
 import type { Bitmask } from '../bitmask/index.js'
 import type { Signature } from './signature.js'
 import {
@@ -442,25 +443,7 @@ export class ArchetypeStore {
   #initColumnRow(cs: ColumnSet, row: number, c: ComponentId): void {
     const def = this.#deps.defOf(c)
     if (def === undefined) return
-    const rt = def as ComponentRuntime<Schema>
-    let layoutIndex = 0
-    for (const f of rt.fields) {
-      if (f.ctor === null) continue
-      const col = cs.columns[layoutIndex] as Column
-      const base = row * col.layout.stride
-      // Every field re-defaults UNCONDITIONALLY (archetype-storage.md §5.7): zero-init only covers
-      // never-used rows — removeRow swap-pop and the cold free list hand out rows still holding the
-      // previous tenant's bytes. Array defaults (vecs) encode per lane; the single-value fillOnInit
-      // would coerce the whole array (NaN) and cannot represent non-uniform lanes.
-      const d = f.default
-      if (Array.isArray(d)) {
-        for (let a = 0; a < col.layout.stride; a++) col.view[base + a] = f.encode(d[a])
-      } else {
-        const fill = col.layout.fillOnInit
-        for (let a = 0; a < col.layout.stride; a++) col.view[base + a] = fill
-      }
-      layoutIndex += 1
-    }
+    initColumnSetRow(cs, def, row)
   }
 
   // --- /
