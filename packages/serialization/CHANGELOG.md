@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.18.0](https://github.com/andymai/ecsia/compare/serialization-v0.17.0...serialization-v0.18.0) (2026-06-10)
+
+
+### Features
+
+* harden the serialization apply paths against malformed wire input ([#104](https://github.com/andymai/ecsia/issues/104)) ([3d27ad8](https://github.com/andymai/ecsia/commit/3d27ad8cab76eab7cfcd74b0c7028a5503d7f919))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.18.0
+    * @ecsia/schema bumped to 0.18.0
+  * devDependencies
+    * @ecsia/relations bumped to 0.18.0
+
 ## [0.17.0](https://github.com/andymai/ecsia/compare/serialization-v0.16.0...serialization-v0.17.0) (2026-06-09)
 
 
