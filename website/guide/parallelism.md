@@ -112,6 +112,46 @@ You can inspect the derived waves with the [devtools](/guide/devtools) `explainP
 it prints exactly which systems share a wave, which conflicts separated them, and which
 systems are pinned to the main thread (they always run there, never on a worker).
 
+### Declaring relation access
+
+A **relation** — a link between two entities, from [Linking entities](/guide/relations) — isn't a
+component, so the scheduler can't tell from a `read`/`write` of components that a system *touches* a
+relation. To gate one, declare **`rel.access(R)`**: the handle that stands in for relation `R` in a
+system's `read`/`write` list. A system that adds or removes `R` links declares it in `write`; a system
+that queries `R` declares it in `read`. The scheduler then serializes them exactly as it would two
+systems sharing a component — the writer runs in an earlier wave than the reader, so the reader always
+sees the finished links.
+
+```ts
+import { createWorld, createRelations, defineSystem } from '@ecsia/kit'
+
+const world = createWorld({})
+const rel = createRelations(world)
+const ChildOf = rel.defineRelation(null) // a link with no payload (a tag relation)
+
+// Adds/removes ChildOf links — declare WRITE access to the relation.
+const Reparent = defineSystem({
+  name: 'Reparent',
+  write: [rel.access(ChildOf)],
+  run() {
+    // rel.addPair(child, ChildOf, parent) / rel.removePair(child, ChildOf, parent)
+  },
+})
+
+// Walks the hierarchy via query(rel.Pair(ChildOf, …)) — declare READ access.
+// The scheduler runs WalkHierarchy in a later wave than Reparent.
+const WalkHierarchy = defineSystem({
+  name: 'WalkHierarchy',
+  read: [rel.access(ChildOf)],
+  run() {
+    // for (const e of query(rel.Pair(ChildOf, Wildcard))) { … }
+  },
+})
+```
+
+Pass the relation itself (`write: [ChildOf]`) and you get a clear error pointing you at
+`rel.access` — a relation has no component identity of its own for the scheduler to gate on.
+
 ### A real plan, rendered
 
 This is the **actual** `renderText(explainPlan(...))` output from running `examples/devtools-tour.ts`
