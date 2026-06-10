@@ -8,7 +8,7 @@ when its membership changes, a value hook only when that one entity's values act
 change.
 
 ::: tip Opt-in, not in the umbrella
-`@ecsia/react` is deliberately **not** re-exported from `ecsia`, because `react` is a peer
+`@ecsia/react` is deliberately **not** re-exported from `@ecsia/kit`, because `react` is a peer
 dependency — pulling it into the umbrella would tax every non-React consumer. Install it
 explicitly:
 

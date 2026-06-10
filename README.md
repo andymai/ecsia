@@ -139,7 +139,7 @@ preview).
 
 | Package | Role |
 |---|---|
-| `ecsia` | the batteries-included umbrella — start here |
+| `@ecsia/kit` | the batteries-included umbrella — start here |
 | `@ecsia/core` | component storage, typed accessors, queries, change tracking |
 | `@ecsia/schema` | component field types and query type inference |
 | `@ecsia/scheduler` | works out which systems can run together, and runs them across threads |
