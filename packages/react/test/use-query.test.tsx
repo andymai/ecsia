@@ -229,7 +229,7 @@ describe('useQuery term restrictions', () => {
     expect(screen.getByTestId('list').textContent).toBe(`${a},${b}`)
   })
 
-  test('a bare relation Pair(...) term throws the v2-deferral error', () => {
+  test('a bare relation Pair(...) term is accepted (no longer throws — see use-query-pair.test.tsx)', () => {
     const Health = mkHealth()
     const { world } = makeKit([Health])
     const rel = createRelations(world)
@@ -242,11 +242,11 @@ describe('useQuery term restrictions', () => {
     }
     expect(() =>
       render(
-        <WorldProvider world={world}>
+        <WorldProvider world={world} relations={rel}>
           <List />
         </WorldProvider>,
       ),
-    ).toThrowError(/Pair\(\.\.\.\) terms are deferred to v2/)
+    ).not.toThrow()
   })
 
   test('a wrapped relation Pair(...) term (has(pair)) throws the unsupported-pair error', () => {
@@ -261,7 +261,7 @@ describe('useQuery term restrictions', () => {
     // hold even if a future core learns to compile wrapped pairs.
     const query: QueryLike = { terms: [has(rel.Pair(ChildOf, parent))], each: () => {} }
     expect(() => bridgeFor(world).queryStore(query)).toThrowError(
-      /Pair\(\.\.\.\) terms are not supported in v1/,
+      /unsupported term inside read\/write\/has\/without/,
     )
   })
 

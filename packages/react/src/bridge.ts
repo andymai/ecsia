@@ -54,39 +54,50 @@ function isComponentDef(value: unknown): value is ComponentDef<Schema> {
   return typeof value === 'object' && value !== null && 'fields' in value && 'schema' in value
 }
 
+/** A Pair query term (rel.Pair(R, target|Wildcard)) — carries the relation whose pair-add/remove
+ * events gate the query's membership. Distinct from a component-wrapper term by its `relation` field. */
+function isPairTerm(term: unknown): term is { relation: { id: number; name?: string } } {
+  return typeof term === 'object' && term !== null && 'relation' in term && 'target' in term
+}
+
 /**
- * The components whose add/remove events can change the query's membership: every positive term
- * plus every without() term (an add to a Without component evicts a match). optional() terms never
- * gate membership. Pair terms are rejected — pair-aware observer terms are not on core's public
- * surface (relations hooks are deferred to v2).
+ * What can change a query's membership, split by event source:
+ * - `comps`: every positive term + every without() term (an add to a Without component evicts a match);
+ *   optional() terms never gate membership.
+ * - `relations`: the relation of every Pair term — its pair-add/pair-remove (and retarget) events
+ *   change which subjects match. The core query already computes Pair-term membership; the bridge just
+ *   needs to re-read on those events.
  */
-function membershipComponents(terms: readonly QueryTerm[]): readonly ComponentDef<Schema>[] {
-  const out: ComponentDef<Schema>[] = []
+function membershipOf(terms: readonly QueryTerm[]): {
+  comps: readonly ComponentDef<Schema>[]
+  relations: readonly RelationLike[]
+} {
+  const comps: ComponentDef<Schema>[] = []
+  const relations: RelationLike[] = []
   for (const term of terms) {
     if (isComponentDef(term)) {
-      out.push(term)
+      comps.push(term)
+      continue
+    }
+    if (isPairTerm(term)) {
+      relations.push({ id: term.relation.id, name: term.relation.name })
       continue
     }
     if (typeof term === 'object' && term !== null && '__term' in term) {
       if (term.__term === 'optional') continue
       const c = (term as { c: unknown }).c
       if (!isComponentDef(c)) {
-        throw new Error(
-          '@ecsia/react useQuery: relation Pair(...) terms are not supported in v1 — filter on components, and read relations with useTarget/useTargets',
-        )
+        throw new Error('@ecsia/react useQuery: unsupported term inside read/write/has/without — pass a component def')
       }
-      out.push(c)
+      comps.push(c)
       continue
     }
     // The query-options term ({ matchPrefabs }) gates prefab visibility, not membership — it
     // contributes no observable component and must not fall through to the throw below.
     if (typeof term === 'object' && term !== null && 'matchPrefabs' in term) continue
-    throw new Error(
-      '@ecsia/react useQuery: unsupported query term — relation Pair(...) terms are deferred to v2; ' +
-        'pass component defs or read/write/has/without/optional terms',
-    )
+    throw new Error('@ecsia/react useQuery: unsupported query term — pass component defs, rel.Pair(...), or read/write/has/without/optional terms')
   }
-  return out
+  return { comps, relations }
 }
 
 function sameMembership(prev: readonly EntityHandle[], next: readonly EntityHandle[]): boolean {
@@ -235,6 +246,7 @@ export class QueryStore {
   readonly #bridge: ReactBridge
   readonly #query: QueryLike
   readonly #comps: readonly ComponentDef<Schema>[]
+  readonly #relations: readonly RelationLike[]
   #dirty = true
   #handles: readonly EntityHandle[] = EMPTY_HANDLES
   #active = false
@@ -243,7 +255,9 @@ export class QueryStore {
   constructor(bridge: ReactBridge, query: QueryLike) {
     this.#bridge = bridge
     this.#query = query
-    this.#comps = membershipComponents(query.terms)
+    const m = membershipOf(query.terms)
+    this.#comps = m.comps
+    this.#relations = m.relations
   }
 
   readonly subscribe = (listener: () => void): (() => void) => {
@@ -253,15 +267,24 @@ export class QueryStore {
       this.#dirty = true
       this.#bridge.__registerQueryStore(this.#query, this)
       this.#bridge.__activateQueryWatcher(this.#comps, this)
+      for (const r of this.#relations) this.#bridge.__activateQueryPairWatcher(r, this)
     }
     return () => {
       this.#listeners.delete(listener)
       if (this.#listeners.size === 0 && this.#active) {
         this.#active = false
         this.#bridge.__deactivateQueryWatcher(this.#comps, this)
+        for (const r of this.#relations) this.#bridge.__deactivateQueryPairWatcher(r, this)
         this.#bridge.__evictQueryStore(this.#query, this)
       }
     }
+  }
+
+  /** A pair-add/remove (or retarget) for a watched relation may change Pair-term membership; recompute.
+   * getSnapshot's set-compare keeps the handle identity stable when membership is actually unchanged,
+   * so an unrelated pair event costs a recompute but never a spurious re-render. */
+  onPairEvent(_kind: PairKind, _eventHandle: EntityHandle): void {
+    this.markDirty()
   }
 
   readonly getSnapshot = (): readonly EntityHandle[] => {
@@ -416,6 +439,10 @@ export class ReactBridge {
   // the numeric id is the stable identity the observer terms use anyway).
   readonly #pairObservers = new Map<number, Map<PairKind, ObserverCell>>()
   readonly #pairWatchers = new Map<number, Map<number, Set<TargetsStore>>>()
+  // Relation-level pair watchers (Pair-term queries): keyed by relation id, notified on EVERY pair
+  // event for that relation (not per-subject like #pairWatchers) — a Pair-term query's membership can
+  // change for any subject of the relation.
+  readonly #queryPairWatchers = new Map<number, Set<QueryStore>>()
   readonly #targetsStores = new Map<number, Map<EntityHandle, TargetsStore>>()
 
   constructor(world: EcsiaWorld) {
@@ -602,6 +629,25 @@ export class ReactBridge {
     for (const kind of PAIR_KINDS) this.#releasePair(relation.id, kind)
   }
 
+  __activateQueryPairWatcher(relation: RelationLike, store: QueryStore): void {
+    for (const kind of PAIR_KINDS) this.#acquirePair(relation.id, kind)
+    let set = this.#queryPairWatchers.get(relation.id)
+    if (set === undefined) {
+      set = new Set()
+      this.#queryPairWatchers.set(relation.id, set)
+    }
+    set.add(store)
+  }
+
+  __deactivateQueryPairWatcher(relation: RelationLike, store: QueryStore): void {
+    const set = this.#queryPairWatchers.get(relation.id)
+    if (set !== undefined) {
+      set.delete(store)
+      if (set.size === 0) this.#queryPairWatchers.delete(relation.id)
+    }
+    for (const kind of PAIR_KINDS) this.#releasePair(relation.id, kind)
+  }
+
   /** Live core-observer count — the dispose-accounting probe the leak tests assert on. */
   __liveObserverCount(): number {
     let n = 0
@@ -690,6 +736,11 @@ export class ReactBridge {
     const watchers = this.#pairWatchers.get(relationId)?.get(index)
     if (watchers !== undefined) {
       for (const store of watchers) store.onPairEvent(kind, subjectHandle)
+    }
+    // Relation-level (Pair-term query) watchers see every pair event for the relation.
+    const queryWatchers = this.#queryPairWatchers.get(relationId)
+    if (queryWatchers !== undefined) {
+      for (const store of queryWatchers) store.onPairEvent(kind, subjectHandle)
     }
   }
 
