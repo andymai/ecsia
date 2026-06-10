@@ -105,6 +105,13 @@ export interface SerializeRelationProvider {
   pairPayloadOf(subject: EntityHandle, relationId: RelationId, target: EntityHandle): Record<string, unknown> | undefined
   /** Tear down a pair on a delta-apply receiver (PairRemove). */
   removePair(subject: EntityHandle, relationId: RelationId, target: EntityHandle): void
+  /**
+   * Rebuild exclusive-relation reverse indexes (backrefs) from the eid columns of the given subjects
+   * after a delta apply. Exclusive pairs serialize via the eid column, not a journaled PairAdd, so a
+   * delta updates the forward target column but not the in-memory backref; this reconciles it (correct
+   * for both fresh adds and re-targets, which carry no removal signal). A no-op when no relation is exclusive.
+   */
+  reindexAfterApply(touched: Iterable<EntityHandle>): void
 }
 
 /** The full surface @ecsia/serialization drives. All members are serial / main-thread. */

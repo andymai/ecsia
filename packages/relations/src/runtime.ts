@@ -1385,6 +1385,38 @@ export function createRelations(world: World): RelationsApi {
       if (rt === undefined) return
       removePair(subject, rt.def, target)
     },
+    reindexAfterApply(touched) {
+      // Exclusive pairs ride the eid column (no journaled PairAdd), so a delta writes the forward
+      // target but leaves the backref stale. For each exclusive relation any touched subject now
+      // belongs to, rebuild the backref from the columns of all current presence-holders (existing
+      // backref subjects ∪ touched). A full rebuild is inherently correct for adds AND re-targets —
+      // re-target sends no removal signal, so an incremental patch can't know the old target.
+      const handles = [...touched]
+      for (const rt of relations) {
+        if (!rt.exclusive) continue
+        let affected = false
+        for (const h of handles) {
+          if (host.isAlive(h) && host.bitmaskHas(host.handleIndex(h), rt.presenceId)) {
+            affected = true
+            break
+          }
+        }
+        if (!affected) continue
+
+        const subjects = new Set<EntityHandle>()
+        for (const set of rt.backref.values()) for (const s of set) subjects.add(s)
+        for (const h of handles) {
+          if (host.isAlive(h) && host.bitmaskHas(host.handleIndex(h), rt.presenceId)) subjects.add(h)
+        }
+        rt.backref.clear()
+        for (const s of subjects) {
+          if (!host.isAlive(s)) continue
+          const t = readExclusiveTarget(rt, s)
+          if (t === null || !host.isAlive(t)) continue
+          backrefAdd(rt, host.handleIndex(t), s)
+        }
+      }
+    },
   }
 
   // --- install seams ---------------------------------------------------------
