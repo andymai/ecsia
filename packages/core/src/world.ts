@@ -149,6 +149,14 @@ export interface RelationsHost {
   deferRelationOp(op: 'add' | 'remove', subject: EntityHandle, relation: RelationDef<Schema | void>, target: EntityHandle, payload?: Record<string, unknown>): boolean
   /** Push a write-log entry for a `.changed`-tracked pair-payload write. */
   trackWrite(index: number, componentId: ComponentId): void
+  /**
+   * Re-test entity `index` against every query referencing `componentId`, adding/removing it from
+   * each query's membership. The exclusive-relation valve writes its eid target column WITHOUT a
+   * migration (and on first attach, AFTER the migration that already maintained at the -1 default),
+   * so a row-filtered query (`rel.Pair(R, target)`) only reflects the attach/retarget when the runtime
+   * re-tests here after writing the eid.
+   */
+  maintainEntity(index: number, componentId: ComponentId): void
   /** Push an ADD_PAIR / REMOVE_PAIR shape-log entry. `journal: false` = observer-only carrier
    * (the exclusive valve's pair events on the presence id) — shape log yes, structural journal no. */
   trackShapePair(index: number, pairId: ComponentId, targetIndex: number, add: boolean, journal?: boolean): void
@@ -1192,6 +1200,7 @@ export function createWorld(options: WorldOptions = {}): World {
           return true
         },
         trackWrite: (index, componentId) => trackWrite(index, componentId),
+        maintainEntity: (index, componentId) => engine?.maintainEntity(index, componentId),
         trackShapePair: (index, pairId, targetIndex, add, journal = true) => {
           ;(reactivity as Reactivity).trackShapePair(
             index,
