@@ -6,7 +6,7 @@ can be asserted in a headless test. `renderText` / `renderHTML` are pure functio
 report shapes.
 
 ::: tip Opt-in, and it reads the core world directly
-`@ecsia/devtools` is **not** re-exported from `ecsia`, and nothing in the framework imports it —
+`@ecsia/devtools` is **not** re-exported from `@ecsia/kit`, and nothing in the framework imports it —
 it sits at the top of the dependency graph. Because `inspectWorld`/`watchWorld` read the world's
 built-in inspection hooks, devtools consumes the `World` from `@ecsia/core` (the one that carries
 those hooks), driven with `@ecsia/scheduler` + `@ecsia/relations` directly — the same wiring a real

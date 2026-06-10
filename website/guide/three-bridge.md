@@ -7,7 +7,7 @@ thing in your world whose data lives in components). It gives you three pieces: 
 frame driver.
 
 ::: tip Opt-in, not in the umbrella
-`@ecsia/three` is deliberately **not** re-exported from `ecsia`. THREE is a large peer dependency
+`@ecsia/three` is deliberately **not** re-exported from `@ecsia/kit`. THREE is a large peer dependency
 with WebGL/DOM assumptions; the kernel stays renderer-agnostic. Install it explicitly:
 
 ```sh

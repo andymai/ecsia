@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://andymai.github.io/ecsia/
+    about: Guides, API reference, and the getting-started walkthrough.
+  - name: Security vulnerability
+    url: https://github.com/andymai/ecsia/security/advisories/new
+    about: Report security issues privately — please do not open a public issue.
