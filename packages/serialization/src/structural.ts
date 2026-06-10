@@ -175,7 +175,15 @@ function writeComponentFieldValues(
 const SCRATCH_F64 = new Float64Array(1)
 
 // --- apply: replay records into the receiver world through validate-then-apply --------------
-export function applyStructuralOps(world: World, bytes: Uint8Array, remap: Map<EntityHandle, EntityHandle>): void {
+// `touched`, when supplied, collects the receiver-local handles this section creates or adds a
+// component to. The delta-apply caller feeds these (plus value-section rows) to the relations
+// reindex so exclusive-relation backrefs are rebuilt — those pairs ride the eid column, not a PairAdd op.
+export function applyStructuralOps(
+  world: World,
+  bytes: Uint8Array,
+  remap: Map<EntityHandle, EntityHandle>,
+  touched?: Set<EntityHandle>,
+): void {
   if (world.phase !== 'serial') {
     throw new Error('applyStructuralOps must run while the world is in its serial phase (outside scheduler.update / worker waves)')
   }
@@ -189,6 +197,7 @@ export function applyStructuralOps(world: World, bytes: Uint8Array, remap: Map<E
         const old = cur.u32()
         const nh = s.spawn()
         remap.set(old as EntityHandle, nh)
+        touched?.add(nh)
         break
       }
       case DeltaOp.EntityDestroy: {
@@ -211,6 +220,7 @@ export function applyStructuralOps(world: World, bytes: Uint8Array, remap: Map<E
         // registry — but a pure structural stream carries no registry, so the producer id IS the local
         // id when sender and receiver share defineComponent order (the documented late-joiner case).
         if (handle === undefined) break
+        touched?.add(handle)
         applyComponentAdd(world, handle, producerCid as ComponentId, values, remap)
         break
       }

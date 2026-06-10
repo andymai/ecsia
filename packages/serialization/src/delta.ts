@@ -495,10 +495,14 @@ export function applyDelta(world: World, bytes: Uint8Array, remap: ReadonlyMap<E
   const valueOff = cur.u32()
   const richOff = cur.u32()
 
+  // Receiver-local handles this delta creates or writes. Fed to the relations reindex below so
+  // exclusive-relation backrefs (which ride the eid column, not a journaled PairAdd) are rebuilt.
+  const touched = new Set<EntityHandle>()
+
   // --- SECTION S: apply structural ops FIRST (creates/destroys/adds/removes), so the value section's
   // handles resolve to live receiver entities. ---
   if ((flags & FLAG_HAS_STRUCTURAL) !== 0 && structOff < valueOff) {
-    applyStructuralOps(world, bytes.subarray(structOff, valueOff), work)
+    applyStructuralOps(world, bytes.subarray(structOff, valueOff), work, touched)
   }
   // Propagate creates AND destroys back to a mutable caller table (no-op for a ReadonlyMap caller):
   // without destroy propagation, a stream-lifetime remap (replication G4) grows without bound under
@@ -520,6 +524,12 @@ export function applyDelta(world: World, bytes: Uint8Array, remap: ReadonlyMap<E
     const rowCount = cur.u32()
     const handles = new Uint32Array(rowCount)
     for (let r = 0; r < rowCount; r++) handles[r] = cur.u32()
+    // A re-target is an in-place eid-column write with no structural op, so collect value-section
+    // rows too — otherwise the reindex would miss exclusive pairs that only changed target.
+    for (let r = 0; r < rowCount; r++) {
+      const local = work.get(handles[r] as number as EntityHandle)
+      if (local !== undefined) touched.add(local)
+    }
     const componentCount = cur.u16()
     for (let ci = 0; ci < componentCount; ci++) {
       const producerCid = cur.u32()
@@ -577,6 +587,13 @@ export function applyDelta(world: World, bytes: Uint8Array, remap: ReadonlyMap<E
       }
     }
   }
+
+  // Rebuild exclusive-relation backrefs from the eid columns just applied. Exclusive pairs serialize
+  // via that column rather than a journaled PairAdd, so a delta updates the forward target but not the
+  // in-memory reverse index — subjectsOf/targetsOf would otherwise be empty for delta-applied pairs.
+  const rel = s.relations()
+  if (rel !== undefined && touched.size > 0) rel.reindexAfterApply(touched)
+
   return targetTick
 }
 
