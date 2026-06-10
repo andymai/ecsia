@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.3](https://github.com/andymai/ecsia/compare/schema-v0.18.2...schema-v0.18.3) (2026-06-10)
+
+
+### Miscellaneous
+
+* **schema:** Synchronize ecsia versions
+
 ## [0.18.2](https://github.com/andymai/ecsia/compare/schema-v0.18.1...schema-v0.18.2) (2026-06-10)
 
 
