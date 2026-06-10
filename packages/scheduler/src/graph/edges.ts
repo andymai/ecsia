@@ -65,7 +65,7 @@ export function resolveOrdering(
       const id = idByDef.get(d)
       if (id === undefined) {
         throw new Error(
-          `system '${owner}' lists a system in its before/after that isn't in this scheduler — add '${d.name}' to createScheduler({ systems: [...] }), or remove the reference`,
+          `system '${owner}' lists a system in its before/after that isn't in this scheduler — add '${d.name}' to createScheduler(world, [...]), or remove the reference`,
         )
       }
       return id

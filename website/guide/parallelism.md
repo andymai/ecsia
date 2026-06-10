@@ -112,6 +112,41 @@ You can inspect the derived waves with the [devtools](/guide/devtools) `explainP
 it prints exactly which systems share a wave, which conflicts separated them, and which
 systems are pinned to the main thread (they always run there, never on a worker).
 
+### Forcing an order between systems
+
+The conflict graph orders systems that share data. When two systems **don't** share data but you still
+want a specific order — say a logger that must run *after* movement even though neither touches the
+other's components — name it with **`before`** or **`after`**. Each takes the other systems (the
+`defineSystem` values themselves), and the edge is honored regardless of conflicts:
+
+```ts
+import { defineComponent, defineSystem, write } from '@ecsia/kit'
+
+const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'pos' })
+
+const Move = defineSystem({
+  name: 'Move',
+  write: [Position],
+  run({ query, dt }) {
+    for (const e of query(write(Position))) e.pos.x += dt
+  },
+})
+
+// LogPositions touches none of Move's components, so they'd otherwise share a wave — `after` forces it later.
+const LogPositions = defineSystem({
+  name: 'LogPositions',
+  after: [Move],
+  run() {
+    // emit this frame's telemetry — a side effect, no component access
+  },
+})
+```
+
+`before: [X]` is the mirror — this system runs before `X`. Reference a system that isn't in
+`createScheduler(world, [...])` and you get a clear error naming it. Unlike the coarse *hints*
+(`inAnyOrderWith`, `beforeWritersOf`, `afterReadersOf`), `before`/`after` are exact, by-name edges —
+reach for them only when you genuinely need a fixed order the data dependencies don't already give you.
+
 ### Declaring relation access
 
 A **relation** — a link between two entities, from [Linking entities](/guide/relations) — isn't a
