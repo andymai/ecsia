@@ -132,18 +132,18 @@ const Move = defineSystem({
   },
 })
 
-// LogPositions reads nothing Move writes, so they'd otherwise share a wave — `after` forces it later.
+// LogPositions touches none of Move's components, so they'd otherwise share a wave — `after` forces it later.
 const LogPositions = defineSystem({
   name: 'LogPositions',
   after: [Move],
   run() {
-    // read positions to log them…
+    // emit this frame's telemetry — a side effect, no component access
   },
 })
 ```
 
 `before: [X]` is the mirror — this system runs before `X`. Reference a system that isn't in
-`createScheduler({ systems: [...] })` and you get a clear error naming it. Unlike the coarse *hints*
+`createScheduler(world, [...])` and you get a clear error naming it. Unlike the coarse *hints*
 (`inAnyOrderWith`, `beforeWritersOf`, `afterReadersOf`), `before`/`after` are exact, by-name edges —
 reach for them only when you genuinely need a fixed order the data dependencies don't already give you.
 
