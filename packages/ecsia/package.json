@@ -1,6 +1,6 @@
 {
   "name": "@ecsia/kit",
-  "version": "0.21.0",
+  "version": "0.21.1",
   "description": "Fast, type-safe entity component system for TypeScript with automatic multithreading.",
   "keywords": [
     "ecs",

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.21.1](https://github.com/andymai/ecsia/compare/relations-v0.21.0...relations-v0.21.1) (2026-06-10)
+
+
+### Bug Fixes
+
+* rebuild exclusive-relation backref on replication delta apply ([#136](https://github.com/andymai/ecsia/issues/136)) ([8034d21](https://github.com/andymai/ecsia/commit/8034d218346440cdaee40660dd8941935ef1f3e7))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.21.1
+    * @ecsia/schema bumped to 0.21.1
+
 ## [0.21.0](https://github.com/andymai/ecsia/compare/relations-v0.20.0...relations-v0.21.0) (2026-06-10)
 
 
