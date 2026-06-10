@@ -12,6 +12,7 @@ import fc from 'fast-check'
 import { createWorld, defineComponent, read, write } from '@ecsia/core'
 import type { ComponentDef, EntityHandle, Schema } from '@ecsia/core'
 import type { PooledElement } from '../src/internal.js'
+import { analyzeEachBody } from '../src/internal.js'
 
 const DT = 1 / 60
 
@@ -58,13 +59,14 @@ interface Rig {
 
 type IntegEl = { position: { x: number; y: number }; velocity: { dx: number; dy: number } }
 
-const bodyEach = (e: PooledElement, ctx: { dt: number }): void => {
-  const el = e as unknown as { position: { x: number; y: number }; velocity: { dx: number; dy: number } }
-  el.position.x += el.velocity.dx * ctx.dt
-  el.position.y += el.velocity.dy * ctx.dt
+const canonicalBody = (e: IntegEl, ctx: { dt: number }): void => {
+  e.position.x += e.velocity.dx * ctx.dt
+  e.position.y += e.velocity.dy * ctx.dt
 }
 
-function makeRig(compiled: boolean): Rig {
+// `body` is run through BOTH compile() (reads its .toString()) and the proxy .each (calls it on the
+// pooled element). The SAME function drives both paths, so any divergence is a compile() bug.
+function makeRig(compiled: boolean, body: (e: IntegEl, ctx: { dt: number }) => void = canonicalBody): Rig {
   const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
   const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
   const Extra = defineComponent({ v: 'i32' }, { name: 'extra' })
@@ -78,11 +80,10 @@ function makeRig(compiled: boolean): Rig {
   }
   // Seed the burst archetype before binding so a re-back hits a LIVE compiled binding.
   const seed = world.spawnWith(Position, Velocity)
-  const compiledRun = q.compile<{ dt: number }>((e, ctx) => {
-    e.position.x += e.velocity.dx * ctx.dt
-    e.position.y += e.velocity.dy * ctx.dt
-  })
-  const step = compiled ? () => compiledRun({ dt: DT }) : () => q.each((e) => bodyEach(e, { dt: DT }))
+  const compiledRun = q.compile<{ dt: number }>(body)
+  const step = compiled
+    ? () => compiledRun({ dt: DT })
+    : () => q.each((e) => body(e as unknown as IntegEl, { dt: DT }))
   return { world, handles: [seed], step, Position, Velocity, Extra }
 }
 
@@ -182,6 +183,102 @@ describe('PROP compile() integrator == .each integrator', { timeout: 60_000 }, (
         expect(drain(cChanged)).toBe(drain(oChanged))
       }),
       { numRuns: 30 },
+    )
+  })
+})
+
+// --- body-shape fuzz: generate a random straight-line numeric body the analyzer ACCEPTS, run the SAME
+// function through BOTH compile() and the proxy, assert byte-identical. This fuzzes the ANALYZER itself
+// (write detection, e/ctx rewrite, operator handling) — the faithful-by-construction core — where the
+// existing properties only vary the world ops under one fixed body.
+const WRITABLE = ['position.x', 'position.y'] as const
+const TERM = fc.oneof(
+  fc.constantFrom('e.velocity.dx', 'e.velocity.dy', 'e.position.x', 'e.position.y', 'ctx.dt'),
+  fc.integer({ min: -5, max: 5 }).map((n) => `${n}`),
+)
+const EXPR = fc.array(TERM, { minLength: 1, maxLength: 3 }).chain((terms) =>
+  fc
+    .array(fc.constantFrom('+', '-', '*'), { minLength: terms.length - 1, maxLength: Math.max(0, terms.length - 1) })
+    // Spaces around operators so a `-` before a negative literal can't mis-lex as `--` (`x - -5`, not `x--5`).
+    .map((ops) => terms.reduce((acc, t, i) => (i === 0 ? t : `${acc} ${ops[i - 1]} ${t}`), '')),
+)
+const STMT = fc.oneof(
+  fc
+    .record({ w: fc.constantFrom(...WRITABLE), op: fc.constantFrom('=', '+=', '-=', '*='), rhs: EXPR })
+    .map(({ w, op, rhs }) => `e.${w}${op}${rhs};`),
+  fc.record({ w: fc.constantFrom(...WRITABLE), inc: fc.constantFrom('++', '--') }).map(({ w, inc }) => `e.${w}${inc};`),
+)
+const BODY_SRC = fc.array(STMT, { minLength: 1, maxLength: 4 }).map((s) => s.join(''))
+
+describe('PROP compile() faithful across FUZZED body shapes', { timeout: 60_000 }, () => {
+  test('SANITY: a `new Function` body IS analyzed (the fuzz exercises the compiled path, not just proxy)', () => {
+    const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
+    const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
+    createWorld({ components: [Position, Velocity] as readonly ComponentDef<Schema>[] })
+    const defs = new Map<string, ComponentDef<Schema>>([
+      ['position', Position],
+      ['velocity', Velocity],
+    ])
+    const plan = analyzeEachBody(new Function('e', 'ctx', 'e.position.x += e.velocity.dx * ctx.dt;') as never, {
+      defByName: (n) => defs.get(n),
+      idOf: (d) => ((d.id as unknown as number) >= 0 ? (d.id as unknown as number) : undefined),
+      isRequired: () => true,
+    })
+    expect(plan).not.toBeNull() // proves the new-Function source parses + compiles, so the fuzz isn't trivial
+  })
+
+  test('a random straight-line body: compile() == proxy .each, byte-for-byte', () => {
+    fc.assert(
+      fc.property(BODY_SRC, fc.array(opArb, { minLength: 1, maxLength: 15 }), (src, ops) => {
+        const body = new Function('e', 'ctx', src) as (e: IntegEl, ctx: { dt: number }) => void
+        const cmp = makeRig(true, body)
+        const oracle = makeRig(false, body)
+        for (const op of ops) {
+          apply(cmp, op)
+          apply(oracle, op)
+        }
+        cmp.step()
+        oracle.step()
+        expect(cmp.handles.length).toBe(oracle.handles.length)
+        for (let i = 0; i < cmp.handles.length; i++) {
+          const a = cmp.world.entity(cmp.handles[i] as EntityHandle).read(cmp.Position) as { x: number; y: number }
+          const b = oracle.world.entity(oracle.handles[i] as EntityHandle).read(oracle.Position) as { x: number; y: number }
+          expect(a.x).toBe(b.x)
+          expect(a.y).toBe(b.y)
+        }
+      }),
+      { numRuns: 80 },
+    )
+  })
+
+  test('a random body with a .changed(Position) consumer: the drained changed-sets match the proxy', () => {
+    fc.assert(
+      fc.property(BODY_SRC, fc.array(opArb, { minLength: 1, maxLength: 15 }), (src, ops) => {
+        const body = new Function('e', 'ctx', src) as (e: IntegEl, ctx: { dt: number }) => void
+        const cmp = makeRig(true, body)
+        const oracle = makeRig(false, body)
+        const changedOf = (rig: Rig) =>
+          rig.world.query(read(rig.Position)).changed(rig.Position) as unknown as {
+            eachChanged(fn: (e: PooledElement) => void): void
+          }
+        const cChanged = changedOf(cmp)
+        const oChanged = changedOf(oracle)
+        for (const op of ops) {
+          apply(cmp, op)
+          apply(oracle, op)
+        }
+        cmp.world.frameReset()
+        oracle.world.frameReset()
+        cmp.step()
+        oracle.step()
+        const drain = (c: { eachChanged(fn: (e: PooledElement) => void): void }): number => {
+          let n = 0
+          c.eachChanged(() => n++)
+          return n
+        }
+        expect(drain(cChanged)).toBe(drain(oChanged))
+      }),
+      { numRuns: 60 },
     )
   })
 })
