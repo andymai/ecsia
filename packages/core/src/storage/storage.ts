@@ -231,7 +231,8 @@ export class Storage {
   #resolve(handle: EntityHandle, archetypeId: number, row: number, def: ComponentDef<Schema>, lenient: boolean): unknown {
     const id = this.#requireId(def)
     const arch = this.archetypes.byId[archetypeId] as Archetype | undefined
-    if (arch === undefined) throw new Error(`storage.resolve: unknown archetype ${archetypeId}`)
+    if (arch === undefined)
+      throw new Error(`internal: unknown archetype id ${archetypeId} for handle ${handle as number} (stale entity record)`)
     let set: ColumnSet | undefined
     let boundRow = row
     if (arch.cold) {

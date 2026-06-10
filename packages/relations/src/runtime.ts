@@ -22,6 +22,7 @@ import type {
 import {
   defineComponent,
   buildColumnSet,
+  initColumnSetRow,
   bindAccessorRow,
   decodeEid,
   encodeEid,
@@ -368,19 +369,14 @@ export function createRelations(world: World): RelationsApi {
     const row = ov.rowByPairKey.get(key)
     if (row !== undefined) return row
     if (!create) return -1
-    const reused = ov.freeRows.pop()
-    const r = reused ?? ov.count++
+    const r = ov.freeRows.pop() ?? ov.count++
     // grow the columns if needed (length-tracking views auto-widen on grow)
     for (const col of ov.columnSet.columns) if (ov.count > col.capacity()) host.buffers.grow(col, ov.count)
-    // A recycled row still holds the previous tenant's bytes — grow default-fills only never-used
-    // rows. Re-default a reused row (the same uniform fillOnInit a fresh row gets) so a partial
-    // addPair payload can't read the prior pair's values in the fields it doesn't write.
-    if (reused !== undefined) {
-      for (const col of ov.columnSet.columns) {
-        const base = r * col.layout.stride
-        for (let a = 0; a < col.layout.stride; a++) col.view[base + a] = col.layout.fillOnInit
-      }
-    }
+    // Default the row to the payload schema's field defaults — the same per-lane init storage gives
+    // every row. Covers a recycled row (free-list rows hold the previous tenant's bytes) AND a fresh
+    // row (grow's uniform fillOnInit can't express a non-uniform vec default like [1,2,3]); without
+    // it a partial-payload addPair reads stale/garbage in the fields it doesn't write.
+    initColumnSetRow(ov.columnSet, ov.def, r)
     ov.rowByPairKey.set(key, r)
     ov.pairByRow.set(r, { subjectIndex: sIdx, targetIndex: tIdx })
     return r

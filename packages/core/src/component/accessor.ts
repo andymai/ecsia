@@ -99,7 +99,9 @@ function columnElementOf(f: FieldDescriptor): ElementKind {
   if (ctor === Uint16Array) return 'u16'
   if (ctor === Int32Array) return 'i32'
   if (ctor === Uint32Array) return 'u32'
-  throw new Error('unsupported column element ctor')
+  throw new Error(
+    `internal: field '${f.name}' has an unsupported column element ctor '${(ctor as { name?: string } | null)?.name ?? String(ctor)}'`,
+  )
 }
 
 function planFields(def: ComponentDef<Schema>): { columnPlans: FieldPlan[]; richPlans: RichPlan[] } {

@@ -47,7 +47,7 @@ describe('op.ts: recordLen is self-describing per opcode', () => {
   test('a corrupt opcode throws naming the offset (line 41, branch 40)', () => {
     const w = new Uint32Array(4)
     w[0] = 42 // not a valid Op
-    expect(() => recordLen(w, 0)).toThrow(/corrupt command buffer: bad opcode 42 at 0/)
+    expect(() => recordLen(w, 0)).toThrow(/corrupt command buffer: unknown opcode 42 at word 0/)
   })
 })
 

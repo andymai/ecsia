@@ -74,6 +74,31 @@ export function buildColumnSet(params: BuildColumnSetParams): ColumnSet {
   return { archetypeId, componentId, columns, accessor }
 }
 
+/**
+ * Re-default every column-backed field of `row` to the component's defaults — UNCONDITIONALLY
+ * (archetype-storage.md §5.7): zero-init covers only never-used rows, but a reused row (a swap-pop, a
+ * free list) holds the previous tenant's bytes. Array defaults (vecs) encode per lane; a scalar uses
+ * the column's single `fillOnInit`, which cannot represent non-uniform lanes. The single source of
+ * truth for row defaulting: storage's row-init and the relations overflow table both call this.
+ */
+export function initColumnSetRow(set: ColumnSet, def: ComponentDef<Schema>, row: number): void {
+  const rt = def as ComponentRuntime<Schema>
+  let layoutIndex = 0
+  for (const f of rt.fields) {
+    if (f.ctor === null) continue
+    const col = set.columns[layoutIndex] as Column
+    const base = row * col.layout.stride
+    const d = f.default
+    if (Array.isArray(d)) {
+      for (let a = 0; a < col.layout.stride; a++) col.view[base + a] = f.encode(d[a])
+    } else {
+      const fill = col.layout.fillOnInit
+      for (let a = 0; a < col.layout.stride; a++) col.view[base + a] = fill
+    }
+    layoutIndex += 1
+  }
+}
+
 // Point a column set's accessor singleton at a (row, entity). 's query/iteration loop pokes
 // __idx; the entity read/write path pokes both before handing the view out.
 export function bindAccessorRow(set: ColumnSet, row: number, eid: EntityHandle): AccessorInstanceBase {

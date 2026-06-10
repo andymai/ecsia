@@ -10,7 +10,7 @@
 //     the prior pair's values in the fields it didn't write.
 
 import { describe, it, expect } from 'vitest'
-import { createWorld, defineComponent, read } from '@ecsia/core'
+import { createWorld, defineComponent, field, read, vec } from '@ecsia/core'
 import { createRelations } from '../src/index.js'
 
 describe('relations — iteration-mutation guard on pair ops', () => {
@@ -110,5 +110,26 @@ describe('relations — overflow payload row reuse re-defaults', () => {
       expect(p.weight).toBe(5)
       expect(p.kind).toBe(0)
     }
+  })
+
+  it('a vec payload field honors its NON-UNIFORM default (fresh + reused row)', () => {
+    const world = createWorld()
+    const rel = createRelations(world)
+    const Aim = rel.defineRelation({ dir: field(vec('f32', 3), { default: [1, 2, 3] }), kind: 'u8' })
+    const t = world.spawn()
+
+    // Fresh row, partial payload (omit dir): a uniform fillOnInit would give [0,0,0] — the per-lane
+    // init gives the real default.
+    const s1 = world.spawn()
+    rel.addPair(s1, Aim, t, { kind: 7 })
+    const p1 = rel.getPair(s1, Aim, t).read() as { dir: { x: number; y: number; z: number } }
+    expect([p1.dir.x, p1.dir.y, p1.dir.z]).toEqual([1, 2, 3])
+
+    // Reused row: free it, then a new partial-payload pair reuses it — still the per-lane default.
+    rel.removePair(s1, Aim, t)
+    const s2 = world.spawn()
+    rel.addPair(s2, Aim, t, { kind: 9 })
+    const p2 = rel.getPair(s2, Aim, t).read() as { dir: { x: number; y: number; z: number } }
+    expect([p2.dir.x, p2.dir.y, p2.dir.z]).toEqual([1, 2, 3])
   })
 })

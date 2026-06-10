@@ -42,6 +42,6 @@ export function recordLen(words: Uint32Array, at: number): number {
     case Op.ADD_PAIR:
       return 5 + (words[at + 4] as number) // 5 + payloadWordCount
     default:
-      throw new Error(`corrupt command buffer: bad opcode ${words[at]} at ${at}`)
+      throw new Error(`corrupt command buffer: unknown opcode ${words[at]} at word ${at}`)
   }
 }
