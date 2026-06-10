@@ -105,7 +105,12 @@ jobs:
           set -uo pipefail
           failed=()
           for pj in packages/*/package.json; do
-            read -r name version private < <(node -p "const p=require('./$pj'); [p.name, p.version, !!p.private].join(' ')")
+            if ! meta=$(node -p "const p=require('./$pj'); [p.name, p.version, !!p.private].join(' ')"); then
+              echo "::error::Could not read $pj"
+              failed+=("$pj")
+              continue
+            fi
+            read -r name version private <<<"$meta"
             if [ "$private" = "true" ]; then
               echo "↷ $name is private; skipping"
               continue
