@@ -1,6 +1,6 @@
 {
   "name": "@ecsia/react",
-  "version": "0.18.5",
+  "version": "0.19.0",
   "description": "React bindings for ecsia: render entity lists and component values from hooks, driven by the world's deferred observers.",
   "keywords": [
     "ecs",
