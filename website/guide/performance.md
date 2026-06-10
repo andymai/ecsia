@@ -234,6 +234,36 @@ log, a `.changed()`/observer system later in the schedule still sees the writes.
 system runs its separately-authored kernel on worker threads; `compile` is a main-thread `run`-body
 tool, exactly like `each` and `bindColumns`.)
 
+## Warm a cold archetype: `warm`
+
+Every loop on this page is fastest over a **hot** archetype — one backed by contiguous typed-array
+columns. There's a cap on how many archetypes stay hot (`maxHotArchetypes`, default
+`max(256, maxEntities >>> 8)`). Once you exceed it, new archetypes are created **cold**: their rows
+live in a shared overflow store keyed by `(entity, component)` rather than in their own columns. Cold
+archetypes still iterate correctly — they just pay an extra indirection per field instead of a
+straight column walk.
+
+If a profile shows a hot loop landing on a cold archetype, promote it once with `world.warm`. Pass the
+exact component set that names the archetype; `warm` allocates its columns and migrates the resident
+rows into contiguous storage:
+
+```ts
+import { createWorld, defineComponent } from '@ecsia/kit'
+
+const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
+const Velocity = defineComponent({ dx: 'f32', dy: 'f32' }, { name: 'velocity' })
+
+const world = createWorld({ components: [Position, Velocity] })
+
+// Make {Position, Velocity} hot before the first heavy frame.
+world.warm(Position, Velocity)
+```
+
+`warm` moves rows, so it's a structural operation — run it at a flush point (during setup or between
+frames), never inside a loop. It's idempotent: warming an already-hot archetype is a no-op. Most apps
+never approach the cap and never need it; reach for `warm` only when profiling points at a cold
+archetype on a hot path.
+
 ## Reproduce
 
 ```bash
