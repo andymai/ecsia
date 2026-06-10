@@ -59,7 +59,7 @@ The world stays the single source of truth; three.js follows it. There's also
 ## Links
 
 - Repository & full docs: https://github.com/andymai/ecsia
-- three.js bridge guide: https://github.com/andymai/ecsia (see the docs site once Pages is enabled)
+- three.js bridge guide: https://andymai.github.io/ecsia/guide/three-bridge
 - Umbrella package: [`@ecsia/kit`](https://github.com/andymai/ecsia)
 
 ## License
