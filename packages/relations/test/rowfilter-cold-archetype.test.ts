@@ -28,9 +28,13 @@ describe('relations — row filter honored on a COLD archetype', () => {
 
     const seen: EntityHandle[] = []
     q.each((e) => seen.push(e.handle))
-
     expect(seen).toEqual([c1]) // only the ChildOf→parentA subject, not c2
     expect(q.count).toBe(1) // count agrees with each()
+
+    // The iterator twin (#eachColdGen) is a separately-fixed cold site — exercise it too.
+    const seenIter: EntityHandle[] = []
+    for (const e of q) seenIter.push(e.handle)
+    expect(seenIter).toEqual([c1])
   })
 
   it('the wildcard pair term still returns all subjects on a cold archetype', () => {

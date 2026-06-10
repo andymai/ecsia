@@ -162,7 +162,9 @@ export function passesColdRowFilters(
     if (cs === undefined) return false
     const col = cs.columns[rf.targetFieldIndex]
     if (col === undefined) return false
-    const stored = col.view[deps.coldRowOf(index, rf.presenceId) * col.layout.stride] as number
+    const row = deps.coldRowOf(index, rf.presenceId)
+    if (row < 0) return false // resident doesn't hold the presence component (shouldn't happen post-match)
+    const stored = col.view[row * col.layout.stride] as number
     const decoded = decodeEid(stored)
     if (decoded === null || (decoded as number) !== (rf.targetEid >>> 0)) return false
   }
