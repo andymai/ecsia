@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.18.1](https://github.com/andymai/ecsia/compare/scheduler-v0.18.0...scheduler-v0.18.1) (2026-06-10)
+
+
+### Bug Fixes
+
+* make relation access declarable in a system (rel.access) so the planner serializes it ([#106](https://github.com/andymai/ecsia/issues/106)) ([b0b44c0](https://github.com/andymai/ecsia/commit/b0b44c01308317c8fb566886453b59baf52b4154))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.18.1
+    * @ecsia/schema bumped to 0.18.1
+  * devDependencies
+    * @ecsia/relations bumped to 0.18.1
+
 ## [0.18.0](https://github.com/andymai/ecsia/compare/scheduler-v0.17.0...scheduler-v0.18.0) (2026-06-10)
 
 

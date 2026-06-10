@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.18.1](https://github.com/andymai/ecsia/compare/devtools-v0.18.0...devtools-v0.18.1) (2026-06-10)
+
+
+### Miscellaneous
+
+* **devtools:** Synchronize ecsia versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.18.1
+    * @ecsia/schema bumped to 0.18.1
+    * @ecsia/scheduler bumped to 0.18.1
+  * devDependencies
+    * @ecsia/relations bumped to 0.18.1
+
 ## [0.18.0](https://github.com/andymai/ecsia/compare/devtools-v0.17.0...devtools-v0.18.0) (2026-06-10)
 
 
