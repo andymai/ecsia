@@ -557,6 +557,11 @@ export function createRelations(world: World): RelationsApi {
     host.trackWrite(sIdx, rt.presenceId)
     // ...plus the ADD leg of the pair-observer carrier (both attach and retarget land here).
     host.trackShapePair(sIdx, rt.presenceId, tIdx, true, false)
+    // The eid target column just changed — on first attach the migration above maintained membership
+    // at the -1 default, and a re-target is an in-place write with NO migration at all. Row-filtered
+    // queries (rel.Pair(R, target)) key on that value, so re-test the subject now or each()/count
+    // never reflect the attach/retarget (and a retarget never moves it between target queries).
+    host.maintainEntity(sIdx, rt.presenceId)
     markDepthDirty(rt, sIdx)
   }
 
