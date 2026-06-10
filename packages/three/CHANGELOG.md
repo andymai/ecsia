@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.18.2](https://github.com/andymai/ecsia/compare/three-v0.18.1...three-v0.18.2) (2026-06-10)
+
+
+### Miscellaneous
+
+* **three:** Synchronize ecsia versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.18.2
+    * @ecsia/schema bumped to 0.18.2
+  * devDependencies
+    * @ecsia/scheduler bumped to 0.18.2
+
 ## [0.18.1](https://github.com/andymai/ecsia/compare/three-v0.18.0...three-v0.18.1) (2026-06-10)
 
 
