@@ -78,7 +78,7 @@ silently. A browser Web-Worker pool is future work.
 ## Links
 
 - Repository, full guide, and benchmarks: https://github.com/andymai/ecsia
-- Docs site: coming with GitHub Pages
+- Docs site: https://andymai.github.io/ecsia/
 
 ## License
 

@@ -53,7 +53,7 @@ bucket lookups (R = registered relations).
 ## Links
 
 - Repository & full docs: https://github.com/andymai/ecsia
-- Relations guide: https://github.com/andymai/ecsia (see the docs site once Pages is enabled)
+- Relations guide: https://andymai.github.io/ecsia/guide/relations
 - Umbrella package: [`@ecsia/kit`](https://github.com/andymai/ecsia)
 
 ## License

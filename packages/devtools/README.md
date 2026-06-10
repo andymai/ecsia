@@ -60,7 +60,7 @@ into core directly — exactly how a real devtools consumer does. See the
 ## Links
 
 - Repository & full docs: https://github.com/andymai/ecsia
-- Devtools guide: https://github.com/andymai/ecsia (see the docs site once Pages is enabled)
+- Devtools guide: https://andymai.github.io/ecsia/guide/devtools
 - Umbrella package: [`@ecsia/kit`](https://github.com/andymai/ecsia)
 
 ## License
