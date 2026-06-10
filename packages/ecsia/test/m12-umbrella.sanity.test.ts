@@ -56,6 +56,7 @@ import type {
   EntityRef,
   ComponentDef,
   RelationDef,
+  RelationsApi,
   ReadView,
   WriteView,
   ReadOf,

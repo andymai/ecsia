@@ -114,7 +114,7 @@ interface RelationRuntime {
   depth: { depth: Int32Array; stamp: Float64Array; gen: number } | null
 }
 
-interface RelationsApi {
+export interface RelationsApi {
   defineRelation<P extends Schema>(payload: P, options?: RelationOptions): RelationDef<P>
   defineRelation(payload: null, options?: RelationOptions): RelationDef<void>
   addPair<R extends RelationDef<Schema | void>>(
