@@ -12,8 +12,8 @@ import { sigHas, signatureMatches } from '../storage/index.js'
 import type { Archetype, Signature } from '../storage/index.js'
 import type { Buffers, RegionKey } from '../memory/index.js'
 import { compileQuery } from './compile.js'
-import type { CompileContext, CompiledQuery } from './compile.js'
-import { LiveQuery } from './live-query.js'
+import type { CompileContext, CompiledQuery, RowFilterTerm } from './compile.js'
+import { LiveQuery, passesColdRowFilters } from './live-query.js'
 import type { LiveQueryDeps, ReactivityQueryHooks } from './live-query.js'
 import { SparseSetU32 } from './sparse-set.js'
 
@@ -123,7 +123,8 @@ export class QueryEngine {
     if (q.rowFilters.length === 0) return true
     const loc = this.#deps.resolveLocation(index)
     const arch = this.#deps.byId[loc.archetypeId]
-    if (arch === undefined || arch.cold) return q.rowFilters.length === 0
+    if (arch === undefined) return false
+    if (arch.cold) return passesColdRowFilters(this.#deps, index, q.rowFilters as readonly RowFilterTerm[])
     for (const rf of q.rowFilters) {
       const cs = arch.columnSets.get(rf.presenceId)
       if (cs === undefined) return false
@@ -140,8 +141,13 @@ export class QueryEngine {
     if (arch.cold) {
       // Cold rows are index-keyed in the overflow store; seed from the cold archetype's residents so
       // a query created AFTER cold entities exist sees them ( cold transparency), matching the
-      // per-entity maintenance path that adds residents as they migrate in.
-      for (const index of this.#deps.coldResidentsOf(arch.id as number)) lq.addEntity(index)
+      // per-entity maintenance path that adds residents as they migrate in. Row filters apply here
+      // too — a row-filtered archetype can be cold, and seed/maintain/each must agree.
+      const filters = lq.compiled.rowFilters as readonly RowFilterTerm[]
+      for (const index of this.#deps.coldResidentsOf(arch.id as number)) {
+        if (filters.length !== 0 && !passesColdRowFilters(this.#deps, index, filters)) continue
+        lq.addEntity(index)
+      }
       return
     }
     const count = arch.count

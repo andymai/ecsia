@@ -145,6 +145,32 @@ export interface LiveQueryDeps {
   coldRowOf(index: number, componentId: ComponentId): number
 }
 
+/**
+ * Row-filter test for a COLD resident. Cold blocks store the presence component's eid target column
+ * keyed (componentId, index), so resolve it via coldColumnSet + coldRowOf rather than the hot
+ * archetype's columnSets. Cold status is a hot-budget decision, independent of relations, so a
+ * row-filtered archetype can be cold — the cold iteration AND the engine's cold seed/maintain must
+ * all run this so each()/count/has agree on which residents pass.
+ */
+export function passesColdRowFilters(
+  deps: Pick<LiveQueryDeps, 'coldColumnSet' | 'coldRowOf'>,
+  index: number,
+  filters: readonly RowFilterTerm[],
+): boolean {
+  for (const rf of filters) {
+    const cs = deps.coldColumnSet(rf.presenceId)
+    if (cs === undefined) return false
+    const col = cs.columns[rf.targetFieldIndex]
+    if (col === undefined) return false
+    const row = deps.coldRowOf(index, rf.presenceId)
+    if (row < 0) return false // resident doesn't hold the presence component (shouldn't happen post-match)
+    const stored = col.view[row * col.layout.stride] as number
+    const decoded = decodeEid(stored)
+    if (decoded === null || (decoded as number) !== (rf.targetEid >>> 0)) return false
+  }
+  return true
+}
+
 export class LiveQuery {
   readonly compiled: CompiledQuery
   readonly terms: readonly unknown[]
@@ -961,14 +987,18 @@ export class LiveQuery {
    * filter over the whole `current` set (which would be O(cold archetypes × |current|)).
    */
   #eachCold(arch: Archetype, binding: ValueBinding, fn: (e: PooledElement) => void): void {
+    const filters = this.compiled.rowFilters as readonly RowFilterTerm[]
     for (const index of this.#deps.coldResidentsOf(arch.id as number)) {
+      if (filters.length !== 0 && !passesColdRowFilters(this.#deps, index, filters)) continue
       fn(this.#bindColdRow(arch, binding, index, this.#deps.handleOf(index)))
     }
   }
 
   /** Generator twin of #eachCold for the [Symbol.iterator] surface ( cold transparency). */
   *#eachColdGen(arch: Archetype, binding: ValueBinding): Generator<PooledElement> {
+    const filters = this.compiled.rowFilters as readonly RowFilterTerm[]
     for (const index of this.#deps.coldResidentsOf(arch.id as number)) {
+      if (filters.length !== 0 && !passesColdRowFilters(this.#deps, index, filters)) continue
       yield this.#bindColdRow(arch, binding, index, this.#deps.handleOf(index))
     }
   }
