@@ -32,8 +32,9 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # Note: Dependabot supports only `default-days` for the github-actions ecosystem —
+    # `semver-major-days` is npm-only and fails config validation here.
     cooldown:
       default-days: 7
-      semver-major-days: 14
     commit-message:
       prefix: ci
