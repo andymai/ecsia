@@ -2,9 +2,10 @@
 // an immutable `SystemBox`, resolving the declared `{read,write}` ComponentDefs to dense ComponentIds
 // and packing them into fixed-width access signature words for the O(words) disjointness test.
 //
-// Pair IDs are component IDs: a declared read/write of a relation expands to the relation's
-// presence id, an ordinary ComponentId in the same dense space. The defs a user passes carry their
-// registered `.id` already, so resolution here is a `.id` read — no registry handle required.
+// Pair IDs are component IDs: a system gates a relation by declaring `rel.access(R)` in read/write,
+// which IS the relation's presence ComponentDef — an ordinary ComponentId in the same dense space.
+// The defs a user passes carry their registered `.id` already, so resolution here is a `.id` read.
+// A bare RelationDef has no presence id of its own and is rejected (see idOf) — pass rel.access(R).
 
 import type { ComponentDef, ComponentId, Schema, SystemId } from '@ecsia/schema'
 import type { TopicDef } from '@ecsia/core'
@@ -21,6 +22,14 @@ export interface AccessMaps {
 const UNREGISTERED = -1
 
 function idOf(def: ComponentDef<Schema>): ComponentId {
+  // A relation isn't a component: a bare RelationDef has no `.fields`, and its `.id` is a RelationId,
+  // not a presence ComponentId — declaring one here would mis-key the conflict words. Reject it with
+  // the fix rather than crash the worker-eligibility field scan on `undefined.fields`.
+  if ((def as { fields?: unknown }).fields === undefined) {
+    throw new Error(
+      "a system's read/write lists something that isn't a component (it has no fields) — if it's a relation, declare rel.access(R) (the relation's presence handle) so the scheduler can serialize systems that touch it",
+    )
+  }
   const id = def.id as unknown as number
   if (id === UNREGISTERED) {
     throw new Error(
@@ -48,7 +57,9 @@ function resolveIds(defs: readonly ComponentDef<Schema>[] | undefined): Componen
 function computeWorkerEligible(def: SystemDef): boolean {
   const all = [...(def.read ?? []), ...(def.write ?? [])]
   for (const c of all) {
-    for (const f of c.fields) {
+    // `?? []` defends against a non-component def (e.g. a bare RelationDef has no fields) independent
+    // of evaluation order — idOf is the authoritative reject for that, but don't crash here either.
+    for (const f of c.fields ?? []) {
       if (!f.shareable) return false
     }
   }

@@ -8,8 +8,10 @@
 import { describe, expect, test, vi } from 'vitest'
 import { createWorld, defineComponent, write } from '@ecsia/core'
 import { createScheduler, defineSystem } from '@ecsia/scheduler'
+import { createRelations } from '@ecsia/relations'
 import { CycleError, aggregateAccess, buildDAG, buildEdges, buildPlan, lowerSystems, resolveOrdering } from '../src/internal.js'
 import type { ScheduleWave, SystemBox } from '../src/internal.js'
+import type { ComponentDef, Schema } from '@ecsia/schema'
 
 // A ComponentDef interns to exactly one world, so each test mints fresh defs + its own world.
 function fixture() {
@@ -37,6 +39,41 @@ function waveSets(waves: readonly ScheduleWave[]): Set<number>[] {
 function waveOf(waves: readonly ScheduleWave[], id: number): number {
   return waveSets(waves).findIndex((s) => s.has(id))
 }
+
+describe('relation access — declared via rel.access(R), expands to the presence id', () => {
+  // The parallel≡serial guarantee for relations rests on the planner SEEING relation read/write. A
+  // relation isn't a component, so it's declared via rel.access(R) (its presence handle); a relation
+  // writer and a relation reader then conflict on the presence id and are serialized into different
+  // waves. Without that, a same-wave writer (lower id) + reader would diverge from serial (the reader
+  // matches pre-write on the main thread while the writer's effect lands at the serial flush).
+  test('a relation writer is serialized strictly before a relation reader', () => {
+    const world = createWorld({})
+    const rel = createRelations(world)
+    const Likes = rel.defineRelation(null)
+    const Writer = defineSystem({ name: 'Writer', write: [rel.access(Likes)], run() {} })
+    const Reader = defineSystem({ name: 'Reader', read: [rel.access(Likes)], run() {} })
+    const plan = planOf([Writer, Reader])
+    expect(waveOf(plan.waves, 0)).toBeLessThan(waveOf(plan.waves, 1))
+  })
+
+  test('two relation READERS collapse into one wave (read-read does not conflict)', () => {
+    const world = createWorld({})
+    const rel = createRelations(world)
+    const Likes = rel.defineRelation(null)
+    const R1 = defineSystem({ name: 'R1', read: [rel.access(Likes)], run() {} })
+    const R2 = defineSystem({ name: 'R2', read: [rel.access(Likes)], run() {} })
+    const plan = planOf([R1, R2])
+    expect(waveSets(plan.waves)).toEqual([new Set([0, 1])])
+  })
+
+  test('declaring a bare RelationDef in read/write fails LOUD (point at rel.access)', () => {
+    const world = createWorld({})
+    const rel = createRelations(world)
+    const Likes = rel.defineRelation(null)
+    const Bad = defineSystem({ name: 'Bad', write: [Likes as unknown as ComponentDef<Schema>], run() {} })
+    expect(() => planOf([Bad])).toThrow(/rel\.access\(R\)/)
+  })
+})
 
 describe('wave layering', () => {
   test('a pure write→read→write chain layers into three single-system waves', () => {
