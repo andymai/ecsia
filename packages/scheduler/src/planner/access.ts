@@ -57,7 +57,9 @@ function resolveIds(defs: readonly ComponentDef<Schema>[] | undefined): Componen
 function computeWorkerEligible(def: SystemDef): boolean {
   const all = [...(def.read ?? []), ...(def.write ?? [])]
   for (const c of all) {
-    for (const f of c.fields) {
+    // `?? []` defends against a non-component def (e.g. a bare RelationDef has no fields) independent
+    // of evaluation order — idOf is the authoritative reject for that, but don't crash here either.
+    for (const f of c.fields ?? []) {
       if (!f.shareable) return false
     }
   }
