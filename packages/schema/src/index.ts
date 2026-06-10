@@ -216,7 +216,6 @@ export type StorageStrategy = 'packed' | 'sparse'
 
 export interface ComponentOptions {
   readonly storage?: StorageStrategy
-  readonly maxHistory?: number
   /**
    * false ⇒ every field of the component is excluded from snapshots/deltas (values re-default on
    * load). Membership (the signature bit) still persists. Type-inert, like `storage`. Default true.
