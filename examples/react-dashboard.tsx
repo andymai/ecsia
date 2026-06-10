@@ -106,8 +106,11 @@ export function App({ dashboard }: { dashboard: Dashboard }) {
 }
 
 // Run in a browser via a bundler: `mountDashboard(document.getElementById('root')!)`. (There is no
-// node entry — React needs a DOM; the smoke test exercises the same components under jsdom.)
-export async function mountDashboard(container: Element): Promise<void> {
+// node entry — React needs a DOM; the smoke test exercises the same components under jsdom.) Returns
+// an unmount callback so a host (hot-reload, route teardown) can tear the tree down.
+export async function mountDashboard(container: Element): Promise<() => void> {
   const { createRoot } = await import('react-dom/client')
-  createRoot(container).render(<App dashboard={createDashboard()} />)
+  const root = createRoot(container)
+  root.render(<App dashboard={createDashboard()} />)
+  return () => root.unmount()
 }

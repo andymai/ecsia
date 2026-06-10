@@ -43,7 +43,10 @@ describe('example: react-dashboard (render an ecsia world from hooks)', () => {
     })
     expect(hpOf(firstShip)).toBe(beforeHit) // not on click…
     act(() => tick())
-    expect(hpOf(firstShip)).toBeLessThan(beforeHit) // …on the next tick
+    // Exactly the write-back (-10) plus this non-burning ship's regen (+1). The precise value proves
+    // the click's write actually landed — not merely that Decay moved the number — and fails loudly
+    // if query order ever put a burning ship (which would read beforeHit - 15) first.
+    expect(hpOf(firstShip)).toBe(beforeHit - 9)
 
     // Spawning is observer-driven too — the new ship joins the list on the drain, not the click.
     act(() => {
