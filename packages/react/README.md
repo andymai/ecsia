@@ -12,7 +12,7 @@ not** re-exported from the umbrella, because `react` is a peer dependency — yo
 explicitly.
 
 > **Status:** unpublished. New to ecsia? Start with the umbrella package
-> [`ecsia`](https://www.npmjs.com/package/ecsia), then add this binding when you're
+> [`@ecsia/kit`](https://www.npmjs.com/package/@ecsia/kit), then add this binding when you're
 > ready to render UI from it.
 
 ## Install
@@ -73,8 +73,9 @@ against.
 
 ## Links
 
+- Runnable example: [`examples/react-dashboard.tsx`](https://github.com/andymai/ecsia/blob/main/examples/react-dashboard.tsx) — a fleet dashboard with `useQuery`/`useComponent`/`useHas`, write-back, and a ticking world.
 - Repository & full docs: https://github.com/andymai/ecsia
-- Umbrella package: [`ecsia`](https://github.com/andymai/ecsia)
+- Umbrella package: [`@ecsia/kit`](https://github.com/andymai/ecsia)
 - three.js bridge (composes with this one): [`@ecsia/three`](https://github.com/andymai/ecsia/tree/main/packages/three)
 
 ## License

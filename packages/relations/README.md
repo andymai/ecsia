@@ -14,7 +14,7 @@ in, its children go too (`deleteSubject` / `removeRelation` / `none`). It attach
 a world via `createRelations(world)`.
 
 > **Status:** 0.1.0, unpublished. New to ecsia? Start with the umbrella package
-> [`ecsia`](https://www.npmjs.com/package/ecsia), which re-exports `createRelations`
+> [`@ecsia/kit`](https://www.npmjs.com/package/@ecsia/kit), which re-exports `createRelations`
 > and `Wildcard`. Use `@ecsia/relations` directly only when composing the layers by
 > hand.
 
@@ -54,7 +54,7 @@ bucket lookups (R = registered relations).
 
 - Repository & full docs: https://github.com/andymai/ecsia
 - Relations guide: https://github.com/andymai/ecsia (see the docs site once Pages is enabled)
-- Umbrella package: [`ecsia`](https://github.com/andymai/ecsia)
+- Umbrella package: [`@ecsia/kit`](https://github.com/andymai/ecsia)
 
 ## License
 

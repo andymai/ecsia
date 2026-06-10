@@ -13,7 +13,7 @@ umbrella, and nothing in the framework imports it — so it never lands in a con
 bundle unless you pull it in yourself.
 
 > **Status:** 0.1.0, unpublished. New to ecsia? Start with the umbrella package
-> [`ecsia`](https://www.npmjs.com/package/ecsia); reach for devtools when you want to
+> [`@ecsia/kit`](https://www.npmjs.com/package/@ecsia/kit); reach for devtools when you want to
 > see inside a running world.
 
 ## Install
@@ -22,11 +22,46 @@ bundle unless you pull it in yourself.
 pnpm add @ecsia/devtools @ecsia/core   # not yet published — local workspace for now
 ```
 
+## Use
+
+`inspectWorld` snapshots a world; `explainPlan` explains a scheduler's waves. Both return plain
+data, and `renderText` (or `renderHTML`) turns that into a report:
+
+```ts
+import { createWorld, defineComponent, write } from '@ecsia/core'
+import { createScheduler, defineSystem } from '@ecsia/scheduler'
+import { inspectWorld, explainPlan, renderText, componentNameMap } from '@ecsia/devtools'
+
+const Health = defineComponent({ hp: 'i32' }, { name: 'health' })
+const world = createWorld({ components: [Health] })
+world.spawnWith([Health, { hp: 100 }])
+
+const Regen = defineSystem({
+  name: 'Regen',
+  write: [Health],
+  run({ query }) {
+    for (const e of query(write(Health))) e.health.hp += 1
+  },
+})
+const scheduler = createScheduler(world, [Regen])
+scheduler.update(1)
+
+// Entities, components, archetypes, and relations as plain data…
+console.log(renderText(inspectWorld(world)))
+// …and why the scheduler grouped systems into the waves it did.
+console.log(renderText(explainPlan(scheduler, componentNameMap(world))))
+```
+
+Take the world from `@ecsia/core`, not the `@ecsia/kit` umbrella: `inspectWorld` reads internal
+inspection hooks the umbrella's public facade deliberately omits, so the diagnostic packages wire
+into core directly — exactly how a real devtools consumer does. See the
+[full tour](https://github.com/andymai/ecsia/blob/main/examples/devtools-tour.ts).
+
 ## Links
 
 - Repository & full docs: https://github.com/andymai/ecsia
 - Devtools guide: https://github.com/andymai/ecsia (see the docs site once Pages is enabled)
-- Umbrella package: [`ecsia`](https://github.com/andymai/ecsia)
+- Umbrella package: [`@ecsia/kit`](https://github.com/andymai/ecsia)
 
 ## License
 
