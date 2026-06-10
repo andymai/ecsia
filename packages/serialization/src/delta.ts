@@ -624,7 +624,7 @@ function writeRowField(
   // so the typed-array view is validly aligned regardless of the source subarray's byteOffset).
   const copy = raw.slice()
   const values = reinterpret(element, copy.buffer, copy.byteOffset, stride)
-  const base = dst.row * col.layout.stride
+  const base = dst.row * stride // guarded equal to col.layout.stride above
   for (let lane = 0; lane < stride; lane++) {
     const value = values[lane] as number
     if (descriptor.token === 'eid') {

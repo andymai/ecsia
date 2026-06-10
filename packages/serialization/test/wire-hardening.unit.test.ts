@@ -91,9 +91,9 @@ function findRun(haystack: Uint8Array, needle: number[]): number {
   return -1
 }
 
-// Flip the first stride byte (value 2) that is immediately preceded by a small element ordinal — the
-// value-section column header is [elementOrd][stride]. We try each candidate and stop at the first that
-// makes the column-stride guard fire; returns whether a tamper was applied.
+// Flip the first plausible stride byte (value 2 immediately preceded by a small element ordinal — the
+// value-section column header is [elementOrd][stride]). Returns whether a tamper was applied; the test
+// itself validates the right byte was hit via the specific corrupt-stride throw it asserts.
 function tamperFirstStride(bytes: Uint8Array): boolean {
   for (let i = 1; i < bytes.length; i++) {
     if (bytes[i] === 2 && (bytes[i - 1] as number) <= 16) {
