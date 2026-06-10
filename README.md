@@ -102,8 +102,8 @@ thing is ESM-only.
 
 ## Status
 
-Published on npm and pre-1.0 (0.x) — feature-complete and API-frozen. Young; expect rough
-edges. Runs on Node 22+, Bun, Deno, and modern browsers.
+0.x and API-frozen — feature-complete but pre-1.0; young, expect rough edges. Runs on
+Node 22+, Bun, Deno, and modern browsers.
 
 ## Install
 

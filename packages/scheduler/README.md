@@ -13,7 +13,7 @@ systems that can safely run at the same time. Opt in, and waves run across a rea
 thread: each worker queues its changes, and the queues are merged in a fixed order, so
 the outcome never depends on thread timing.
 
-> **Status:** published on npm (0.x). New to ecsia? Start with the umbrella package
+> **Status:** 0.x, API-frozen. New to ecsia? Start with the umbrella package
 > [`@ecsia/kit`](https://www.npmjs.com/package/@ecsia/kit), which re-exports `defineSystem`,
 > `createScheduler`, and `WorkerPool`.
 >

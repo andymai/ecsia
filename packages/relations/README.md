@@ -13,7 +13,7 @@ many entities exist. And cleanup can be automatic: despawn a parent and, if you 
 in, its children go too (`deleteSubject` / `removeRelation` / `none`). It attaches to
 a world via `createRelations(world)`.
 
-> **Status:** published on npm (0.x). New to ecsia? Start with the umbrella package
+> **Status:** 0.x, API-frozen. New to ecsia? Start with the umbrella package
 > [`@ecsia/kit`](https://www.npmjs.com/package/@ecsia/kit), which re-exports `createRelations`
 > and `Wildcard`. Use `@ecsia/relations` directly only when composing the layers by
 > hand.
