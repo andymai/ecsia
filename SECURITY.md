@@ -40,3 +40,20 @@ We follow responsible disclosure. Once a fix is released, we will:
 1. Credit the reporter (unless they prefer anonymity)
 2. Publish a security advisory
 3. Note the fix in the changelog
+
+## Supply Chain
+
+In response to the 2025–2026 wave of npm and GitHub Actions supply-chain attacks
+(Shai-Hulud worm, chalk/debug compromise, tj-actions tag retag), the build is configured to
+fail closed on the patterns those attacks exploit:
+
+| Defense                                   | Where                            | What it blocks                                                                |
+| ----------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------- |
+| All GitHub Actions pinned to commit SHA   | `.github/workflows/*.yml`        | Tag-retag attacks (tj-actions class). Tags are mutable; commit SHAs are not.  |
+| OSV scan (PRs report-only, main blocking) | `.github/workflows/osv-scan.yml` | Known-CVE versions already in the lockfile (`pnpm-lock.yaml`).                |
+| Dependabot cooldown (7d / 14d major)      | `.github/dependabot.yml`         | Fresh malicious uploads — a new version isn't proposed until it has aged.     |
+| Provenance via trusted-publisher OIDC     | `.github/workflows/release.yml`  | `NPM_TOKEN` exposure. Releases publish from CI (`id-token: write`) via npm OIDC trusted publishers, so packages are signed and attested. |
+
+Install-time cooldown (pnpm `minimumReleaseAge`) is deliberately not configured: it would block
+CI installs of freshly-published dependencies, and the Dependabot cooldown already gates the
+update path where fresh-upload risk concentrates.
