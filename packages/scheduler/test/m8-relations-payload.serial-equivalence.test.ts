@@ -55,7 +55,11 @@ function worldApplyOf(kit: Kit, warn: (m: string) => void): WorldApply {
 function encoderOver(kit: Kit, cb: CommandBuffer, warn: (m: string) => void): CommandEncoder {
   return makeEncoder({
     cb,
-    infoOf: (def) => ({ id: (def as unknown as { id: number }).id as unknown as ComponentId, codec: undefined as never }),
+    // This harness encodes only setRelation (which uses relationCodec, not infoOf); a component add
+    // would need a real codec, so fail loudly rather than hand back an undefined one.
+    infoOf: () => {
+      throw new Error('payload-relation harness encodes only setRelation; infoOf (component add) is unused')
+    },
     relationCodec: (rid) => ((rid as unknown as number) === (kit.relId as unknown as number) ? kit.codec : undefined),
     warn,
   })

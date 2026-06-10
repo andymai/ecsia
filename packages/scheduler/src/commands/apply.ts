@@ -236,7 +236,14 @@ function applyBuffer(world: WorldApply, cb: CommandBuffer, newlyCreated: Set<num
             // relation's replicated payload schema — so a worker-issued payloaded addPair matches a
             // serial one. A tag relation carries no payload words (payloadWords===0) → undefined.
             let payload: Record<string, unknown> | undefined
-            if (payloadWords > 0) payload = world.relationCodecOf?.(rid)?.decode(words, at + 5)
+            if (payloadWords > 0) {
+              const codec = world.relationCodecOf?.(rid)
+              if (codec !== undefined) payload = codec.decode(words, at + 5)
+              // Payload words present but no codec registered (a relation unaligned to the manifest, or
+              // a wiring gap) — surface it rather than silently apply a payload-less pair, mirroring the
+              // topics path's misalignment diagnostic.
+              else world.warn(`ADD_PAIR carries ${payloadWords} payload word(s) for relation ${rid as number} but no codec is registered; payload dropped`)
+            }
             world.addPair(s, rid, t, payload)
           } else {
             world.warn('ADD_PAIR encountered but relations are not wired')
