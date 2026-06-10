@@ -1326,6 +1326,7 @@ export function createRelations(world: World): RelationsApi {
         exclusive: rt.exclusive,
         hasPayload: rt.storageKind !== 'tag',
         presenceId: rt.presenceId,
+        payloadSchema: rt.def.payload ?? null,
       }))
     },
     livePairs() {

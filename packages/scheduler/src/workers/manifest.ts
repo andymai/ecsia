@@ -3,6 +3,7 @@
 // (zero-copy): the worker reads live SAB columns.
 
 import type { SharedHandleManifest } from '@ecsia/core'
+import type { Schema } from '@ecsia/schema'
 
 /** Dense component-id assignment so the worker aligns ids identically. */
 export interface ComponentManifestEntry {
@@ -10,6 +11,14 @@ export interface ComponentManifestEntry {
   readonly id: number
   /** Per-field word counts (declaration order) so the worker rebuilds the payload codec. */
   readonly fieldWords: readonly number[]
+}
+
+/** A registered relation + its payload schema, so a worker rebuilds the pair-payload codec by id. */
+export interface RelationManifestEntry {
+  readonly name: string
+  readonly id: number
+  /** The payload field schema (POJO tokens), or null for a tag relation (no payload words). */
+  readonly payloadSchema: Schema | null
 }
 
 export interface WorkerBootstrap {
@@ -28,6 +37,12 @@ export interface WorkerBootstrap {
    * records carry the main thread's topicId. Empty in a topic-free world.
    */
   readonly topics: readonly { readonly name: string; readonly id: number }[]
+  /**
+   * Registered relations + their payload schemas, so a worker rebuilds the pair-payload codec by
+   * relationId (a payloaded `addPair` in a worker kernel encodes the payload, matching a serial run).
+   * Empty in a relation-free world; tag relations carry `payloadSchema: null`.
+   */
+  readonly relations: readonly RelationManifestEntry[]
   /**
    * Per-system consume windows, indexed by SystemId: for each topic the system declares in
    * `consume:`, the topic id plus this (system, topic) reader's cursor-table slot. A worker-run

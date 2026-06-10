@@ -3,7 +3,7 @@
 // NEVER imports serialization. Everything here is serial / main-thread (snapshots run at a flush
 // point). The world wires a concrete implementation in createWorld.
 
-import type { ComponentId, EntityHandle, FieldDescriptor, RelationId, StorageStrategy } from '@ecsia/schema'
+import type { ComponentId, EntityHandle, FieldDescriptor, RelationId, Schema, StorageStrategy } from '@ecsia/schema'
 import type { Column, RuntimeCapabilities } from './memory/index.js'
 
 /**
@@ -86,6 +86,10 @@ export interface SerializeRelationProvider {
     readonly exclusive: boolean
     readonly hasPayload: boolean
     readonly presenceId: ComponentId
+    /** The relation's payload field schema (POJO tokens), or null for a tag relation. Lets a worker
+     * rebuild the pair-payload codec by relationId — the schema crosses the worker boundary, the
+     * resolved descriptors (functions) do not. */
+    readonly payloadSchema: Schema | null
   }[]
   /** Every live pair across all relations, in deterministic (relationId, subject, target) order. */
   livePairs(): readonly SerializePair[]

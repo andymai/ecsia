@@ -14,7 +14,7 @@
 import { Worker } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
 import type { World, ComponentId, TopicDef } from '@ecsia/core'
-import { handleIndex } from '@ecsia/core'
+import { handleIndex, defineComponent } from '@ecsia/core'
 import type { ComponentDef, Schema, SystemId } from '@ecsia/schema'
 import { has } from '@ecsia/schema'
 import { makeCommandBuffer, resetBuffer, flushAll, buildFieldCodec } from '../commands/index.js'
@@ -24,7 +24,7 @@ import type { WaveCounter } from '../executor/seams.js'
 import { selectWaitTier } from '../executor/seams.js'
 import { makeReservationSab, fillReservation, consumedCount } from './reservation.js'
 import type { WorkerReservationSab } from './reservation.js'
-import type { WorkerBootstrap, ComponentManifestEntry, ColumnsAddedMessage } from './manifest.js'
+import type { WorkerBootstrap, ComponentManifestEntry, RelationManifestEntry, ColumnsAddedMessage } from './manifest.js'
 import type { WorkerSystemKernel } from './worker-system.js'
 
 /** A worker-eligible system registered with the pool, indexed by SystemId (registration order). */
@@ -100,6 +100,8 @@ export class WorkerPool {
   readonly #diag: (message: string) => void
   readonly #defById = new Map<number, ComponentDef<Schema>>()
   readonly #codecById = new Map<number, ComponentFieldCodec>()
+  /** relationId → pair-payload codec (main-side decode of worker ADD_PAIR payloads). */
+  readonly #relationCodecById = new Map<number, ComponentFieldCodec>()
   #wakeGen = 0
   // The last column-growth generation we broadcast to the workers. A cheap `!==` against the
   // world's live generation gates the whole re-backing fence — zero work when nothing re-backed.
@@ -131,6 +133,19 @@ export class WorkerPool {
         this.#defById.set(id, def)
         this.#codecById.set(id, codec)
         components.push({ name: def.name, id, fieldWords: [codec.totalWords] })
+      }
+    }
+
+    // Relation payload manifest + main-side decode codecs. Relations attach via createRelations(world)
+    // and the scheduler never imports @ecsia/relations, so the payload SCHEMA (POJO tokens) rides the
+    // existing __serialize provider; both sides rebuild the codec from it (defineComponent → codec),
+    // aligning by relationId — the same align-by-schema mechanism components/topics already use.
+    const relations: RelationManifestEntry[] = []
+    for (const r of cfg.world.__serialize.relations()?.relations() ?? []) {
+      const id = r.id as unknown as number
+      relations.push({ name: r.name, id, payloadSchema: r.payloadSchema })
+      if (r.payloadSchema !== null && !this.#relationCodecById.has(id)) {
+        this.#relationCodecById.set(id, buildFieldCodec(defineComponent(r.payloadSchema, { brand: `rel$${id}$payload` })))
       }
     }
 
@@ -178,6 +193,10 @@ export class WorkerPool {
         // re-plan that introduces new topics — a worker publish to an unaligned topic is dropped
         // with a diagnostic, never silently misrouted.
         topics: cfg.world.__topics.manifest(),
+        // Relation ids/schemas snapshotted ONCE here, like components/topics: register relations
+        // before pool construction; recreate the pool if relations are added after. A worker
+        // setRelation for an unaligned relation falls back to payloadWordCount=0, never misroutes.
+        relations,
         consumes,
         commandSab: command.words.buffer as SharedArrayBuffer,
         reservationSab: reservation.sab,
@@ -388,6 +407,7 @@ export class WorkerPool {
       // fills in via createRelations(world). The scheduler does NOT import @ecsia/relations.
       addPair: (s, rid, t, payload) => apply.addPair?.(s, rid, t, payload),
       removePair: (s, rid, t) => apply.removePair?.(s, rid, t),
+      relationCodecOf: (rid) => this.#relationCodecById.get(rid as unknown as number),
       stagePublish: (topicId, systemId, words, at, fieldWords) =>
         world.__topics.stageWords(topicId, systemId, words, at, fieldWords),
       advanceConsume: (topicId, systemId, seq) => {
