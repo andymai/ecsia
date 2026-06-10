@@ -11,7 +11,7 @@ frame driver.
 with WebGL/DOM assumptions; the kernel stays renderer-agnostic. Install it explicitly:
 
 ```sh
-pnpm add @ecsia/three three   # @ecsia/three is unpublished today — workspace-local for now
+pnpm add @ecsia/three three   # three is a peer dependency
 ```
 :::
 

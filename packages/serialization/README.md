@@ -21,14 +21,14 @@ automatic full baseline when structural churn outruns the delta journal, and a
 receiver-owned entity remap — plus `encodeReplicationMessage` /
 `decodeReplicationMessage` for binary transports.
 
-> **Status:** 0.1.0, unpublished. New to ecsia? Start with the umbrella package
+> **Status:** published on npm (0.x). New to ecsia? Start with the umbrella package
 > [`@ecsia/kit`](https://www.npmjs.com/package/@ecsia/kit), which re-exports
 > `createSnapshotSerializer`, `createDeltaSerializer`, `applyDelta`, and friends.
 
 ## Install
 
 ```sh
-pnpm add @ecsia/serialization @ecsia/core   # not yet published — local workspace for now
+pnpm add @ecsia/serialization @ecsia/core
 ```
 
 ## Links

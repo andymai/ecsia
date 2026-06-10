@@ -16,7 +16,7 @@ It is a complete single-threaded ECS on its own. The opt-in layers —
 `@ecsia/scheduler`, `@ecsia/relations`, `@ecsia/serialization` — plug into a world
 through attachment points core provides; nothing imports upward.
 
-> **Status:** 0.1.0, unpublished. New to ecsia? Start with the umbrella package
+> **Status:** published on npm (0.x). New to ecsia? Start with the umbrella package
 > [`@ecsia/kit`](https://www.npmjs.com/package/@ecsia/kit), which re-exports the whole surface
 > and tree-shakes what you don't touch. Reach for `@ecsia/core` directly only when you
 > want the kernel without the scheduler/serialization layers.
@@ -24,7 +24,7 @@ through attachment points core provides; nothing imports upward.
 ## Install
 
 ```sh
-pnpm add @ecsia/core   # not yet published — local workspace for now
+pnpm add @ecsia/core
 ```
 
 ## Links
