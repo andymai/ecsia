@@ -203,12 +203,22 @@ const EXPR = fc.array(TERM, { minLength: 1, maxLength: 3 }).chain((terms) =>
     .map((ops) => terms.reduce((acc, t, i) => (i === 0 ? t : `${acc} ${ops[i - 1]} ${t}`), '')),
 )
 const STMT = fc.oneof(
+  // `*=` is omitted on purpose: multiplicative accumulation over many steps overflows f32 to NaN,
+  // collapsing a run into a vacuous NaN==NaN check. `*` still appears inside expressions (bounded per step).
   fc
-    .record({ w: fc.constantFrom(...WRITABLE), op: fc.constantFrom('=', '+=', '-=', '*='), rhs: EXPR })
+    .record({ w: fc.constantFrom(...WRITABLE), op: fc.constantFrom('=', '+=', '-='), rhs: EXPR })
     .map(({ w, op, rhs }) => `e.${w}${op}${rhs};`),
   fc.record({ w: fc.constantFrom(...WRITABLE), inc: fc.constantFrom('++', '--') }).map(({ w, inc }) => `e.${w}${inc};`),
 )
 const BODY_SRC = fc.array(STMT, { minLength: 1, maxLength: 4 }).map((s) => s.join(''))
+
+// Deps mirroring what compile() derives from this query (write(Position), read(Velocity)) — used to
+// assert PER RUN that the generated body actually compiles, so the fuzz never degenerates to proxy-vs-proxy.
+const depsOf = (rig: Rig) => ({
+  defByName: (n: string) => (n === 'position' ? rig.Position : n === 'velocity' ? rig.Velocity : undefined),
+  idOf: (d: ComponentDef<Schema>) => ((d.id as unknown as number) >= 0 ? (d.id as unknown as number) : undefined),
+  isRequired: () => true,
+})
 
 describe('PROP compile() faithful across FUZZED body shapes', { timeout: 60_000 }, () => {
   test('SANITY: a `new Function` body IS analyzed (the fuzz exercises the compiled path, not just proxy)', () => {
@@ -233,6 +243,8 @@ describe('PROP compile() faithful across FUZZED body shapes', { timeout: 60_000 
         const body = new Function('e', 'ctx', src) as (e: IntegEl, ctx: { dt: number }) => void
         const cmp = makeRig(true, body)
         const oracle = makeRig(false, body)
+        // Guarantee this run exercises the COMPILED path (else cmp silently runs the proxy → vacuous).
+        expect(analyzeEachBody(body as never, depsOf(cmp))).not.toBeNull()
         for (const op of ops) {
           apply(cmp, op)
           apply(oracle, op)
@@ -257,6 +269,7 @@ describe('PROP compile() faithful across FUZZED body shapes', { timeout: 60_000 
         const body = new Function('e', 'ctx', src) as (e: IntegEl, ctx: { dt: number }) => void
         const cmp = makeRig(true, body)
         const oracle = makeRig(false, body)
+        expect(analyzeEachBody(body as never, depsOf(cmp))).not.toBeNull() // compiled path exercised
         const changedOf = (rig: Rig) =>
           rig.world.query(read(rig.Position)).changed(rig.Position) as unknown as {
             eachChanged(fn: (e: PooledElement) => void): void
