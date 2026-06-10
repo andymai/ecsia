@@ -86,6 +86,9 @@ import { createRelations as _mkRel2 } from '@ecsia/relations'
 // The wildcard target sentinel for `rel.Pair(R, Wildcard)` — typed as WildcardToken at the source.
 export { Wildcard } from '@ecsia/relations'
 export type { DefinePrefabOptions, PairAccessor, StorageKind } from '@ecsia/relations'
+// The return type of createRelations — exported so consumers can NAME the relations handle (e.g.
+// annotate a helper that returns it). Without it, downstream declaration emit fails with TS4058.
+export type { RelationsApi } from '@ecsia/relations'
 // Prefabs (createWorld({ prefabs: true })): the `Prefab` tag and `IsA` relation are PER-WORLD
 // built-ins (a ComponentDef registers to exactly one world; a RelationDef's id is world-scoped),
 // so they ride the relations surface — `const { definePrefab, spawnFrom, IsA, Prefab } =

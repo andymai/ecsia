@@ -12,3 +12,7 @@ export { createRelations, Wildcard } from './runtime.js'
 // because they are part of the relations story: observe pair membership per relation, any target.
 export { onPairAdded, onPairRemoved } from '@ecsia/core'
 export type { DefinePrefabOptions, PairAccessor, StorageKind } from './runtime.js'
+// The full Relations API surface — the return type of createRelations. Exported so downstream code
+// can name it (e.g. annotate a function that returns it) without a `ReturnType<typeof createRelations>`
+// dance, which otherwise fails declaration emit with TS4058.
+export type { RelationsApi } from './runtime.js'
