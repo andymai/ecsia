@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.19.0](https://github.com/andymai/ecsia/compare/relations-v0.18.5...relations-v0.19.0) (2026-06-10)
+
+
+### Features
+
+* replicate relation payload schemas to workers (pair payloads survive the worker round-trip) ([#128](https://github.com/andymai/ecsia/issues/128)) ([f4d8c7a](https://github.com/andymai/ecsia/commit/f4d8c7ae12511557d118bf7fbeb007933a964478))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.19.0
+    * @ecsia/schema bumped to 0.19.0
+
 ## [0.18.5](https://github.com/andymai/ecsia/compare/relations-v0.18.4...relations-v0.18.5) (2026-06-10)
 
 
