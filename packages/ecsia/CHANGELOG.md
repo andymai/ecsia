@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.18.1](https://github.com/andymai/ecsia/compare/kit-v0.18.0...kit-v0.18.1) (2026-06-10)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.18.0
+    * @ecsia/schema bumped to 0.18.0
+    * @ecsia/relations bumped to 0.18.0
+    * @ecsia/scheduler bumped to 0.18.0
+    * @ecsia/serialization bumped to 0.18.0
+
 ## [0.18.0](https://github.com/andymai/ecsia/compare/kit-v0.17.0...kit-v0.18.0) (2026-06-09)
 
 
