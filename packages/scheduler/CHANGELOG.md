@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.18.5](https://github.com/andymai/ecsia/compare/scheduler-v0.18.4...scheduler-v0.18.5) (2026-06-10)
+
+
+### Bug Fixes
+
+* honor per-lane vec defaults on relation overflow rows; clarify 4 internal errors ([#120](https://github.com/andymai/ecsia/issues/120)) ([3da84e5](https://github.com/andymai/ecsia/commit/3da84e563ddaba59d3ee8a89c17d7c2c9e106ea6))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.18.5
+    * @ecsia/schema bumped to 0.18.5
+  * devDependencies
+    * @ecsia/relations bumped to 0.18.5
+
 ## [0.18.4](https://github.com/andymai/ecsia/compare/scheduler-v0.18.3...scheduler-v0.18.4) (2026-06-10)
 
 
