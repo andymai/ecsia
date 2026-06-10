@@ -185,6 +185,28 @@ describe('numeric observer-window reads — generation-aware, dying-tenant corre
     expect(seen.sort((a, b) => a - b)).toEqual([1, 2, 3]) // each dying tenant read its own value
   })
 
+  test('a column GROW during held-row eviction preserves the dying value (grow copies rows above count)', () => {
+    // The one held-row cell the other tests miss: an allocRow eviction that ALSO re-backs the column.
+    // The held dead row sits above count; if buffers.grow copied only [0,count) it would be lost and
+    // the divert would read freed memory. Force it: despawn a held victim, then spawn far past the
+    // column's initial capacity so allocRow keeps evicting the held row upward across one+ grows.
+    const { world, Pos } = rig()
+    let saw = -999
+    world.observe(onRemove(Pos), (ref) => {
+      saw = (ref.read(Pos) as { x: number }).x
+    })
+    const h: EntityHandle[] = []
+    for (let i = 0; i < 6; i++) h.push(world.spawnWith([Pos, { x: 100 + i }]))
+    world.frameReset()
+    world.observerDrain()
+
+    world.frameReset()
+    world.despawn(h[0] as EntityHandle) // not the last row → swap-popped + HELD above count (x=100)
+    for (let i = 0; i < 300; i++) world.spawnWith([Pos, { x: 5000 + i }]) // crosses grow boundaries while held
+    world.observerDrain() // fires onRemove(h[0]) with the window still open
+    expect(saw).toBe(100) // the dying value survived every grow-during-eviction
+  })
+
   test('the hold releases at flushPending: the next frame reuses the row normally (no leak)', () => {
     const { world, Pos } = rig()
     world.observe(onRemove(Pos), () => {})
