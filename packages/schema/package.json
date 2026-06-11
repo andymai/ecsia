@@ -1,6 +1,6 @@
 {
   "name": "@ecsia/schema",
-  "version": "0.21.1",
+  "version": "0.21.2",
   "description": "Component schema tokens and query type inference for ecsia.",
   "keywords": [
     "ecs",

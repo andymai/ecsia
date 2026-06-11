@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.21.2](https://github.com/andymai/ecsia/compare/kit-v0.21.1...kit-v0.21.2) (2026-06-11)
+
+
+### Bug Fixes
+
+* make the public barrels browser-safe (no static node:* edge to the worker pool) ([#138](https://github.com/andymai/ecsia/issues/138)) ([28ac5f6](https://github.com/andymai/ecsia/commit/28ac5f658a905e22b384094354aa70e994b43fea))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.21.2
+    * @ecsia/schema bumped to 0.21.2
+    * @ecsia/relations bumped to 0.21.2
+    * @ecsia/scheduler bumped to 0.21.2
+    * @ecsia/serialization bumped to 0.21.2
+
 ## [0.21.1](https://github.com/andymai/ecsia/compare/kit-v0.21.0...kit-v0.21.1) (2026-06-10)
 
 
