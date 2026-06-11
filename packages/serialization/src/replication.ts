@@ -74,6 +74,12 @@ export interface ReplicationStream {
    * (`> sinceTick`): a structural op journaled at tick T after `tick()` has already run falls
    * outside every later window — it is lost to the stream forever, and only a baseline re-covers
    * the missing entity/component on receivers.
+   *
+   * SCHEDULER INTERPLAY: `scheduler.update()` begins with `frameReset()`, which advances the
+   * world tick. So in a host loop the capture window for out-of-system mutations (network
+   * commands, editor actions) is BETWEEN `update()` and `tick()` — a mutation made before
+   * `update()` stamps into the previous, already-emitted tick and is silently skipped. Drain
+   * any external-command inbox after `update()`, then emit.
    */
   tick(): ReplicationMessage
 }
