@@ -124,6 +124,25 @@ message and enforces the rules a hand-rolled loop tends to get wrong:
 - **The receiver owns the remap.** The producer-to-local entity table grows as deltas create
   entities, for the lifetime of the stream — you never thread it by hand.
 
+### The capture window: mutate after `update()`, then `tick()`
+
+A delta covers `(previous emission, now]` with **strict** tick comparison, and a scheduler's
+`update()` *begins* by advancing the world's tick (`frameReset`). Together those fix the shape of
+a host loop:
+
+```ts no-check
+scheduler.update(dt) // advances the tick — mutations below stamp into the NEW window
+applyInbox(world) //    world mutations from outside systems (network commands, editor actions)
+broadcast(encodeReplicationMessage(stream.tick())) // the window covers them
+```
+
+A mutation made *before* `update()` stamps into the previous tick — already outside the next
+emission's window — and is lost to the stream forever; only a baseline re-covers it on receivers.
+If mutations originate in several places, funnel them through one post-`update()`, pre-`tick()`
+flush point (an inbox drained at the frame), which is also what keeps multi-client command
+application deterministic. (Mutations made *inside* systems during `update()` are fine — they
+stamp into the current frame's tick.)
+
 The mirror world must be **dedicated** to the stream: every baseline (a join, a resync, a
 journal-gap degrade) rebases via a replace-load that clears all entities in the receiver
 world, so receiver-local entities do not survive. Keep non-replicated state elsewhere.
