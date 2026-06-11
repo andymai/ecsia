@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.21.2](https://github.com/andymai/ecsia/compare/serialization-v0.21.1...serialization-v0.21.2) (2026-06-11)
+
+
+### Miscellaneous
+
+* **serialization:** Synchronize ecsia versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.21.2
+    * @ecsia/schema bumped to 0.21.2
+  * devDependencies
+    * @ecsia/relations bumped to 0.21.2
+
 ## [0.21.1](https://github.com/andymai/ecsia/compare/serialization-v0.21.0...serialization-v0.21.1) (2026-06-10)
 
 

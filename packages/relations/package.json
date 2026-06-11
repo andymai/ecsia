@@ -1,6 +1,6 @@
 {
   "name": "@ecsia/relations",
-  "version": "0.21.1",
+  "version": "0.21.2",
   "description": "Entity relationships for ecsia: hierarchies, targeting, and other entity-to-entity links, with fast queries and despawn cascades.",
   "keywords": [
     "ecs",
