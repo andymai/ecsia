@@ -14,24 +14,9 @@ const outdir = join(HERE, 'dist')
 
 await mkdir(outdir, { recursive: true })
 
-// The umbrella STATICALLY re-exports WorkerPool, whose module imports `Worker` from node:worker_threads
-// and `fileURLToPath` from node:url. The browser entry NEVER constructs a WorkerPool, and pool.js has no
-// module-scope side effects that touch those bindings (they are used only inside the constructor). So we
-// stub the two node builtins with empty browser modules: the import bindings resolve harmlessly and the
-// (never-called) pool code is inert in-tab. This models the real browser story — the worker pool is a
-// node:worker_threads feature; a browser Web-Worker pool is future work (see README).
-const stubNodeBuiltins = {
-  name: 'stub-node-builtins',
-  setup(b) {
-    b.onResolve({ filter: /^node:(worker_threads|url|os)$/ }, (a) => ({ path: a.path, namespace: 'node-stub' }))
-    b.onLoad({ filter: /.*/, namespace: 'node-stub' }, () => ({
-      // Minimal browser-safe shims for the bindings the (unused) pool subgraph imports.
-      contents: 'export const Worker = undefined; export const fileURLToPath = (u) => String(u); export const cpus = () => [];',
-      loader: 'js',
-    }))
-  },
-}
-
+// No node-builtin stubs: the umbrella exposes the worker pool type-only + via loadWorkerPool(),
+// so the static module graph is browser-clean. This build failing on a bare `node:*` import IS the
+// regression signal that a node-only module leaked back into the barrel.
 const result = await build({
   entryPoints: [join(HERE, 'entry.ts')],
   outfile: join(outdir, 'entry.js'),
@@ -40,7 +25,6 @@ const result = await build({
   platform: 'browser',
   target: ['es2023'],
   sourcemap: true,
-  plugins: [stubNodeBuiltins],
   // No code splitting: a single self-contained module the <script type="module"> loads.
   metafile: true,
   logLevel: 'info',

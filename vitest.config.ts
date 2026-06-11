@@ -5,6 +5,9 @@ const pkg = (name: string) =>
   fileURLToPath(new URL(`./packages/${name}/src/index.ts`, import.meta.url))
 
 const alias = {
+  '@ecsia/scheduler/workers': fileURLToPath(
+    new URL('./packages/scheduler/src/workers/index.ts', import.meta.url),
+  ),
   '@ecsia/schema': pkg('schema'),
   '@ecsia/core': pkg('core'),
   '@ecsia/relations': pkg('relations'),

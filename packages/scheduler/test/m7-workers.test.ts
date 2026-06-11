@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, test, afterEach } from 'vitest'
 import { createWorld, defineComponent } from '@ecsia/core'
 import type { EntityHandle, World } from '@ecsia/core'
-import { WorkerPool } from '@ecsia/scheduler'
+import { WorkerPool } from '@ecsia/scheduler/workers'
 import type { PoolSystem } from '@ecsia/scheduler'
 import type { SystemId } from '@ecsia/schema'
 

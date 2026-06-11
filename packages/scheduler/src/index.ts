@@ -31,5 +31,11 @@ export type { SchedulePlan, ScheduleWave, SystemBatch } from './graph/index.js'
 export type { SystemBox } from './planner/index.js'
 
 // --- workers: the worker pool the threaded frame loop drives ---
-export { WorkerPool } from './workers/index.js'
-export type { PoolConfig, PoolSystem } from './workers/index.js'
+// Node-only (node:worker_threads, node:url) — deliberately NOT a static value re-export. A static
+// edge drags those builtins into every bundle that merely imports this barrel, and browser bundlers
+// throw on bare `node:*` imports even though single-threaded consumers never construct a pool.
+// Node code constructs one via the async loader below or imports '@ecsia/scheduler/workers'
+// directly; the threaded executor path (`threading: {...}`) already loads the module lazily.
+export type { WorkerPool, PoolConfig, PoolSystem } from './workers/index.js'
+export const loadWorkerPool = async (): Promise<typeof import('./workers/index.js').WorkerPool> =>
+  (await import('./workers/index.js')).WorkerPool
