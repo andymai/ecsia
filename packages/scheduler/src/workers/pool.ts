@@ -219,6 +219,8 @@ export class WorkerPool {
     this.#spawning = this.#spawn(boots, cfg.workerEntryUrl)
   }
 
+  #spawned = false
+
   async #spawn(
     boots: readonly { boot: WorkerBootstrap; command: CommandBuffer; reservation: WorkerReservationSab; workSab: SharedArrayBuffer; wakeSab: SharedArrayBuffer; noticeSab: SharedArrayBuffer; writeCorralSab: SharedArrayBuffer }[],
     workerEntryUrl: string | undefined,
@@ -252,6 +254,7 @@ export class WorkerPool {
       worker.on('error', (err) => this.#diag(`worker ${i} crashed: ${String(err)}`))
       this.#slots.push(slot)
     }
+    this.#spawned = true
   }
 
   /** Wait until every spawned worker has posted 'ready' (bootstrap complete). */
@@ -274,6 +277,9 @@ export class WorkerPool {
    */
   async runRound(batches: readonly { systemId: SystemId; workerIndex: number }[], dt: number): Promise<void> {
     if (this.#disposed) throw new Error('worker pool disposed')
+    // Workers now spawn asynchronously (lazy node:* load) — before ready() resolves there are no
+    // slots, and silently dispatching to zero workers would read as "ran instantly". Fail loud.
+    if (!this.#spawned) throw new Error('worker pool not ready — await pool.ready() before runRound()')
     const active = batches.filter((b) => b.workerIndex >= 0 && b.workerIndex < this.#slots.length)
     if (active.length === 0) return
 
