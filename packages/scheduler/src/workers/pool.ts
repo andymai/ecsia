@@ -11,8 +11,13 @@
 // workers block on their wake word OFF the main thread, so there is no deadlock. NO-SAB contexts take
 // the postMessage fallback (transfer columns per wave) — emitted with a diagnostic, never silent.
 
-import { Worker } from 'node:worker_threads'
-import { fileURLToPath } from 'node:url'
+import type { Worker } from 'node:worker_threads'
+
+// node:worker_threads / node:url load lazily inside #spawn(): a static `node:*` import here would
+// break every browser bundle that merely *includes* this module, and bundlers resolve literal
+// dynamic specifiers at build time too — the template literal keeps the specifier opaque. Node
+// resolves it at runtime; browsers never reach it (constructing a pool is Node-only by design).
+const nodeImport = <T>(mod: string): Promise<T> => import(`node:${mod}`) as Promise<T>
 import type { World, ComponentId, TopicDef } from '@ecsia/core'
 import { handleIndex, defineComponent } from '@ecsia/core'
 import type { ComponentDef, Schema, SystemId } from '@ecsia/schema'
@@ -107,6 +112,8 @@ export class WorkerPool {
   // world's live generation gates the whole re-backing fence — zero work when nothing re-backed.
   #appliedGrowthGen = 0
   #disposed = false
+  /** Resolves once every Worker is constructed (the node:* lazy-load + spawn phase). */
+  readonly #spawning: Promise<void>
 
   constructor(cfg: PoolConfig) {
     this.#world = cfg.world
@@ -170,9 +177,8 @@ export class WorkerPool {
       })),
     )
     const reservationCap = Math.max(...cfg.systems.map((s) => s.maxSpawnsPerWave), 1)
-    const here = fileURLToPath(import.meta.url)
-    const entryUrl = cfg.workerEntryUrl ?? here.replace(/pool\.(js|ts)$/, 'worker-entry.$1')
 
+    const boots: { boot: WorkerBootstrap; command: CommandBuffer; reservation: WorkerReservationSab; workSab: SharedArrayBuffer; wakeSab: SharedArrayBuffer; noticeSab: SharedArrayBuffer; writeCorralSab: SharedArrayBuffer }[] = []
     for (let i = 0; i < cfg.workers; i++) {
       const command = makeCommandBuffer(i, cfg.commandWords ?? 1 << 14, true)
       const reservation = makeReservationSab(reservationCap)
@@ -207,16 +213,38 @@ export class WorkerPool {
         noticeSab,
         writeCorralSab,
       }
-      const worker = new Worker(entryUrl, { workerData: boot })
+      boots.push({ boot, command, reservation, workSab, wakeSab, noticeSab, writeCorralSab })
+    }
+
+    this.#spawning = this.#spawn(boots, cfg.workerEntryUrl)
+  }
+
+  #spawned = false
+
+  async #spawn(
+    boots: readonly { boot: WorkerBootstrap; command: CommandBuffer; reservation: WorkerReservationSab; workSab: SharedArrayBuffer; wakeSab: SharedArrayBuffer; noticeSab: SharedArrayBuffer; writeCorralSab: SharedArrayBuffer }[],
+    workerEntryUrl: string | undefined,
+  ): Promise<void> {
+    const [{ Worker: NodeWorker }, { fileURLToPath }] = await Promise.all([
+      nodeImport<typeof import('node:worker_threads')>('worker_threads'),
+      nodeImport<typeof import('node:url')>('url'),
+    ])
+    const here = fileURLToPath(import.meta.url)
+    const entryUrl = workerEntryUrl ?? here.replace(/pool\.(js|ts)$/, 'worker-entry.$1')
+
+    for (const b of boots) {
+      if (this.#disposed) return
+      const i = b.boot.workerIndex
+      const worker = new NodeWorker(entryUrl, { workerData: b.boot })
       const slot: WorkerSlot = {
         index: i,
         worker,
-        command,
-        reservation,
-        work: { sab: workSab, i32: new Int32Array(workSab), f32: new Float32Array(workSab) },
-        wake: new Int32Array(wakeSab),
-        notice: new Int32Array(noticeSab),
-        writeCorral: new Uint32Array(writeCorralSab),
+        command: b.command,
+        reservation: b.reservation,
+        work: { sab: b.workSab, i32: new Int32Array(b.workSab), f32: new Float32Array(b.workSab) },
+        wake: new Int32Array(b.wakeSab),
+        notice: new Int32Array(b.noticeSab),
+        writeCorral: new Uint32Array(b.writeCorralSab),
         ready: false,
       }
       worker.on('message', (msg: { kind: string; message?: string; workerIndex?: number }) => {
@@ -226,10 +254,12 @@ export class WorkerPool {
       worker.on('error', (err) => this.#diag(`worker ${i} crashed: ${String(err)}`))
       this.#slots.push(slot)
     }
+    this.#spawned = true
   }
 
   /** Wait until every spawned worker has posted 'ready' (bootstrap complete). */
   async ready(): Promise<void> {
+    await this.#spawning
     const deadline = Date.now() + 5000
     while (this.#slots.some((s) => !s.ready)) {
       if (Date.now() > deadline)
@@ -247,6 +277,9 @@ export class WorkerPool {
    */
   async runRound(batches: readonly { systemId: SystemId; workerIndex: number }[], dt: number): Promise<void> {
     if (this.#disposed) throw new Error('worker pool disposed')
+    // Workers now spawn asynchronously (lazy node:* load) — before ready() resolves there are no
+    // slots, and silently dispatching to zero workers would read as "ran instantly". Fail loud.
+    if (!this.#spawned) throw new Error('worker pool not ready — await pool.ready() before runRound()')
     const active = batches.filter((b) => b.workerIndex >= 0 && b.workerIndex < this.#slots.length)
     if (active.length === 0) return
 
@@ -435,6 +468,7 @@ export class WorkerPool {
   async dispose(): Promise<void> {
     if (this.#disposed) return
     this.#disposed = true
+    await this.#spawning.catch(() => {}) // settle the spawn phase so no worker outlives dispose
     this.#wakeGen = -1
     for (const slot of this.#slots) {
       Atomics.store(slot.wake, WAKE, -1)

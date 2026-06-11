@@ -24,7 +24,7 @@ import {
   defineSystem,
   createScheduler,
   write,
-  WorkerPool,
+  loadWorkerPool,
 } from '@ecsia/kit'
 import type { EntityHandle, PoolSystem, SystemDef, World } from '@ecsia/kit'
 import type { SystemId } from '@ecsia/schema'
@@ -242,6 +242,7 @@ async function timeThreaded(perGroup: number, frames: number, workers: number, s
   const s = seed(true, workers, perGroup, seedVal)
   const { defs, systems } = poolSystems(s)
   const sched = createScheduler(s.world, defs, { workers })
+  const WorkerPool = await loadWorkerPool()
   const pool = new WorkerPool({
     world: s.world as never,
     workers,

@@ -32,7 +32,7 @@ import {
   without,
   onAdd,
   onRemove,
-  WorkerPool,
+  loadWorkerPool,
 } from '../packages/ecsia/dist/index.js'
 
 // --- tiny harness (no framework) -------------------------------------------
@@ -469,6 +469,7 @@ await asyncSection('OPTIONAL worker_threads pool round-trip', async () => {
 
   let pool
   try {
+    const WorkerPool = await loadWorkerPool()
     pool = new WorkerPool({
       world: thr.world,
       workers: WORKERS,

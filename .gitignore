@@ -20,3 +20,4 @@ website/.snippet-check/
 bench/.report-dist/
 .claude/agent-memory-local/
 .claude/scheduled_tasks.lock
+test-results/

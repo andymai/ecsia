@@ -37,7 +37,7 @@ import {
   onChange,
   // scheduler
   createScheduler,
-  WorkerPool,
+  loadWorkerPool,
   // serialization
   createSnapshotSerializer,
   createSnapshotDeserializer,
@@ -105,8 +105,9 @@ describe('umbrella — the documented public surface is importable from ecsia', 
       applyDelta,
     ]
     for (const f of fns) expect(typeof f).toBe('function')
-    // Constructors / classes.
-    expect(typeof WorkerPool).toBe('function')
+    // The pool class is type-only on the umbrella (Node-only module, no static node:* edge);
+    // the async loader is the value surface.
+    expect(typeof loadWorkerPool).toBe('function')
     expect(typeof ConfigError).toBe('function')
     expect(new ConfigError('x')).toBeInstanceOf(Error)
     // Constants + sentinels.

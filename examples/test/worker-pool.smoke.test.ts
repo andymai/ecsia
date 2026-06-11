@@ -14,8 +14,8 @@
 
 import { fileURLToPath } from 'node:url'
 import { describe, expect, test, afterEach } from 'vitest'
-import { createWorld, defineComponent, defineSystem, createScheduler, write, WorkerPool } from '@ecsia/kit'
-import type { EntityHandle, PoolSystem, World } from '@ecsia/kit'
+import { createWorld, defineComponent, defineSystem, createScheduler, write, loadWorkerPool } from '@ecsia/kit'
+import type { EntityHandle, PoolSystem, World, WorkerPool } from '@ecsia/kit'
 
 const WORKER_ENTRY = fileURLToPath(
   new URL('../../packages/scheduler/dist/workers/worker-entry.js', import.meta.url),
@@ -85,6 +85,7 @@ describe('worker example genuinely runs threaded on a REAL WorkerPool', () => {
       { id: 0 as never, name: 'Regen', matchComponents: [thr.Health], kernel: () => {}, maxSpawnsPerWave: 0 },
       { id: 1 as never, name: 'Channel', matchComponents: [thr.Mana], kernel: () => {}, maxSpawnsPerWave: 0 },
     ]
+    const WorkerPool = await loadWorkerPool()
     pool = new WorkerPool({
       world: thr.world as never,
       workers: 2,

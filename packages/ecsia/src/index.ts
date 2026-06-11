@@ -157,9 +157,10 @@ export const createScheduler: (
   opts?: _CreateSchedulerOptions,
 ) => _SchedulerHandle
 
-// Worker-parallel path: the pool + the RoundDispatcher seam updateThreaded drives.
-export { WorkerPool } from '@ecsia/scheduler'
-export type { PoolConfig, PoolSystem, RoundDispatcher } from '@ecsia/scheduler'
+// Worker-parallel path: the pool + the RoundDispatcher seam updateThreaded drives. The pool class
+// is type-only here (it's Node-only — see the scheduler barrel); construct via loadWorkerPool().
+export { loadWorkerPool } from '@ecsia/scheduler'
+export type { WorkerPool, PoolConfig, PoolSystem, RoundDispatcher } from '@ecsia/scheduler'
 
 // ---------------------------------------------------------------------------
 // Serialization — copy snapshot/delta + zero-copy worker handoff. The world-taking
