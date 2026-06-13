@@ -41,7 +41,7 @@
     "@types/three": "^0.184.1",
     "@vitest/coverage-v8": "4.1.8",
     "bitecs": "^0.4.0",
-    "esbuild": "0.28.0",
+    "esbuild": "0.28.1",
     "fast-check": "^4.8.0",
     "jsdom": "^29.1.1",
     "miniplex": "^2.0.0",
