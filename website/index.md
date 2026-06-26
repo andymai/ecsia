@@ -34,7 +34,8 @@ ecsia is **published on npm**, **feature-complete and API-frozen**, but pre-1.0.
 experimental: the surface is frozen and the test suite is green, but the API may still shift
 before 1.0.
 
-- **On npm** — `pnpm add @ecsia/kit` (see [Getting started](/guide/getting-started)).
+- **On npm** — `pnpm add @ecsia/kit` (see [Getting started](/guide/getting-started)). Latest
+  release is **0.21.2**; every `@ecsia/*` package ships in lockstep at the same version.
 - **Node `>=22.13`** — the engine floor. ESM-only, strict TypeScript.
 - **Browser multithreading needs two HTTP headers** — threads share memory through
   `SharedArrayBuffer`, which browsers only allow on cross-origin-isolated pages (a server-side
