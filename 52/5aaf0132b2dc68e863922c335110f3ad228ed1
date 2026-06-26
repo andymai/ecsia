@@ -1,0 +1,24 @@
+website/index.md
+  s_3fd92839467745::t_640f946eaf75f4 37-38
+pnpm-workspace.yaml
+  s_3fd92839467745::t_85a200c5d1f54f 8-9
+  s_3fd92839467745::t_8f83de329edfab 6-7
+pnpm-lock.yaml
+  s_3fd92839467745::t_17ecc23151e117 7-10,1354-1355,2266,2553,2590
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "525aaf0132b2dc68e863922c335110f3ad228ed1",
+  "prompts": {},
+  "sessions": {
+    "s_3fd92839467745": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "94cccb1a-2b08-4ed1-83d2-5daa10ad6120",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
