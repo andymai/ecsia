@@ -1,6 +1,6 @@
 {
   "name": "@ecsia/rollback",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "description": "Handle-stable whole-world capture and restore for ecsia: the checkpoint substrate for rollback netcode and prediction.",
   "keywords": [
     "ecs",
