@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.25.0](https://github.com/andymai/ecsia/compare/kit-v0.24.0...kit-v0.25.0) (2026-07-22)
+
+
+### Miscellaneous
+
+* **kit:** Synchronize ecsia versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.25.0
+    * @ecsia/schema bumped to 0.25.0
+    * @ecsia/relations bumped to 0.25.0
+    * @ecsia/scheduler bumped to 0.25.0
+    * @ecsia/serialization bumped to 0.25.0
+
 ## [0.24.0](https://github.com/andymai/ecsia/compare/kit-v0.23.0...kit-v0.24.0) (2026-07-22)
 
 

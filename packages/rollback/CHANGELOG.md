@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.25.0](https://github.com/andymai/ecsia/compare/rollback-v0.24.0...rollback-v0.25.0) (2026-07-22)
+
+
+### Features
+
+* **rollback:** predict/confirm/rollback session loop ([#159](https://github.com/andymai/ecsia/issues/159)) ([6b11e4b](https://github.com/andymai/ecsia/commit/6b11e4bf8b824a6a5e975657b0573a544bc4f553))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.25.0
+    * @ecsia/schema bumped to 0.25.0
+
 ## [0.24.0](https://github.com/andymai/ecsia/compare/rollback-v0.23.0...rollback-v0.24.0) (2026-07-22)
 
 
