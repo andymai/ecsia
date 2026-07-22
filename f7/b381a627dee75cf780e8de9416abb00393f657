@@ -1,0 +1,47 @@
+packages/serialization/src/delta.ts
+  s_8d9683fb10832a::t_473c7f4618a2df 37
+  s_8d9683fb10832a::t_f4c5075f671d51 474,482
+packages/serialization/test/m10-compression.unit.test.ts
+  s_8d9683fb10832a::t_9d96ca6c7b1469 114-128
+packages/serialization/src/deserialize.ts
+  s_8d9683fb10832a::t_3bbd997cabc2c6 27
+  s_8d9683fb10832a::t_d2f6c73c973fb9 47-51
+  s_8d9683fb10832a::t_2837f89a4312ba 77-81
+bundle-budget.json
+  s_8d9683fb10832a::t_9e65a14b61fb37 13-14
+website/guide/serialization.md
+  s_8d9683fb10832a::t_3e2a0217e276fc 223-231
+packages/serialization/src/replication.ts
+  s_8d9683fb10832a::t_8822ad1847d00b 181-185,190-194
+  s_8d9683fb10832a::t_6eb2821fb53eda 225
+packages/ecsia/src/index.ts
+  s_8d9683fb10832a::t_e58f669032fd26 190-191
+  s_8d9683fb10832a::t_b9bf28f4c4589c 192
+  s_8d9683fb10832a::t_57cec49e9a7861 203,205
+  s_8d9683fb10832a::t_f9be79f064a6b2 206
+  s_8d9683fb10832a::t_f2c6a1aaeb8e57 226-227,231-236
+  s_8d9683fb10832a::t_ae31057193c5a0 247-253
+  s_8d9683fb10832a::t_dd3863ba917eae 211-217
+packages/serialization/src/compression.ts
+  s_8d9683fb10832a::t_4f118995c6d860 40-55
+  s_8d9683fb10832a::t_7938a9c71b9363 186-187,189,194-201
+  s_8d9683fb10832a::t_356745b277d671 209
+packages/serialization/src/index.ts
+  s_8d9683fb10832a::t_942ad05f6264ad 29,31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "f7b381a627dee75cf780e8de9416abb00393f657",
+  "prompts": {},
+  "sessions": {
+    "s_8d9683fb10832a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4bc81bdc-d97f-48ea-8bf0-8f57be4510ce",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
