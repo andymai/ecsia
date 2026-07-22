@@ -75,11 +75,14 @@ const session = createRollbackSession(world, {
 })
 
 // Per frame: feed the local input, advance. Remote inputs are predicted until they land.
-session.recordInput(0, session.currentFrame + 1, new Uint8Array([1, 0]))
-session.advance()
+for (let i = 0; i < 2; i++) {
+  session.recordInput(0, session.currentFrame + 1, new Uint8Array([1, 0]))
+  session.advance()
+}
 
 // A remote input for a PAST frame that contradicts its prediction rewinds and re-simulates
-// inside this call; one that matches costs nothing but an advancing confirmedFrame.
+// inside this call; one that matches costs nothing but an advancing confirmedFrame. Only a frame
+// this session actually simulated is accepted — the first is the tick it was created at, plus one.
 session.recordInput(1, session.currentFrame - 1, new Uint8Array([0, 1]))
 
 declare function runOneFixedStep(): void
