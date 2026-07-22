@@ -1,0 +1,74 @@
+packages/rollback/test/relations.test.ts
+  s_8d9683fb10832a::t_73942d5caef4b6 1-15,17-31,33-45,51-101,157-262
+  s_8d9683fb10832a::t_c9399a20408624 46-50
+  s_8d9683fb10832a::t_75f61937b65830 16
+  s_8d9683fb10832a::t_8770eb752a8bc2 32
+  s_8d9683fb10832a::t_3ff0e483125341 102-130
+  s_8d9683fb10832a::t_5972cd44e2931a 131-156
+packages/rollback/README.md
+  s_8d9683fb10832a::t_ac3f880cce08c3 22-29
+packages/core/src/world.ts
+  s_8d9683fb10832a::t_f19c6b585be4bf 93-98,1137
+  s_8d9683fb10832a::t_5bf8ecf2c73b89 200-205
+  s_8d9683fb10832a::t_d5cd85cce3553a 54,527,1257-1259,1289-1290
+packages/core/src/registry.ts
+  s_8d9683fb10832a::t_f7298266b8ce0c 80,90-100
+  s_8d9683fb10832a::t_90cac6577f248c 56-72,77-79
+  s_8d9683fb10832a::t_7ea250fb969cac 81
+packages/core/src/rollback-surface.ts
+  s_8d9683fb10832a::t_3f57562632078b 55-59,61-62
+  s_8d9683fb10832a::t_c866c1e9e95fae 11-14
+  s_8d9683fb10832a::t_0d9f913d91eb82 60
+  s_8d9683fb10832a::t_3d97f3f75dfc75 23-39
+packages/rollback/package.json
+  s_8d9683fb10832a::t_3c4bb20be45628 52-54
+packages/rollback/test/rollback.test.ts
+  s_8d9683fb10832a::t_21e1220797f12e 4
+  s_8d9683fb10832a::t_c6b33c1acfa846 271-272,276-277,283-284
+packages/rollback/test/relations-golden.property.test.ts
+  s_8d9683fb10832a::t_ef5ed489872b0a 1-148
+packages/rollback/src/rollback.ts
+  s_8d9683fb10832a::t_3ff68a38bfbe1d 326
+  s_8d9683fb10832a::t_724439cf96151e 344-345
+  s_8d9683fb10832a::t_b458dd4602a134 71-72
+  s_8d9683fb10832a::t_d524741beb9ed9 23-25
+  s_8d9683fb10832a::t_739df4133327a2 197-207,210-211,214-217
+  s_8d9683fb10832a::t_1bdd2d43475cd9 298,303-304
+  s_8d9683fb10832a::t_fa908af3313df0 120-123
+  s_8d9683fb10832a::t_959d69cbe3c938 45-52
+  s_8d9683fb10832a::t_48d0f9cd840a34 342-343
+  s_8d9683fb10832a::t_149ba0d0ff8a78 8-16
+packages/rollback/test/sim-relations.ts
+  s_8d9683fb10832a::t_84235605fcbf81 1-153
+packages/relations/src/runtime.ts
+  s_8d9683fb10832a::t_577480b8eaffa1 1582-1586,1588
+  s_8d9683fb10832a::t_406ed22e82a3c5 211-267
+  s_8d9683fb10832a::t_c4a9688bef0175 285-288
+  s_8d9683fb10832a::t_2d7ae90ab3f5f8 29,37,41
+  s_8d9683fb10832a::t_eea3e9ad2697a7 353-355
+  s_8d9683fb10832a::t_196d8dd52f1cf2 1606
+  s_8d9683fb10832a::t_a8f58dc3797a32 1558-1564
+  s_8d9683fb10832a::t_3c792388b4a2ba 356-363
+  s_8d9683fb10832a::t_9fa0557b8ae142 1587
+  s_8d9683fb10832a::t_08ac3ccae894fd 1495-1557,1565-1581,1589-1605,1607-1614,1618
+packages/core/src/index.ts
+  s_8d9683fb10832a::t_3b3b3b2199f2cd 153
+pnpm-lock.yaml
+  s_8d9683fb10832a::t_a44a2acc51f5b7 170-173
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "07ff498bff330bf71676095ac4a4f48860150275",
+  "prompts": {},
+  "sessions": {
+    "s_8d9683fb10832a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4bc81bdc-d97f-48ea-8bf0-8f57be4510ce",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
