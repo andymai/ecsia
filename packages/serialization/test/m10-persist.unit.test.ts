@@ -298,7 +298,7 @@ describe('delta header — schemaHash gate', () => {
     const ser = createDeltaSerializer(src, src.currentTick())
     const patch = ser.deltaCopy()
     const dv = new DataView(patch.buffer, patch.byteOffset)
-    expect(dv.getUint16(4, true)).toBe(4) // FORMAT_VERSION
+    expect(dv.getUint16(4, true)).toBe(5) // FORMAT_VERSION
     expect(dv.getUint32(8, true)).toBe(src.__serialize.schemaHash() >>> 0)
   })
 

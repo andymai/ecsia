@@ -18,6 +18,7 @@ import type { ElementKind, SerializeArchetype, World } from '@ecsia/core'
 import { WriteCursor, ReadCursor } from './cursor.js'
 import {
   DELTA_MIN_SUPPORTED_VERSION,
+  FLAG_FIELD_GRANULAR,
   FLAG_IS_DELTA,
   FLAG_HAS_RICH,
   FLAG_HAS_STRUCTURAL,
@@ -62,10 +63,21 @@ export interface DeltaOptions {
    * auto-detects and decompresses; bundled compressors need no receiver config.
    */
   readonly compressor?: Compressor
+  /**
+   * SECTION V grain. `'component'` (default) emits every persisted column of a changed row — the v4
+   * wire, byte-identical. `'field'` emits only the columns whose value moved since that row's last
+   * emission: the archetype's changed rows are grouped by their identical change mask and each group
+   * becomes one block carrying just that group's columns (FLAG_FIELD_GRANULAR, v5).
+   *
+   * Per-field change detection needs a baseline, and core stamps changeVersion per ENTITY, so
+   * `'field'` allocates the same serializer-owned shadow `epsilon` does — and pays the same memory
+   * cost. With `epsilon` unset the comparison is EXACT (tolerance 0).
+   */
+  readonly granularity?: 'component' | 'field'
 }
 
 /**
- * A reusable since-T delta serializer (v4 wire). Changed rich fields ride SECTION R, selected by the SAME
+ * A reusable since-T delta serializer (v5 wire). Changed rich fields ride SECTION R, selected by the SAME
  * whole-entity changeVersion stamp as the numeric value section — including a row
  * changed ONLY in a rich field. `epsilon` (opt-in) drops sub-tolerance NUMERIC rows; rich values are
  * never epsilon-filtered.
@@ -80,11 +92,11 @@ export interface DeltaSerializer {
   deltaCopy(): Uint8Array
   readonly sinceTick: number
   /**
-   * Snap the epsilon shadow to the CURRENT column values (no-op when `epsilon` is unset). The
-   * shadow normally holds last-EMITTED values, so a receiver rebased onto an exact full snapshot
-   * would otherwise be epsilon-compared against stale emissions — letting it drift up to
-   * 2·epsilon before a held-back row re-crosses tolerance. Call at the same serial flush a
-   * rebasing snapshot is taken.
+   * Snap the epsilon shadow to the CURRENT column values (a no-op unless `epsilon` or
+   * `granularity: 'field'` allocated a shadow). The shadow normally holds last-EMITTED values, so a
+   * receiver rebased onto an exact full snapshot would otherwise be epsilon-compared against stale
+   * emissions — letting it drift up to 2·epsilon before a held-back row re-crosses tolerance. Call
+   * at the same serial flush a rebasing snapshot is taken.
    */
   refreshEpsilonShadow(): void
 }
@@ -96,7 +108,10 @@ const DELTA_HEADER_BYTES = 32
 export function createDeltaSerializer(world: World, sinceTick: number, opts: DeltaOptions = {}): DeltaSerializer {
   assertPlatformLittleEndian()
   const includeStructural = opts.includeStructural ?? true
-  const epsilon = opts.epsilon
+  const fieldGranular = opts.granularity === 'field'
+  // Field granularity is expressed over the epsilon shadow's change masks, so it turns the shadow on
+  // with an EXACT tolerance when no epsilon was asked for.
+  const epsilon = opts.epsilon ?? (fieldGranular ? 0 : undefined)
   const s = world.__serialize
   // The serializer-OWNED epsilon shadow (RF-SHADOW-FREE): per (archetypeId, columnIndex) a parallel
   // Float64Array of the last-EMITTED numeric values, sized lazily as archetypes are encountered. Only
@@ -140,7 +155,9 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
     cur.u32(0) // richSectionOffset (v2; 0 when no RICH section)
 
     // --- SECTION S: STRUCTURAL OPS since baseline ---
-    let flags = FLAG_IS_DELTA
+    // Set for the whole image, emitted or not: the reader's per-column branch is unconditional, so
+    // the flag describes the grammar of every block rather than the presence of a group.
+    let flags = fieldGranular ? FLAG_IS_DELTA | FLAG_FIELD_GRANULAR : FLAG_IS_DELTA
     if (includeStructural) {
       cur.patchU32(structOffAt, cur.pos)
       const drained = s.drainStructuralSince(baseline)
@@ -170,7 +187,8 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
       // at the end of write(), so a dropped row is re-considered only if a LATER write re-stamps it —
       // a one-shot sub-epsilon change is permanently dropped (bounded by epsilon, within the
       // documented contract). The shadow updates to the EMITTED values after selection.
-      const rows = epsilon !== undefined ? filterByEpsilon(a, allRows, shadow, epsilon) : allRows
+      const selected = epsilon !== undefined ? selectByEpsilon(a, allRows, shadow, epsilon, fieldGranular) : undefined
+      const rows = selected?.rows ?? allRows
       if (rows.length === 0) continue
       // PERSISTED columns only. The changeVersion stamp is per-entity and shared with the public
       // `.changed` predicate, so a write to a non-persisted field still stamps the row (reactivity
@@ -179,6 +197,10 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
       // archetype with no persisted columns at all contributes nothing to SECTION V.
       const persisted = persistedColumnsOf(a)
       if (persisted.length === 0) continue
+      if (selected !== undefined && fieldGranular) {
+        changedArchetypeCount += writeFieldGranularBlocks(cur, a, selected, persisted)
+        continue
+      }
       changedArchetypeCount += 1
       writeValueArchBlock(cur, a, rows, persisted)
     }
@@ -460,7 +482,15 @@ export function computeRowFieldMasks(
   return masks
 }
 
-function filterByEpsilon(
+/** The epsilon filter's result: the kept rows plus the masks that justified keeping them, so a
+ * field-granular caller can group the rows without recomputing the compare. */
+interface EpsilonSelection {
+  readonly rows: number[]
+  readonly masks: Uint32Array
+  readonly words: number
+}
+
+function selectByEpsilon(
   a: {
     id: number
     count: number
@@ -473,7 +503,8 @@ function filterByEpsilon(
   rows: readonly number[],
   shadow: Map<number, ArchShadow>,
   epsilon: number,
-): number[] {
+  perField: boolean,
+): EpsilonSelection {
   let archShadow = shadow.get(a.id)
   if (archShadow === undefined) {
     archShadow = newArchShadow(a.count)
@@ -501,13 +532,86 @@ function filterByEpsilon(
     if (exceeds) {
       kept.push(r)
       archShadow.tenants[r] = occupant
-      for (const c of cols) {
+      const rowBase = r * words
+      for (let ci = 0; ci < cols.length; ci++) {
+        // At field grain the shadow may only advance for the columns this row actually TRANSMITS:
+        // snapping a column the block omits would reset its sub-tolerance drift baseline without the
+        // receiver ever seeing the value, and the divergence would then accumulate past epsilon.
+        if (perField && ((masks[rowBase + (ci >>> 5)] as number) & (1 << (ci & 31))) === 0) continue
+        const c = cols[ci] as EpsilonCol
         const base = r * c.stride
         for (let lane = 0; lane < c.stride; lane++) c.cells[base + lane] = c.view[base + lane] as number
       }
     }
   }
-  return kept
+  return { rows: kept, masks, words }
+}
+
+// Rows sharing a change mask share a column set, so ONE block per distinct mask keeps SECTION V
+// field-major and pays zero per-row overhead. Below this many rows per group the per-block header
+// (arch id, row count, handles, component/field framing) outweighs the columns it drops, so the
+// archetype falls back to a single whole-row block — legal because blocks are self-describing.
+const FIELD_GROUP_MIN_ROWS = 4
+
+function writeFieldGranularBlocks(
+  cur: WriteCursor,
+  a: SerializeArchetype,
+  selected: EpsilonSelection,
+  persisted: readonly PersistedComponentColumns[],
+): number {
+  const { rows, masks, words } = selected
+  const groups = new Map<string, number[]>()
+  for (const r of rows) {
+    let key = ''
+    for (let w = 0; w < words; w++) key += (masks[r * words + w] as number).toString(36) + '.'
+    const g = groups.get(key)
+    if (g === undefined) groups.set(key, [r])
+    else g.push(r)
+  }
+  const all = restrictToMask(persisted, masks, 0, 0)
+  if (groups.size * FIELD_GROUP_MIN_ROWS > rows.length) {
+    writeValueArchBlock(cur, a, rows, persisted, undefined, all.ordinals)
+    return 1
+  }
+  for (const grouped of groups.values()) {
+    // An all-clear mask means the row was kept for a reason the columns cannot express (a tenant
+    // change in a column-less archetype); emit the whole row rather than an empty block.
+    const sub = restrictToMask(persisted, masks, (grouped[0] as number) * words, words)
+    const cols = sub.entries.length > 0 ? sub : { entries: persisted, ordinals: all.ordinals }
+    writeValueArchBlock(cur, a, grouped, cols.entries, undefined, cols.ordinals)
+  }
+  return groups.size
+}
+
+// The persisted columns whose mask bit is set, plus each kept column's PER-COMPONENT persisted
+// ordinal — the index the receiver resolves against its own descriptors. `words === 0` selects
+// everything (the fallback block's ordinals are just each column's position).
+function restrictToMask(
+  persisted: readonly PersistedComponentColumns[],
+  masks: Uint32Array,
+  maskBase: number,
+  words: number,
+): { entries: PersistedComponentColumns[]; ordinals: number[][] } {
+  const entries: PersistedComponentColumns[] = []
+  const ordinals: number[][] = []
+  let bit = 0
+  for (const pc of persisted) {
+    const colIndices: number[] = []
+    const ords: number[] = []
+    for (let j = 0; j < pc.colIndices.length; j++) {
+      const set = words === 0 || (((masks[maskBase + (bit >>> 5)] as number) >>> (bit & 31)) & 1) === 1
+      if (set) {
+        colIndices.push(pc.colIndices[j] as number)
+        ords.push(j)
+      }
+      bit += 1
+    }
+    if (colIndices.length > 0) {
+      entries.push({ compIndex: pc.compIndex, colIndices })
+      ordinals.push(ords)
+    }
+  }
+  return { entries, ordinals }
 }
 
 // --- apply: structural ops first, then the changed values, all resolved via the remap table ---------
@@ -588,6 +692,7 @@ export function applyDelta(
 
   // --- SECTION V: write the changed values into the receiver entities resolved via the remap. ---
   cur.seek(valueOff)
+  const fieldGranular = (flags & FLAG_FIELD_GRANULAR) !== 0
   const changedArchetypeCount = cur.u32()
   for (let ai = 0; ai < changedArchetypeCount; ai++) {
     cur.u32() // producer archetype id (ignored — rows carry handles)
@@ -605,6 +710,9 @@ export function applyDelta(
       const producerCid = cur.u32()
       const fieldCount = cur.u16()
       for (let fi = 0; fi < fieldCount; fi++) {
+        // A field-granular block carries a SUBSET of the component's columns, so each one names its
+        // wire field index; a v4 block's columns are the whole set, in order.
+        const wireFi = fieldGranular ? cur.u16() : fi
         const element = ordinalToElement(cur.u8())
         const stride = cur.u8()
         const widthBytes = elementBytes(element) * stride
@@ -612,7 +720,7 @@ export function applyDelta(
           const raw = cur.takeBytes(widthBytes)
           const local = work.get(handles[r] as number as EntityHandle)
           if (local === undefined) continue
-          writeRowField(s, local, producerCid as ComponentId, fi, element, stride, raw, work)
+          writeRowField(s, local, producerCid as ComponentId, wireFi, element, stride, raw, work)
         }
       }
     }
@@ -775,29 +883,38 @@ export function collectChangedRows(world: World, baseline: number): Map<number, 
 // visible to the client to NO_ENTITY — an eid holds the target's RAW producer handle (encodeEid is
 // identity), so emitting one bulk would leak a concealed entity's existence. Absent (the unfiltered
 // serializer) the eid column is bulk-copied exactly as before, so shipped output stays byte-identical.
+// `wireOrdinals` (field-granular blocks) is parallel to `persisted`: per component, the wire field
+// index of each kept column, written ahead of the element/stride pair. Absent ⇒ the v4 grammar, where
+// a column's wire field index is its position in the block.
 export function writeValueArchBlock(
   cur: WriteCursor,
   a: SerializeArchetype,
   rows: readonly number[],
   persisted: readonly PersistedComponentColumns[],
   isHidden?: (handle: number) => boolean,
+  wireOrdinals?: readonly (readonly number[])[],
 ): void {
   cur.u32(a.id)
   cur.u32(rows.length)
   // Per changed row: the FULL entity handle (the boundary-stable row identity).
   for (const r of rows) cur.u32(a.rows[r] as number)
   cur.u16(persisted.length)
-  for (const pc of persisted) {
+  for (let pi = 0; pi < persisted.length; pi++) {
+    const pc = persisted[pi] as PersistedComponentColumns
     const comp = a.components[pc.compIndex]
     if (comp === undefined) continue
     cur.u32(comp.componentId as number)
     cur.u16(pc.colIndices.length)
-    for (const ci of pc.colIndices) {
+    const ords = wireOrdinals?.[pi]
+    for (let j = 0; j < pc.colIndices.length; j++) {
+      const ci = pc.colIndices[j] as number
       const col = comp.columns[ci]
       if (col === undefined) continue
       const stride = col.layout.stride
       // U8 element ordinal + u8 stride, then per row the stride elements at the column's NATIVE
-      // element width (a raw byte copy — no f64 widening, no per-row allocation).
+      // element width (a raw byte copy — no f64 widening, no per-row allocation). A field-granular
+      // block prefixes the column's wire field index, since its columns are a subset.
+      if (ords !== undefined) cur.u16(ords[j] as number)
       cur.u8(elementOrdinal(col.layout.element))
       cur.u8(stride)
       if (isHidden !== undefined && comp.fields[ci]?.token === 'eid') {

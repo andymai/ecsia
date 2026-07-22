@@ -9,6 +9,7 @@ import { createWorld, defineComponent } from '@ecsia/core'
 import type { ComponentDef, EntityHandle, Schema } from '@ecsia/core'
 import { createSnapshotSerializer, createSnapshotDeserializer, createDeltaSerializer, applyDelta } from '../src/index.js'
 import { computeRowFieldMasks, newArchShadow } from '../src/delta.js'
+import { SERIALIZATION_FORMAT_VERSION } from '../src/format.js'
 import type { EpsilonCol } from '../src/delta.js'
 import { scenarioFrames } from './epsilon-byte-identity.fixture.js'
 
@@ -69,6 +70,34 @@ describe('epsilon shadow follows entity identity', () => {
     expect(dst.world.entity(mc).read(dst.P).x).toBeCloseTo(7.2, 4)
   })
 
+  // Growing an archetype reallocates the shadow column, and `fresh` is COLUMN-scoped: the call that
+  // observes the growth reports every candidate row as changed, not just the appended one. The
+  // consequence is an over-send (a within-tolerance row emits once), never a drop — which is what
+  // makes the change masks safe to drive a field-granular wire, where a wrongly-CLEAR bit would
+  // strand a stale value on the receiver forever.
+  test('an entity entering the archetype re-emits within-tolerance rows (over-send, never a drop)', () => {
+    const src = mk()
+    const a = src.world.spawnWith(src.P)
+
+    const { dst, remap } = mirror(src)
+    const ser = createDeltaSerializer(src.world, src.world.currentTick(), { epsilon: 0.5 })
+    src.world.advanceTick()
+    src.world.entity(a).write(src.P).x = 1
+    applyDelta(dst.world, ser.delta(), remap)
+    const ma = remap.get(a) as EntityHandle
+
+    src.world.advanceTick()
+    src.world.entity(a).write(src.P).x = 1.2 // sub-epsilon: dropped, receiver lags
+    applyDelta(dst.world, ser.delta(), remap)
+    expect(dst.world.entity(ma).read(dst.P).x).toBeCloseTo(1, 4)
+
+    src.world.advanceTick()
+    src.world.spawnWith(src.P) // grows the column ⇒ FRESH ⇒ every candidate row emits
+    src.world.entity(a).write(src.P).x = 1.3 // still sub-epsilon vs the last emitted 1
+    applyDelta(dst.world, ser.delta(), remap)
+    expect(dst.world.entity(ma).read(dst.P).x).toBeCloseTo(1.3, 4)
+  })
+
   test('a sub-epsilon change on an UNMOVED entity is still dropped (the optimization survives)', () => {
     const src = mk()
     const a = src.world.spawnWith(src.P)
@@ -100,14 +129,26 @@ describe('epsilon filtering is byte-identical on the wire', () => {
     return h.digest('hex')
   }
 
-  test.each([
+  // The goldens are the v4 ones, frozen BEFORE the field-granular wire landed. v5 changes exactly two
+  // bytes of a component-granularity image — the header's version word — so rewinding that word to 4
+  // must reproduce them byte for byte. That is a far stronger regression guard than re-deriving them.
+  const GOLDEN = [
     [undefined, '1e2e3e03cc87b4759a8ddeccf4daa21075975bf0ac87ddcfaf510d441b77e342', [238, 160, 80, 56, 93, 152, 92, 80, 80, 68, 40]],
     [0.5, 'b2f1696ad2136a7263759936c678915520b59c8d2c30bbc3013fcac26ad26829', [238, 80, 40, 56, 93, 152, 92, 80, 40, 68, 40]],
     [0.05, 'f8743bd91cc52bfa794c6ad89d8a30c00fa3102bb9963bb812f507926ee98246', [238, 120, 80, 56, 93, 152, 92, 80, 40, 68, 40]],
-  ] as const)('epsilon=%s reproduces the golden delta stream', (epsilon, sha256, lengths) => {
+  ] as const
+
+  const asVersion4 = (f: Uint8Array): Uint8Array => {
+    const copy = f.slice()
+    new DataView(copy.buffer).setUint16(4, 4, true)
+    return copy
+  }
+
+  test.each(GOLDEN)('epsilon=%s reproduces the pre-v5 golden delta stream', (epsilon, sha256, lengths) => {
     const frames = scenarioFrames(epsilon)
     expect(frames.map((f) => f.byteLength)).toEqual(lengths) // fails first, and legibly
-    expect(digest(frames)).toBe(sha256)
+    for (const f of frames) expect(new DataView(f.buffer, f.byteOffset).getUint16(4, true)).toBe(SERIALIZATION_FORMAT_VERSION)
+    expect(digest(frames.map(asVersion4))).toBe(sha256)
   })
 
   test('the three configurations really do diverge (the golden would otherwise prove nothing)', () => {

@@ -57,6 +57,12 @@ export interface ReplicationStreamOptions {
    * for a non-bundled compressor. Undefined ⇒ raw bytes, unchanged wire.
    */
   readonly compressor?: Compressor
+  /**
+   * SECTION V grain for the UNFILTERED `tick()` stream (see {@link DeltaOptions}). Per-client
+   * {@link StateView} deltas stay component-granular: a view has no emission shadow of its own, and
+   * the shared changeset carries no per-field information.
+   */
+  readonly granularity?: 'component' | 'field'
 }
 
 /**
@@ -111,6 +117,7 @@ export function createReplicationStream(world: World, opts: ReplicationStreamOpt
     ...(opts.epsilon !== undefined ? { epsilon: opts.epsilon } : {}),
     ...(opts.onUnserializable !== undefined ? { onUnserializable: opts.onUnserializable } : {}),
     ...(opts.compressor !== undefined ? { compressor: opts.compressor } : {}),
+    ...(opts.granularity !== undefined ? { granularity: opts.granularity } : {}),
   }
   const snap = createSnapshotSerializer(world, {
     ...(opts.onUnserializable !== undefined ? { onUnserializable: opts.onUnserializable } : {}),

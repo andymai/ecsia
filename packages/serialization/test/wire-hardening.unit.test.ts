@@ -13,6 +13,7 @@ import {
   createDeltaSerializer,
   applyDelta,
 } from '../src/index.js'
+import { DELTA_MIN_SUPPORTED_VERSION, SERIALIZATION_FORMAT_VERSION } from '../src/format.js'
 
 describe('wire hardening — out-of-range lane/stride throw instead of corrupting memory', () => {
   it('a structural ComponentAdd with a lane past the field stride throws', () => {
@@ -80,6 +81,50 @@ describe('wire hardening — out-of-range lane/stride throw instead of corruptin
     expect(() => applyDelta(dst, bytes, remap as Map<EntityHandle, EntityHandle>)).toThrow(
       /field stride 99 does not match/,
     )
+  })
+})
+
+// The field-granular grammar (v5) inserts a u16 per column, so a reader that cannot read v5 must
+// REFUSE the image — misparsing one would read the field index as an element ordinal + stride and
+// scatter bytes across the receiver's columns.
+describe('wire hardening — version gating of the field-granular grammar', () => {
+  const setVersion = (bytes: Uint8Array, version: number): Uint8Array => {
+    const copy = bytes.slice()
+    new DataView(copy.buffer).setUint16(4, version, true)
+    return copy
+  }
+
+  const scenario = (): { src: ReturnType<typeof createWorld>; P: ComponentDef<Schema>; e: EntityHandle; dst: ReturnType<typeof createWorld>; dstP: ComponentDef<Schema>; remap: Map<EntityHandle, EntityHandle> } => {
+    const P = defineComponent({ x: 'f32', y: 'f32' }, { name: 'p' }) as ComponentDef<Schema>
+    const src = createWorld({ components: [P] })
+    const e = src.spawnWith(P)
+    const dstP = defineComponent({ x: 'f32', y: 'f32' }, { name: 'p' }) as ComponentDef<Schema>
+    const dst = createWorld({ components: [dstP] })
+    const { remap } = createSnapshotDeserializer(dst).load(createSnapshotSerializer(src).snapshotCopy())
+    return { src, P, e, dst, dstP, remap: remap as Map<EntityHandle, EntityHandle> }
+  }
+
+  it('a reader whose ceiling predates the image rejects it loudly instead of misparsing', () => {
+    const { src, P, e, dst, remap } = scenario()
+    const ser = createDeltaSerializer(src, src.currentTick(), { granularity: 'field' })
+    src.advanceTick()
+    ;(src.entity(e).write(P) as { x: number }).x = 3
+    const bytes = ser.deltaCopy()
+    // A v4-max build takes the same `version > SERIALIZATION_FORMAT_VERSION` branch against this v5
+    // image that this build takes against a v6 one — shift the version rather than the build.
+    const tooNew = setVersion(bytes, SERIALIZATION_FORMAT_VERSION + 1)
+    expect(() => applyDelta(dst, tooNew, remap)).toThrow(/can't be read by this build/)
+  })
+
+  it('a v4 image still applies to the v5 reader (DELTA_MIN_SUPPORTED_VERSION stays at 4)', () => {
+    const { src, P, e, dst, dstP, remap } = scenario()
+    const ser = createDeltaSerializer(src, src.currentTick())
+    src.advanceTick()
+    ;(src.entity(e).write(P) as { x: number }).x = 3
+    // A component-granularity image is byte-identical to the v4 wire apart from the version word.
+    expect(DELTA_MIN_SUPPORTED_VERSION).toBe(4)
+    applyDelta(dst, setVersion(ser.deltaCopy(), DELTA_MIN_SUPPORTED_VERSION), remap)
+    expect((dst.entity(remap.get(e) as EntityHandle).read(dstP) as { x: number }).x).toBe(3)
   })
 })
 
