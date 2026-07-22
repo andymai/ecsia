@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.27.0](https://github.com/andymai/ecsia/compare/serialization-v0.26.0...serialization-v0.27.0) (2026-07-22)
+
+
+### Features
+
+* **serialization:** field-granular deltas via granularity: 'field' ([#164](https://github.com/andymai/ecsia/issues/164)) ([19e509e](https://github.com/andymai/ecsia/commit/19e509ef6f8b7a0d48624ba40bcec60acd122c5e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.27.0
+    * @ecsia/schema bumped to 0.27.0
+  * devDependencies
+    * @ecsia/relations bumped to 0.27.0
+
 ## [0.26.0](https://github.com/andymai/ecsia/compare/serialization-v0.25.0...serialization-v0.26.0) (2026-07-22)
 
 
