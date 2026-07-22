@@ -51,7 +51,7 @@ import type {
 } from './serialize-surface.js'
 import type { Column } from './memory/index.js'
 import type { InspectSurface, InspectArchetype, InspectQuery } from './inspect-surface.js'
-import type { RollbackHost } from './rollback-surface.js'
+import type { RelationsRollbackProvider, RollbackHost } from './rollback-surface.js'
 import type { ComponentRuntime } from './component/index.js'
 import { Topics } from './topics/index.js'
 import type { TopicDef, TopicEventInit } from './topics/index.js'
@@ -90,6 +90,12 @@ export interface RelationsHost {
   allocSyntheticId(): ComponentId
   /** Intern a synthetic ComponentDef (presence/overflow) at a minted id so storage can build its columns. */
   registerSynthetic(def: ComponentDef<Schema>, id: ComponentId): void
+  /**
+   * Re-point an already-interned synthetic def at a different id. Lets relations keep ONE canonical
+   * def per (relation, target) pair across a rollback that rewound the minting counter, instead of
+   * interning a fresh def — and a fresh def per rollback would grow `defOf`/`idOf` without bound.
+   */
+  rebindSynthetic(def: ComponentDef<Schema>, id: ComponentId): void
   /** id → registered def (real or synthetic). */
   defOf(id: ComponentId): ComponentDef<Schema> | undefined
   /** ONE migration adding several ids (relations atomicity; archetype-storage ). */
@@ -191,6 +197,12 @@ export interface RelationsHost {
    * in, core relays it, the acyclic boundary holds.
    */
   setSerializationProvider(provider: SerializeRelationProvider): void
+  /**
+   * Install the relation capture/restore leg @ecsia/rollback drives through `world.__installRollback`.
+   * Same relay shape as the serialization provider: relations hands it in, core only stores it, and a
+   * relation-free world leaves it unset (rollback then has nothing extra to capture).
+   */
+  setRollbackProvider(provider: RelationsRollbackProvider): void
   readonly maxEntities: number
   readonly indexBits: number
 }
@@ -512,6 +524,7 @@ export function createWorld(options: WorldOptions = {}): World {
     | null = null
   let applyRemovePair: ((s: EntityHandle, r: RelationId, t: EntityHandle) => void) | null = null
   let serializationProvider: SerializeRelationProvider | null = null
+  let relationsRollback: RelationsRollbackProvider | undefined
 
   // The query engine is created AFTER storage (it subscribes to storage.onArchetypeCreated), but
   // storage's single-entity maintenance hooks must call into the engine. Late-bind through a mutable
@@ -1121,6 +1134,7 @@ export function createWorld(options: WorldOptions = {}): World {
       return {
         allocSyntheticId: () => registry.allocSyntheticId(),
         registerSynthetic: (def, id) => registry.registerSynthetic(def, id),
+        rebindSynthetic: (def, id) => registry.rebindSynthetic(def, id),
         defOf: (id) => registry.defOf(id),
         migrateAddingMany: (handle, defs) => {
           if (IS_DEV && iterating > 0) throw iterationMutationError('addPair')
@@ -1240,6 +1254,9 @@ export function createWorld(options: WorldOptions = {}): World {
         setSerializationProvider: (provider) => {
           serializationProvider = provider
         },
+        setRollbackProvider: (provider) => {
+          relationsRollback = provider
+        },
         maxEntities: resolved.maxEntities,
         indexBits: handleLayout.indexBits,
       }
@@ -1269,6 +1286,8 @@ export function createWorld(options: WorldOptions = {}): World {
         bitmask,
         archetypes: storage.archetypes,
         changeVersion: () => (reactivity as Reactivity).changeVersionStore,
+        registry,
+        relations: () => relationsRollback,
         setTick: (tick) => {
           state.tick = tick >>> 0
         },

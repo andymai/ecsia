@@ -150,7 +150,7 @@ export type { InspectSurface, InspectArchetype, InspectQuery } from './inspect-s
 // image must reach. Imported by @ecsia/rollback, which owns the image format + capture/restore.
 // TYPE-ONLY on purpose — the mechanism lives in the sibling, so a world that never rolls back
 // bundles none of it (opposite handle semantics to `__serialize`; see ./rollback-surface.ts).
-export type { RollbackHost } from './rollback-surface.js'
+export type { RollbackHost, RelationsRollbackProvider } from './rollback-surface.js'
 export type { EntityStore, EntityIdentityImage } from './entity/index.js'
 export type { Bitmask } from './bitmask/index.js'
 export type { ArchetypeStore, Archetype } from './storage/index.js'

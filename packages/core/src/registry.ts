@@ -53,8 +53,30 @@ export class ComponentRegistry {
     this.#byId[id as number] = def
   }
 
+  /**
+   * Re-point an ALREADY-interned synthetic def at a different id. `registerSynthetic` is one-shot by
+   * design (a def belongs to one world at one id); this is the rollback exception: a pair def is a
+   * pure function of (relation, target), so relations keeps ONE canonical def per pair and re-binds
+   * it when a rewound minting counter hands that pair a different id. Rebinding rather than minting
+   * a fresh def is what keeps `idOf`'s map bounded by the world's pair space instead of by the
+   * number of rollbacks. Both directions must move together — `idOf` is how storage resolves a
+   * migration's target ids (Storage.#requireId).
+   */
+  rebindSynthetic(def: ComponentDef<Schema>, id: ComponentId): void {
+    const rt = def as ComponentRuntime<Schema>
+    if (rt.id === id) return
+    rt.id = id
+    this.#byDef.set(def, id)
+    this.#byId[id as number] = def
+  }
+
   idOf(def: ComponentDef<Schema>): ComponentId | undefined {
     return this.#byDef.get(def)
+  }
+
+  /** How many defs `idOf` resolves — the census a rollback leak assertion watches. */
+  get registeredDefCount(): number {
+    return this.#byDef.size
   }
 
   defOf(id: ComponentId): ComponentDef<Schema> | undefined {
@@ -64,6 +86,17 @@ export class ComponentRegistry {
   /**: seeds the bitmask/sigWords fixed stride = ceil(nextComponentId/32) ( C4). */
   get nextComponentId(): number {
     return this.#nextId
+  }
+
+  /**
+   * ROLLBACK-ONLY rewind of the synthetic-id high-water mark. The counter is MONOTONIC during a
+   * simulation; a rollback restore must wind it back to the checkpoint's value or the re-simulation
+   * mints DIFFERENT pair ids for the same logical pairs, producing different archetype signatures.
+   * Only ids above the restored mark are re-mintable, and those defs were dropped by the same
+   * restore.
+   */
+  set nextComponentId(next: number) {
+    this.#nextId = next
   }
 }
 

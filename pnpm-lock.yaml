@@ -167,6 +167,10 @@ importers:
       '@ecsia/schema':
         specifier: workspace:*
         version: link:../schema
+    devDependencies:
+      '@ecsia/relations':
+        specifier: workspace:*
+        version: link:../relations
 
   packages/scheduler:
     dependencies:

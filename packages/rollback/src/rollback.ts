@@ -5,13 +5,24 @@
 // and NEVER alias a live column view (a fallback grow re-creates those).
 
 import { snapshotInto } from '@ecsia/core'
-import type { Archetype, Column, EntityIdentityImage, RollbackHost, TypedArray, World } from '@ecsia/core'
+import type {
+  Archetype,
+  Column,
+  EntityIdentityImage,
+  RelationsRollbackProvider,
+  RollbackHost,
+  TypedArray,
+  World,
+} from '@ecsia/core'
 
 /**
  * Opaque, reusable capture buffer. Allocate one per rollback-ring slot and reuse it: a capture only
  * allocates when the live set outgrows the image's buffers (doubling), so a steady-state ring
  * allocates nothing per frame. An image holds the world's Column references and is NOT portable to
  * another world.
+ *
+ * The one exception is the relation topology (see {@link RollbackSurface}), whose maps are cloned
+ * fresh per capture — a world with no relation defined keeps the zero-allocation steady state.
  */
 declare const rollbackImageBrand: unique symbol
 export interface RollbackImage {
@@ -31,6 +42,14 @@ export interface RollbackImage {
  *   • the component bitmask: the u32 words AND the out-of-stride sparse overflow
  *   • the changeVersion stamps, when stamping is enabled
  *   • world.tick
+ *   • RELATION TOPOLOGY, when a relation is defined: the pair-id minting maps, the per-relation
+ *     back-ref / forward / pair-count indices, the non-exclusive overflow tables (row mapping, free
+ *     list AND payload bytes — they sit in a standalone ColumnSet the per-archetype walk never
+ *     reaches), and the component-id high-water mark those ids are minted from. That counter is the
+ *     reason relations need their own leg at all: it is MONOTONIC, so a re-simulation that resumes
+ *     from a stale mark mints DIFFERENT pair ids for the same logical pairs and lands the same
+ *     entities in different archetype signatures — a divergence no value comparison would catch.
+ *     @ecsia/relations owns the blob's shape; this module only stores and hands it back.
  *
  * WHAT IT DELIBERATELY OMITS: the frame-transient reactivity structures — the write/shape log rings,
  * the Changed lists, the per-frame added/removed query flavors and the topic rings. A rollback ring
@@ -49,10 +68,8 @@ export interface RollbackSurface {
   /**
    * Capture the ENTIRE live world into `img`, overwriting whatever it held. Serial-phase only.
    *
-   * THROWS on the v1 limitations, deliberately fail-fast rather than silently restoring a partial
-   * world: a world with a relation defined (relation state lives in JS maps behind a MONOTONIC
-   * synthetic pair-id counter, so re-simulating mints different pair ids and different archetype
-   * signatures), entities resident in the cold-archetype overflow store (per-TYPE blocks, outside
+   * THROWS on the remaining limitations, deliberately fail-fast rather than silently restoring a
+   * partial world: entities resident in the cold-archetype overflow store (per-TYPE blocks, outside
    * the per-archetype hot walk), or a registered rich (`'string'` / `object<T>`) field (sidecar
    * values the image cannot reach).
    */
@@ -100,6 +117,10 @@ class Image {
     spawned: 0,
     despawned: 0,
   }
+  /** The component-id high-water mark: what the re-simulation must mint synthetic pair ids from. */
+  syntheticIdMark = 0
+  /** The relations runtime's opaque topology blob, or null in a relation-free world. */
+  relations: unknown = null
   bitmaskWords: Uint32Array = new Uint32Array(0)
   bitmaskWordCount = 0
   bitmaskIndexCount = 0
@@ -173,15 +194,38 @@ export function createRollbackSurface(world: World): RollbackSurface {
     return n
   }
 
-  const assertCoverable = (verb: string): void => {
-    const relations = world.__serialize.relations()
-    if (relations !== undefined && relations.relations().length > 0) {
+  // Memoized once resolved: a leg is installed exactly once per world and never uninstalled, so the
+  // steady state is a null check. It canNOT be resolved at construction time — createRelations(world)
+  // may run AFTER createRollbackSurface(world) — hence the re-probe while it is still absent.
+  let installedLeg: RelationsRollbackProvider | null = null
+
+  /**
+   * The relations capture/restore leg, or null while no relations runtime is attached. Throws rather
+   * than capturing partially if relations are defined but the leg is missing — that combination means
+   * a @ecsia/relations older than this seam is attached, and a half-captured world restores silently
+   * wrong (pair ids drift, archetype signatures diverge) instead of loudly.
+   */
+  const relationsLeg = (verb: string): RelationsRollbackProvider | null => {
+    if (installedLeg !== null) return installedLeg
+    const leg = host.relations()
+    if (leg !== undefined) {
+      installedLeg = leg
+      return leg
+    }
+    // No leg. Only an error if a relations runtime is nonetheless attached; `relations()` allocates a
+    // descriptor array, so it stays behind the cheap undefined check and off the steady-state path.
+    const provider = world.__serialize.relations()
+    if (provider !== undefined && provider.relations().length > 0) {
       throw unsupported(
         verb,
-        'relation state (JS maps behind a MONOTONIC synthetic pair-id counter) is not in the image, so re-simulating mints different pair ids and different archetype signatures',
-        'Relation-aware rollback is a follow-up; checkpoint relation-free worlds until then.',
+        'the world has relations defined but no relations rollback leg is installed, so the pair-id minting state would stay outside the image',
+        'Upgrade @ecsia/relations to a version that installs the rollback provider.',
       )
     }
+    return null
+  }
+
+  const assertCoverable = (verb: string): void => {
     const cold = coldResidents()
     if (cold > 0) {
       throw unsupported(
@@ -262,10 +306,13 @@ export function createRollbackSurface(world: World): RollbackSurface {
     captureImage(image): void {
       assertSerial('captureImage')
       assertCoverable('captureImage')
+      const leg = relationsLeg('captureImage')
       const img = image as unknown as Image
       assertOwned('captureImage', img)
       img.seq += 1
       img.tick = world.tick
+      img.syntheticIdMark = host.registry.nextComponentId
+      img.relations = leg === null ? null : leg.capture()
 
       const indexCount = host.entities.index.denseLen
       sizeIdentity(img.identity, indexCount)
@@ -287,9 +334,20 @@ export function createRollbackSurface(world: World): RollbackSurface {
     restoreImage(image): void {
       assertSerial('restoreImage')
       assertCoverable('restoreImage')
+      const leg = relationsLeg('restoreImage')
       const img = image as unknown as Image
       assertOwned('restoreImage', img)
       if (img.seq === 0) throw new Error('rollback restoreImage(): the image has never been captured into')
+      if (leg !== null && img.relations === null) {
+        throw unsupported(
+          'restoreImage',
+          'this image was captured before the relations runtime was installed, so it holds no relation topology — ' +
+            'restoring it would leave the live pair maps, back-refs and pair-id counter describing a world the restored columns no longer match',
+          'Capture a fresh checkpoint after createRelations(world); an image taken before it cannot describe this world.',
+        )
+      }
+      // The inverse (an image WITH a topology and no leg) is unreachable: a leg is never uninstalled,
+      // and an image from a different surface is already refused by assertOwned.
 
       // Widest index the bitmask must be coherent over: the checkpoint's, or the current denseLen
       // when the re-sim minted past it (those slots must lose their bits).
@@ -302,6 +360,10 @@ export function createRollbackSurface(world: World): RollbackSurface {
       host.entities.restoreIdentity(img.identity)
       host.bitmask.restoreFrom(img.bitmaskWords, img.bitmaskIndexCount, clearThrough, img.bitmaskSparse)
       host.changeVersion().restoreFrom(img.changeVersion, img.changeVersionCount)
+      // Rewind the minting counter BEFORE the topology: a relation defined after the checkpoint is
+      // dropped by the leg, and its ids must be re-mintable for the re-simulation to reproduce them.
+      host.registry.nextComponentId = img.syntheticIdMark
+      if (leg !== null) leg.restore(img.relations)
       host.setTick(img.tick)
       host.resyncQueries()
     },

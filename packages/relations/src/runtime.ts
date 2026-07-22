@@ -26,6 +26,7 @@ import {
   bindAccessorRow,
   decodeEid,
   encodeEid,
+  snapshotInto,
   IS_DEV,
   NO_ENTITY,
 } from '@ecsia/core'
@@ -33,9 +34,11 @@ import type {
   Column,
   ColumnSet,
   RelationsHost,
+  RelationsRollbackProvider,
   ResolvedPair,
   SerializePair,
   SerializeRelationProvider,
+  TypedArray,
   World,
 } from '@ecsia/core'
 import { pairKey64, overflowKey64 } from './pair-key.js'
@@ -205,6 +208,63 @@ export interface RelationsApi {
 
 const EMPTY_SET: ReadonlySet<EntityHandle> = new Set()
 
+// --- rollback image ---------------------------------------------------------
+// Relation topology is JS maps behind a MONOTONIC synthetic-id counter, so it is not reachable
+// through the per-archetype column walk @ecsia/rollback captures. Everything here is cloned deeply
+// enough that a later mutation of the live structure cannot reach the captured copy.
+
+interface OverflowImage {
+  rowByPairKey: Map<bigint, number>
+  pairByRow: Map<number, { subjectIndex: number; targetIndex: number }>
+  freeRows: number[]
+  count: number
+  columns: TypedArray[]
+}
+
+interface RelationImage {
+  backref: Map<number, Set<EntityHandle>>
+  overflow: OverflowImage | null
+}
+
+interface RelationsImage {
+  nextRelationId: number
+  relationCount: number
+  overflowArchetypeSeq: number
+  pairIdByKey: Map<bigint, ComponentId>
+  pairKeyById: Map<ComponentId, { relationId: RelationId; targetIndex: number }>
+  pairDefById: Map<ComponentId, ComponentDef<Schema>>
+  pairsByRelation: Map<number, Set<ComponentId>>
+  pairRefCount: Map<ComponentId, number>
+  presenceIds: Set<number>
+  relationIdByPresence: Map<number, number>
+  relationPairCount: Map<number, Map<number, number>>
+  forwardIndex: Map<number, Map<number, Set<number>>>
+  perRelation: RelationImage[]
+}
+
+function cloneSetMap<K, V>(src: ReadonlyMap<K, ReadonlySet<V>>): Map<K, Set<V>> {
+  const out = new Map<K, Set<V>>()
+  for (const [k, v] of src) out.set(k, new Set(v))
+  return out
+}
+
+function refillSetMap<K, V>(dst: Map<K, Set<V>>, src: ReadonlyMap<K, ReadonlySet<V>>): void {
+  dst.clear()
+  for (const [k, v] of src) dst.set(k, new Set(v))
+}
+
+function cloneCountMap(src: ReadonlyMap<number, ReadonlyMap<number, number>>): Map<number, Map<number, number>> {
+  const out = new Map<number, Map<number, number>>()
+  for (const [k, v] of src) out.set(k, new Map(v))
+  return out
+}
+
+function cloneForward(src: ReadonlyMap<number, Map<number, Set<number>>>): Map<number, Map<number, Set<number>>> {
+  const out = new Map<number, Map<number, Set<number>>>()
+  for (const [k, v] of src) out.set(k, cloneSetMap(v))
+  return out
+}
+
 export function createRelations(world: World): RelationsApi {
   const host: RelationsHost = world.__installRelations()
   // Pair keys index by the WORLD's target-index width (= 32 - generationBits). Captured once
@@ -222,6 +282,10 @@ export function createRelations(world: World): RelationsApi {
   const pairDefById = new Map<ComponentId, ComponentDef<Schema>>()
   const pairsByRelation = new Map<number, Set<ComponentId>>()
   const pairRefCount = new Map<ComponentId, number>()
+  // pairKey64 → THE def object for that (relation, target). A memoization of a pure function, NOT
+  // simulation state: deliberately outside the rollback image, so a rewind reuses the same def
+  // rather than interning a new one at the re-minted id.
+  const pairDefByKey = new Map<bigint, ComponentDef<Schema>>()
   // Every relation's presence ComponentId — with pairKeyById, the filter that splits a prefab's
   // copyable components from its relation artifacts (spawnFrom copies components only).
   const presenceIds = new Set<number>()
@@ -286,8 +350,17 @@ export function createRelations(world: World): RelationsApi {
     const existing = pairIdByKey.get(key)
     if (existing !== undefined) return existing
     const cid = host.allocSyntheticId()
-    const def = makePairDef(rt.relationId, targetIndex)
-    host.registerSynthetic(def, cid)
+    // The canonical def for this pair, if one was ever minted. A rollback rewinds `pairIdByKey`, so
+    // without this every re-mint after every rewind would intern a BRAND-NEW def object and the
+    // registry's def→id map would grow with the rollback count rather than with the pair space.
+    let def = pairDefByKey.get(key)
+    if (def === undefined) {
+      def = makePairDef(rt.relationId, targetIndex)
+      pairDefByKey.set(key, def)
+      host.registerSynthetic(def, cid)
+    } else {
+      host.rebindSynthetic(def, cid)
+    }
     pairIdByKey.set(key, cid)
     pairKeyById.set(cid, { relationId: rt.relationId, targetIndex })
     pairDefById.set(cid, def)
@@ -1419,9 +1492,130 @@ export function createRelations(world: World): RelationsApi {
     },
   }
 
+  // --- rollback provider -----------------------------------------------------
+  // The pair-id minting maps, the per-relation indices and the overflow row mapping. The synthetic-id
+  // counter itself is core's and is rewound by @ecsia/rollback alongside this blob. Payload BYTES are
+  // included for the overflow tables only: they live in a standalone ColumnSet under a synthetic
+  // archetype id, so the image's per-archetype walk never sees them (an exclusive relation's payload
+  // rides the subject's presence columns and IS covered by that walk).
+
+  function captureOverflow(ov: OverflowTable): OverflowImage {
+    const columns: TypedArray[] = []
+    for (const col of ov.columnSet.columns) {
+      const Ctor = col.view.constructor as new (length: number) => TypedArray
+      const data = new Ctor(ov.count * col.layout.stride)
+      snapshotInto(col, ov.count, data, 0)
+      columns.push(data)
+    }
+    return {
+      rowByPairKey: new Map(ov.rowByPairKey),
+      pairByRow: new Map(ov.pairByRow),
+      freeRows: [...ov.freeRows],
+      count: ov.count,
+      columns,
+    }
+  }
+
+  function restoreOverflow(ov: OverflowTable, img: OverflowImage): void {
+    ov.rowByPairKey.clear()
+    for (const [k, v] of img.rowByPairKey) ov.rowByPairKey.set(k, v)
+    ov.pairByRow.clear()
+    for (const [k, v] of img.pairByRow) ov.pairByRow.set(k, v)
+    ov.freeRows = [...img.freeRows]
+    ov.count = img.count
+    for (let i = 0; i < ov.columnSet.columns.length; i++) {
+      const col = ov.columnSet.columns[i] as Column
+      const data = img.columns[i]
+      if (data === undefined) continue
+      ;(col.view as unknown as { set(a: ArrayLike<number>, o: number): void }).set(data as unknown as ArrayLike<number>, 0)
+    }
+  }
+
+  const rollbackProvider: RelationsRollbackProvider = {
+    capture(): unknown {
+      return {
+        nextRelationId,
+        relationCount: relations.length,
+        overflowArchetypeSeq,
+        pairIdByKey: new Map(pairIdByKey),
+        pairKeyById: new Map(pairKeyById),
+        pairDefById: new Map(pairDefById),
+        pairsByRelation: cloneSetMap(pairsByRelation),
+        pairRefCount: new Map(pairRefCount),
+        presenceIds: new Set(presenceIds),
+        relationIdByPresence: new Map(relationIdByPresence),
+        relationPairCount: cloneCountMap(relationPairCount),
+        forwardIndex: cloneForward(forwardIndex),
+        perRelation: relations.map((rt) => ({
+          backref: cloneSetMap(rt.backref),
+          overflow: rt.overflow === null ? null : captureOverflow(rt.overflow),
+        })),
+      } satisfies RelationsImage
+    },
+
+    restore(state): void {
+      const img = state as RelationsImage
+      if (img.relationCount > relations.length) {
+        throw new Error(
+          'relations rollback: this image holds more relations than the world now has — an earlier, deeper restore ' +
+            'dropped a relation this one would need to re-introduce, and its runtime is gone. Define every relation ' +
+            'before the first checkpoint.',
+        )
+      }
+      // A relation DEFINED after the checkpoint is unwound too: its runtime is dropped and its
+      // presence/overflow ids fall back above the restored high-water mark, so a re-simulating
+      // defineRelation re-mints exactly the ids the original run did.
+      for (let i = img.relationCount; i < relations.length; i++) {
+        const rt = relations[i] as RelationRuntime
+        byDef.delete(rt.def)
+        byRelationId.delete(rt.relationId as number)
+      }
+      relations.length = img.relationCount
+      nextRelationId = img.nextRelationId
+      overflowArchetypeSeq = img.overflowArchetypeSeq
+
+      pairIdByKey.clear()
+      for (const [k, v] of img.pairIdByKey) pairIdByKey.set(k, v)
+      pairKeyById.clear()
+      for (const [k, v] of img.pairKeyById) pairKeyById.set(k, v)
+      pairDefById.clear()
+      for (const [k, v] of img.pairDefById) {
+        pairDefById.set(k, v)
+        // A canonical def is shared across rewinds, so a mint since this checkpoint may have re-bound
+        // it to a different id. Storage resolves a migration's target through `idOf`, so the binding
+        // has to be put back or an addPair would migrate to the id the abandoned future minted.
+        host.rebindSynthetic(v, k)
+      }
+      refillSetMap(pairsByRelation, img.pairsByRelation)
+      pairRefCount.clear()
+      for (const [k, v] of img.pairRefCount) pairRefCount.set(k, v)
+      presenceIds.clear()
+      for (const id of img.presenceIds) presenceIds.add(id)
+      relationIdByPresence.clear()
+      for (const [k, v] of img.relationIdByPresence) relationIdByPresence.set(k, v)
+
+      relationPairCount.clear()
+      for (const [k, v] of img.relationPairCount) relationPairCount.set(k, new Map(v))
+      forwardIndex.clear()
+      for (const [k, v] of img.forwardIndex) forwardIndex.set(k, cloneSetMap(v))
+
+      for (let i = 0; i < relations.length; i++) {
+        const rt = relations[i] as RelationRuntime
+        const cell = img.perRelation[i] as RelationImage
+        refillSetMap(rt.backref, cell.backref)
+        if (rt.overflow !== null && cell.overflow !== null) restoreOverflow(rt.overflow, cell.overflow)
+        // The depth cache is derived from the exclusive target columns the restore just rewrote;
+        // one gen bump invalidates the whole thing (the same O(1) whole-cache invalidation any
+        // structural change uses).
+        if (rt.depth !== null) rt.depth.gen += 1
+      }
+    },
+  }
+
   // --- install seams ---------------------------------------------------------
 
   host.setPreDespawn(onPreDespawn)
+  host.setRollbackProvider(rollbackProvider)
   host.setSerializationProvider(serializationProvider)
   host.setPairResolver(resolvePair)
   // Relation-level pair observers (onPairAdded/onPairRemoved): the deferred drain hands us each
