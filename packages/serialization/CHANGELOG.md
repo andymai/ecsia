@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.22.0](https://github.com/andymai/ecsia/compare/serialization-v0.21.2...serialization-v0.22.0) (2026-07-22)
+
+
+### Features
+
+* **serialization:** optional compression at the *Copy() boundary ([#153](https://github.com/andymai/ecsia/issues/153)) ([eb844c1](https://github.com/andymai/ecsia/commit/eb844c1fb03a14382423999a0a6df4480a36505e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.22.0
+    * @ecsia/schema bumped to 0.22.0
+  * devDependencies
+    * @ecsia/relations bumped to 0.22.0
+
 ## [0.21.2](https://github.com/andymai/ecsia/compare/serialization-v0.21.1...serialization-v0.21.2) (2026-06-11)
 
 
