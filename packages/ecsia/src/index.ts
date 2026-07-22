@@ -204,6 +204,9 @@ export type {
   ReplicationApplyResult,
   DecompressOptions,
   DeserializeOptions,
+  StateView,
+  StateViewOptions,
+  VisibilityQuery,
 } from '@ecsia/serialization'
 
 export const createSnapshotSerializer: (world: World) => _SnapshotSerializer = ((world: World) =>

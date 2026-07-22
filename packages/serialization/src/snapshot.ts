@@ -63,6 +63,51 @@ export interface SnapshotSerializer {
   snapshotCopy(): Uint8Array
 }
 
+// SECTION 1 of a snapshot image: the component + relation registry + staticString choice tables. It
+// is world-global (view-independent), so the filtered baseline (interest.ts) writes the same section
+// verbatim. The caller patches the registry offset word, then calls this at that position.
+export function writeRegistrySection(
+  cur: WriteCursor,
+  s: World['__serialize'],
+  relProvider: ReturnType<World['__serialize']['relations']>,
+): void {
+  const comps = s.components()
+  cur.u32(comps.length)
+  for (const c of comps) {
+    cur.u32(c.id as number)
+    writeString(cur, c.name)
+    cur.u16(c.fieldCount)
+    cur.u8(c.storage === 'sparse' ? 1 : 0)
+  }
+  const rels = relProvider !== undefined ? relProvider.relations() : []
+  cur.u32(rels.length)
+  for (const r of rels) {
+    cur.u16(r.id as number)
+    writeString(cur, r.name)
+    cur.u8((r.exclusive ? 1 : 0) | (r.hasPayload ? 2 : 0))
+    cur.u32(r.presenceId as number)
+  }
+  // staticString choices tables: emitted per component field that is a staticString.
+  const stringTables: { componentId: number; fieldIndex: number; choices: readonly string[] }[] = []
+  for (const c of comps) {
+    const fields = s.fieldsOf(c.id)
+    if (fields === undefined) continue
+    for (let fi = 0; fi < fields.length; fi++) {
+      const f = fields[fi]
+      if (f !== undefined && f.choices !== undefined) {
+        stringTables.push({ componentId: c.id as number, fieldIndex: fi, choices: f.choices })
+      }
+    }
+  }
+  cur.u32(stringTables.length)
+  for (const t of stringTables) {
+    cur.u32(t.componentId)
+    cur.u16(t.fieldIndex)
+    cur.u16(t.choices.length)
+    for (const ch of t.choices) writeString(cur, ch)
+  }
+}
+
 export function createSnapshotSerializer(world: World, opts: SnapshotOptions = {}): SnapshotSerializer {
   assertPlatformLittleEndian()
   const includeRelations = opts.includeRelations ?? true
@@ -104,41 +149,7 @@ export function createSnapshotSerializer(world: World, opts: SnapshotOptions = {
 
     // --- SECTION 1: REGISTRY ---
     cur.patchU32(offRegistryAt, cur.pos)
-    const comps = s.components()
-    cur.u32(comps.length)
-    for (const c of comps) {
-      cur.u32(c.id as number)
-      writeString(cur, c.name)
-      cur.u16(c.fieldCount)
-      cur.u8(c.storage === 'sparse' ? 1 : 0)
-    }
-    const rels = relProvider !== undefined ? relProvider.relations() : []
-    cur.u32(rels.length)
-    for (const r of rels) {
-      cur.u16(r.id as number)
-      writeString(cur, r.name)
-      cur.u8((r.exclusive ? 1 : 0) | (r.hasPayload ? 2 : 0))
-      cur.u32(r.presenceId as number)
-    }
-    // staticString choices tables: emitted per component field that is a staticString.
-    const stringTables: { componentId: number; fieldIndex: number; choices: readonly string[] }[] = []
-    for (const c of comps) {
-      const fields = s.fieldsOf(c.id)
-      if (fields === undefined) continue
-      for (let fi = 0; fi < fields.length; fi++) {
-        const f = fields[fi]
-        if (f !== undefined && f.choices !== undefined) {
-          stringTables.push({ componentId: c.id as number, fieldIndex: fi, choices: f.choices })
-        }
-      }
-    }
-    cur.u32(stringTables.length)
-    for (const t of stringTables) {
-      cur.u32(t.componentId)
-      cur.u16(t.fieldIndex)
-      cur.u16(t.choices.length)
-      for (const ch of t.choices) writeString(cur, ch)
-    }
+    writeRegistrySection(cur, s, relProvider)
 
     // --- SECTION 2: STRUCTURE (entity identity + membership) ---
     cur.patchU32(offStructureAt, cur.pos)

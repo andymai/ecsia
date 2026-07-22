@@ -34,6 +34,17 @@ export const FLAG_HAS_RELATIONS = 2
 export const FLAG_HAS_STRUCTURAL = 4
 /** Snapshot/delta: a RICH (sidecar JSON) section is present. v2+ only. */
 export const FLAG_HAS_RICH = 8
+/** Delta/snapshot header: this image was emitted for a StateView (interest.ts) — a receiver treats
+ * absent entities/components as "not visible", never a protocol error. Unfiltered streams never set
+ * it; the apply path needs no branch (a filtered image is a structurally valid delta/snapshot). */
+export const FLAG_IS_FILTERED = 16
+
+// Structural-op header high bit: on an EntityDestroy/ComponentRemove written by a filtered view it
+// marks CONCEALED (left this view's interest, still alive on the host) rather than a real removal.
+// The despawn/remove behavior is UNCHANGED — the bit is informational; apply masks it off with
+// DELTA_OP_MASK, a no-op for the existing 0..6 ops, so unfiltered streams are unaffected.
+export const DELTA_OP_CONCEAL = 0x80
+export const DELTA_OP_MASK = 0x7f
 
 // Delta SECTION R per-row states (v4). KEEP carries no information — the receiver's current value
 // stands (used ONLY for the onUnserializable skip policy, which must never clobber). RESET is the

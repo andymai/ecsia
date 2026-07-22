@@ -56,6 +56,10 @@ export type {
   ReplicationApplyResult,
 } from './replication.js'
 
+// ---- Interest management (Layer 3: per-client filtered replication) ----
+export { createStateView, gatherSharedChangeset } from './interest.js'
+export type { StateView, StateViewOptions, VisibilityQuery, SharedChangeset } from './interest.js'
+
 // ---- Structural delta stream / observer log (Layer 2) ----
 export { encodeStructuralOps, applyStructuralOps, createObserverLog } from './structural.js'
 export type { ObserverLog, DeltaRecord } from './structural.js'
@@ -65,4 +69,6 @@ export {
   SERIALIZATION_FORMAT_VERSION,
   SNAPSHOT_MAGIC,
   DeltaOp,
+  FLAG_IS_FILTERED,
+  DELTA_OP_CONCEAL,
 } from './format.js'

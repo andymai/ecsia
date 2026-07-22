@@ -186,8 +186,68 @@ for a full run: a mid-stream join, spawn/despawn churn, and a dropped message re
 Two honest limits. **One server, many mirrors:** deltas describe the whole world, and
 applying one *journals* the structural changes it makes — so two worlds streaming at each
 other re-broadcast each other's entities as their own and spawn duplicates. For peer-to-peer,
-elect one peer as the server and send inputs upstream. **Per-client filtering** (interest
-management) is not built in: every client receives the whole world.
+elect one peer as the server and send inputs upstream. **Whole-world by default:** a plain
+`stream.tick()` sends every entity to every client — for per-client filtering, open a view
+(below).
+
+## Interest management: per-client filtered views
+
+A **`StateView`** filters what one client sees. `stream.view(opts)` opens a view whose
+`visible` query defines the entities that client may receive; `hideComponents` (and/or a
+`conceal(entity, component)` predicate) additionally strips named components from otherwise-
+visible entities — a hidden-information layer that is cheat-proof by construction, because the
+concealed bytes never leave the server. A view emits the same `baseline()` / `delta()`
+messages as the stream, so the client is an ordinary `createReplicationReceiver` over a
+dedicated mirror world — no client-side changes.
+
+The host scans changed rows and structural ops **once per tick** and each view **masks** that
+shared changeset, so cost scales with what a client actually sees change, never with
+`views × world`. An entity **entering** a view arrives as a full add carrying its current
+values; **leaving** arrives as a destroy flagged *concealed* (a predicting client can keep a
+last-known ghost) rather than an error.
+
+```ts
+import {
+  createWorld, defineComponent, defineTag, has,
+  createReplicationStream, createReplicationReceiver,
+  encodeReplicationMessage, decodeReplicationMessage,
+} from '@ecsia/kit'
+
+const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
+const Hand = defineComponent({ card: 'u16' }, { name: 'hand' })
+const InRoom = defineTag('in-room')
+
+const server = createWorld({ components: [Position, Hand, InRoom], maxEntities: 1 << 16 })
+const stream = createReplicationStream(server)
+
+// One view per client: the entities it may see (a query) + components concealed even on
+// visible entities. Drive every live view once per serial flush, in lockstep.
+const view = stream.view({
+  visible: server.query(has(InRoom)), // only entities tagged InRoom reach this client
+  hideComponents: [Hand.id], //          Hand never materializes on this client, even when visible
+})
+
+declare function sendTo(client: number, bytes: Uint8Array): void
+sendTo(1, encodeReplicationMessage(view.delta())) //    existing client: the next filtered delta
+sendTo(2, encodeReplicationMessage(view.baseline())) // a joiner: full filtered state, same flush
+
+// The client mirror is an ordinary receiver over a dedicated world.
+const mirror = createWorld({ components: [Position, Hand, InRoom], maxEntities: 1 << 16 })
+const client = createReplicationReceiver(mirror)
+function onClientMessage(bytes: Uint8Array): void {
+  client.apply(decodeReplicationMessage(bytes))
+}
+```
+
+v1 filters at the **entity + component** grain. An `eid` field (or exclusive relation) on a
+visible entity that points at a *hidden* one is masked to null on the wire, so a hidden
+entity's existence never leaks. One edge to know: a reference from a still-visible entity to
+one that *leaves* the view later is **not** re-cleared on the client (the referrer sent no
+update, and there's no reverse index to drive one) — the stale handle can't alias a live
+entity thanks to generation bits, but if a client must observe the clear promptly, conceal
+the referencing component. Field-level concealment, rich (`string` / `object<T>`) fields
+inside a filtered stream, and synthesizing a pre-existing entity's *non-exclusive* relation
+pairs on enter are also not yet covered — see the interest-management spec for the current edges.
 
 ## Compression (optional)
 

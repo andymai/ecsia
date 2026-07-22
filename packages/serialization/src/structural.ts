@@ -9,9 +9,9 @@
 
 import type { ComponentId, EntityHandle, FieldDescriptor, RelationId } from '@ecsia/schema'
 import { encodeEid, ShapeKind } from '@ecsia/core'
-import type { SerializeStructuralRecord, World } from '@ecsia/core'
+import type { SerializeArchetype, SerializeStructuralRecord, World } from '@ecsia/core'
 import { WriteCursor, ReadCursor } from './cursor.js'
-import { DeltaOp, NO_ENTITY_U32, readString, writeString } from './format.js'
+import { DELTA_OP_CONCEAL, DELTA_OP_MASK, DeltaOp, NO_ENTITY_U32, readString, writeString } from './format.js'
 import { readPairPayload, writePairPayload } from './payload.js'
 
 export interface DeltaRecord {
@@ -86,67 +86,147 @@ export function encodeStructuralOps(world: World): Uint8Array {
 export function writeDeltaStructuralSection(cur: WriteCursor, world: World, records: readonly SerializeStructuralRecord[]): void {
   const s = world.__serialize
   const rel = s.relations()
-  for (const rec of records) {
-    switch (rec.kind as number) {
-      case ShapeKind.Create:
-        cur.u8(DeltaOp.EntityCreate)
-        cur.u32(rec.handle >>> 0)
-        break
-      case ShapeKind.Destroy:
-        cur.u8(DeltaOp.EntityDestroy)
-        cur.u32(rec.handle >>> 0)
-        break
-      case ShapeKind.Add: {
-        const dst = s.columnsOf(rec.handle as EntityHandle, rec.componentId as ComponentId)
-        cur.u8(DeltaOp.ComponentAdd)
-        cur.u32(rec.handle >>> 0)
-        cur.u32(rec.componentId >>> 0)
-        if (dst === null) {
-          cur.u16(0) // entity no longer holds it (removed again after this Add since T) — no values
-        } else {
-          writeComponentFieldValues(cur, dst.columns as readonly { view: { [i: number]: number }; layout: { stride: number } }[], dst.fields, dst.row)
-        }
-        break
+  for (const rec of records) emitStructuralRecord(cur, world, rec, rel)
+}
+
+// One journaled structural record → one wire op, values read at emit time. Shared by the unfiltered
+// delta (writeDeltaStructuralSection) and the filtered view stream (interest.ts), which gates WHICH
+// records reach here — so the encoding lives in exactly one place. `rel` is passed to avoid a
+// per-record provider deref; pass `world.__serialize.relations()`.
+export function emitStructuralRecord(
+  cur: WriteCursor,
+  world: World,
+  rec: SerializeStructuralRecord,
+  rel: ReturnType<World['__serialize']['relations']>,
+  isHidden?: (handle: number) => boolean,
+): void {
+  const s = world.__serialize
+  switch (rec.kind as number) {
+    case ShapeKind.Create:
+      cur.u8(DeltaOp.EntityCreate)
+      cur.u32(rec.handle >>> 0)
+      break
+    case ShapeKind.Destroy:
+      cur.u8(DeltaOp.EntityDestroy)
+      cur.u32(rec.handle >>> 0)
+      break
+    case ShapeKind.Add: {
+      const dst = s.columnsOf(rec.handle as EntityHandle, rec.componentId as ComponentId)
+      cur.u8(DeltaOp.ComponentAdd)
+      cur.u32(rec.handle >>> 0)
+      cur.u32(rec.componentId >>> 0)
+      if (dst === null) {
+        cur.u16(0) // entity no longer holds it (removed again after this Add since T) — no values
+      } else {
+        writeComponentFieldValues(cur, dst.columns as readonly { view: { [i: number]: number }; layout: { stride: number } }[], dst.fields, dst.row, isHidden)
       }
-      case ShapeKind.Remove:
-        cur.u8(DeltaOp.ComponentRemove)
-        cur.u32(rec.handle >>> 0)
-        cur.u32(rec.componentId >>> 0)
-        break
-      case ShapeKind.AddPair:
-      case ShapeKind.SetPayload: {
-        const relationId = rel?.relationIdOfPair(rec.componentId as ComponentId)
-        if (relationId === undefined) break // relation-free world or unmapped pair id — skip
-        cur.u8(rec.kind === ShapeKind.AddPair ? DeltaOp.PairAdd : DeltaOp.PairPayload)
-        cur.u32(rec.handle >>> 0)
-        cur.u16(relationId as number)
-        cur.u32(rec.target >>> 0)
-        // Values-on-add: read the pair's CURRENT payload at emit time so a stale receiver
-        // reconstructs the post-add (or post-set) state. undefined for a tag relation.
-        const payload = rel?.pairPayloadOf(rec.handle as EntityHandle, relationId, rec.target as EntityHandle)
-        writePairPayload(cur, payload)
-        break
-      }
-      case ShapeKind.RemovePair: {
-        const relationId = rel?.relationIdOfPair(rec.componentId as ComponentId)
-        if (relationId === undefined) break // relation-free world or unmapped pair id — skip
-        cur.u8(DeltaOp.PairRemove)
-        cur.u32(rec.handle >>> 0)
-        cur.u16(relationId as number)
-        cur.u32(rec.target >>> 0)
-        break
-      }
-      default:
-        break
+      break
     }
+    case ShapeKind.Remove:
+      cur.u8(DeltaOp.ComponentRemove)
+      cur.u32(rec.handle >>> 0)
+      cur.u32(rec.componentId >>> 0)
+      break
+    case ShapeKind.AddPair:
+    case ShapeKind.SetPayload: {
+      const relationId = rel?.relationIdOfPair(rec.componentId as ComponentId)
+      if (relationId === undefined) break // relation-free world or unmapped pair id — skip
+      cur.u8(rec.kind === ShapeKind.AddPair ? DeltaOp.PairAdd : DeltaOp.PairPayload)
+      cur.u32(rec.handle >>> 0)
+      cur.u16(relationId as number)
+      cur.u32(rec.target >>> 0)
+      // Values-on-add: read the pair's CURRENT payload at emit time so a stale receiver
+      // reconstructs the post-add (or post-set) state. undefined for a tag relation.
+      const payload = rel?.pairPayloadOf(rec.handle as EntityHandle, relationId, rec.target as EntityHandle)
+      writePairPayload(cur, payload)
+      break
+    }
+    case ShapeKind.RemovePair: {
+      const relationId = rel?.relationIdOfPair(rec.componentId as ComponentId)
+      if (relationId === undefined) break // relation-free world or unmapped pair id — skip
+      cur.u8(DeltaOp.PairRemove)
+      cur.u32(rec.handle >>> 0)
+      cur.u16(relationId as number)
+      cur.u32(rec.target >>> 0)
+      break
+    }
+    default:
+      break
   }
 }
 
-function writeComponentFieldValues(
+// A filtered view's LEAVE op: EntityDestroy (or ComponentRemove) carrying the conceal reason bit.
+// `conceal` true ⇒ the entity left THIS view but still lives on the host; false ⇒ a real removal
+// (the same byte the unfiltered stream emits). applyStructuralOps masks the bit off, so despawn
+// behavior is identical either way.
+export function emitEntityDestroy(cur: WriteCursor, handle: number, conceal: boolean): void {
+  cur.u8(conceal ? (DeltaOp.EntityDestroy | DELTA_OP_CONCEAL) : DeltaOp.EntityDestroy)
+  cur.u32(handle >>> 0)
+}
+
+// A filtered view's ENTER op for a PRE-EXISTING entity: a full per-client baseline for one entity —
+// EntityCreate + one ComponentAdd (with CURRENT values) per REAL, non-concealed component in the
+// entity's signature. Synthetic pair/presence ids are skipped (not in `realComponentIds`); a tag
+// component emits a value-less ComponentAdd (u16 0), reproducing membership. Non-exclusive relation
+// pairs are NOT synthesized here (no per-entity live-pairs seam — a v1 non-goal); exclusive relations
+// ride an eid column and so are carried as ordinary field values.
+export function synthEntityAdd(
+  cur: WriteCursor,
+  world: World,
+  arch: SerializeArchetype,
+  handle: number,
+  realComponentIds: ReadonlySet<number>,
+  isConcealed: (handle: number, componentId: number) => boolean,
+  isHidden: (handle: number) => boolean,
+): void {
+  cur.u8(DeltaOp.EntityCreate)
+  cur.u32(handle >>> 0)
+  for (const cid of arch.signature) {
+    if (!realComponentIds.has(cid) || isConcealed(handle, cid)) continue
+    emitComponentAdd(cur, world, handle, cid, isHidden)
+  }
+}
+
+// One ComponentAdd op carrying the component's CURRENT values (a value-less u16 0 for a tag). Shared by
+// synthEntityAdd (enter) and the filtered stream's component-REVEAL transition. `isHidden` masks eid
+// lanes pointing at a target the client cannot see.
+export function emitComponentAdd(
+  cur: WriteCursor,
+  world: World,
+  handle: number,
+  componentId: number,
+  isHidden?: (handle: number) => boolean,
+): void {
+  const s = world.__serialize
+  cur.u8(DeltaOp.ComponentAdd)
+  cur.u32(handle >>> 0)
+  cur.u32(componentId >>> 0)
+  const dst = s.columnsOf(handle as EntityHandle, componentId as ComponentId)
+  if (dst === null) {
+    cur.u16(0)
+  } else {
+    writeComponentFieldValues(cur, dst.columns as readonly { view: { [i: number]: number }; layout: { stride: number } }[], dst.fields, dst.row, isHidden)
+  }
+}
+
+// One ComponentRemove op — the filtered stream's component-CONCEAL transition (a component that became
+// concealed on a still-visible entity). Idempotent on the receiver if it never held the component.
+export function emitComponentRemove(cur: WriteCursor, handle: number, componentId: number): void {
+  cur.u8(DeltaOp.ComponentRemove)
+  cur.u32(handle >>> 0)
+  cur.u32(componentId >>> 0)
+}
+
+// `isHidden`, when supplied (filtered view stream), masks an `eid` field's value to NO_ENTITY (-1)
+// when its stored handle is not visible to the client — an eid word carries the target's RAW handle,
+// so an unmasked one would leak a concealed entity. Absent (the unfiltered / baseline stream) the
+// value is emitted verbatim, so shipped output is unchanged.
+export function writeComponentFieldValues(
   cur: WriteCursor,
   columns: readonly { view: { [i: number]: number }; layout: { stride: number } }[],
   fields: readonly FieldDescriptor[],
   row: number,
+  isHidden?: (handle: number) => boolean,
 ): void {
   // Emit: u16 fieldWordCount, then per word: name + lane + f64 value. The wire is name-keyed
   // (self-describing), so non-persisted fields are simply omitted and re-default on apply.
@@ -157,8 +237,11 @@ function writeComponentFieldValues(
     const col = columns[colIndex]
     if (col !== undefined && f.persist) {
       const stride = col.layout.stride
+      const maskEid = isHidden !== undefined && f.token === 'eid'
       for (let lane = 0; lane < stride; lane++) {
-        words.push({ name: f.name, lane, value: (col.view[row * stride + lane] as number) })
+        let value = col.view[row * stride + lane] as number
+        if (maskEid && value !== -1 && isHidden(value >>> 0)) value = -1
+        words.push({ name: f.name, lane, value })
       }
     }
     colIndex += 1
@@ -191,7 +274,10 @@ export function applyStructuralOps(
   const relProvider = s.relations()
   const cur = new ReadCursor(bytes)
   while (!cur.atEnd) {
-    const op = cur.u8() as DeltaOp
+    // Mask the conceal bit (DELTA_OP_CONCEAL): a filtered view's leave op is EntityDestroy|0x80. The
+    // despawn/remove is identical to a real removal — the bit is a receiver-side hint only, and a
+    // no-op for the existing 0..6 ops an unfiltered stream emits.
+    const op = (cur.u8() & DELTA_OP_MASK) as DeltaOp
     switch (op) {
       case DeltaOp.EntityCreate: {
         const old = cur.u32()
