@@ -1,12 +1,12 @@
 {
-  "packages/core": "0.25.0",
-  "packages/devtools": "0.25.0",
-  "packages/ecsia": "0.25.0",
-  "packages/react": "0.25.0",
-  "packages/relations": "0.25.0",
-  "packages/rollback": "0.25.0",
-  "packages/scheduler": "0.25.0",
-  "packages/schema": "0.25.0",
-  "packages/serialization": "0.25.0",
-  "packages/three": "0.25.0"
+  "packages/core": "0.26.0",
+  "packages/devtools": "0.26.0",
+  "packages/ecsia": "0.26.0",
+  "packages/react": "0.26.0",
+  "packages/relations": "0.26.0",
+  "packages/rollback": "0.26.0",
+  "packages/scheduler": "0.26.0",
+  "packages/schema": "0.26.0",
+  "packages/serialization": "0.26.0",
+  "packages/three": "0.26.0"
 }
