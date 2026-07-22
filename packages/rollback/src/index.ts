@@ -9,3 +9,14 @@
 
 export { createRollbackSurface } from './rollback.js'
 export type { RollbackSurface, RollbackImage } from './rollback.js'
+export { createRollbackSession } from './session.js'
+export type {
+  Frame,
+  FrameInputs,
+  InputImage,
+  PlayerId,
+  PredictionPolicy,
+  RollbackOptions,
+  RollbackSession,
+  UnrecoverableRollback,
+} from './session.js'
