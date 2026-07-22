@@ -14,4 +14,4 @@ export { reserveEntityBlock, returnReservedIds } from './reservation.js'
 export type { EntityReservation } from './reservation.js'
 
 export { EntityStore } from './store.js'
-export type { EntityStoreConfig, HandleStats } from './store.js'
+export type { EntityStoreConfig, HandleStats, EntityIdentityImage } from './store.js'

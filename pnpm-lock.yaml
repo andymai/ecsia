@@ -159,6 +159,15 @@ importers:
         specifier: workspace:*
         version: link:../schema
 
+  packages/rollback:
+    dependencies:
+      '@ecsia/core':
+        specifier: workspace:*
+        version: link:../core
+      '@ecsia/schema':
+        specifier: workspace:*
+        version: link:../schema
+
   packages/scheduler:
     dependencies:
       '@ecsia/core':

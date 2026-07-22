@@ -136,8 +136,11 @@ export class QueryEngine {
     return true
   }
 
-  /**: add every live row's entity index to `current`. New archetypes start empty. */
-  #seedCurrentFromArchetype(lq: LiveQuery, arch: Archetype): void {
+  /**
+   *: add every live row's entity index to `current`. New archetypes start empty. `delta` false
+   * (the rollback resync) adds without recording added/removed flavor deltas.
+   */
+  #seedCurrentFromArchetype(lq: LiveQuery, arch: Archetype, delta = true): void {
     if (arch.cold) {
       // Cold rows are index-keyed in the overflow store; seed from the cold archetype's residents so
       // a query created AFTER cold entities exist sees them ( cold transparency), matching the
@@ -146,7 +149,8 @@ export class QueryEngine {
       const filters = lq.compiled.rowFilters as readonly RowFilterTerm[]
       for (const index of this.#deps.coldResidentsOf(arch.id as number)) {
         if (filters.length !== 0 && !passesColdRowFilters(this.#deps, index, filters)) continue
-        lq.addEntity(index)
+        if (delta) lq.addEntity(index)
+        else lq.current.add(index)
       }
       return
     }
@@ -156,7 +160,8 @@ export class QueryEngine {
       const handle = arch.rows[row] as number
       const index = this.#handleIndex(handle)
       if (filters.length > 0 && !this.#rowPasses(arch, row, lq.compiled)) continue
-      lq.addEntity(index)
+      if (delta) lq.addEntity(index)
+      else lq.current.add(index)
     }
   }
 
@@ -225,6 +230,20 @@ export class QueryEngine {
   /**: evict a despawned entity from EVERY live query (constraint-less queries included). */
   dropEntity(index: number): void {
     for (const lq of this.#byHash.values()) lq.removeEntity(index)
+  }
+
+  /**
+   * ROLLBACK-ONLY (@ecsia/rollback restore): rebuild every live query's `current` membership
+   * from the RESTORED archetype tables. Iteration is archetype-driven and needs nothing here, but
+   * `current` (query `.count` / membership) is incrementally maintained state the restore rewinds
+   * underneath. The per-frame added/removed delta lists are frame-transient (rollback runs between
+   * frames) and are deliberately left alone — reseeding through `addEntity` would forge deltas.
+   */
+  rollbackResyncMembership(): void {
+    for (const lq of this.#byHash.values()) {
+      lq.current.clear()
+      for (const arch of lq.matchingArchetypes) this.#seedCurrentFromArchetype(lq, arch, false)
+    }
   }
 
   /**: AND the entity's shape words against the query masks. */

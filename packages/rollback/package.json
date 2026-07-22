@@ -1,0 +1,53 @@
+{
+  "name": "@ecsia/rollback",
+  "version": "0.23.0",
+  "description": "Handle-stable whole-world capture and restore for ecsia: the checkpoint substrate for rollback netcode and prediction.",
+  "keywords": [
+    "ecs",
+    "entity-component-system",
+    "ecsia",
+    "rollback",
+    "netcode",
+    "prediction",
+    "snapshot",
+    "data-oriented",
+    "typescript"
+  ],
+  "license": "MIT",
+  "author": "Andy Aragon",
+  "homepage": "https://github.com/andymai/ecsia",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andymai/ecsia.git",
+    "directory": "packages/rollback"
+  },
+  "bugs": {
+    "url": "https://github.com/andymai/ecsia/issues"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@ecsia/core": "workspace:*",
+    "@ecsia/schema": "workspace:*"
+  }
+}

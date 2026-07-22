@@ -73,6 +73,33 @@ export class ChangeVersionStore {
     return this.versionAt(index) > since
   }
 
+  /**
+   * ROLLBACK-ONLY (@ecsia/rollback capture): copy the stamps of entity indices [0, count)
+   * into `out`, returning the number written — 0 when stamping is disabled or the column was never
+   * allocated (nothing to roll back).
+   */
+  captureInto(out: Uint32Array, count: number): number {
+    const col = this.#column
+    if (!this.enabled || col === null) return 0
+    const n = Math.min(count, col.capacity())
+    out.set((col.view as Uint32Array).subarray(0, n), 0)
+    return n
+  }
+
+  /**
+   * ROLLBACK-ONLY: write `src[0, count)` back over the stamps and zero everything above — those are
+   * post-checkpoint writes, and a recycled index must not read a future tick as its own. `count === 0`
+   * means the checkpoint had no stamps at all, so the whole column resets.
+   */
+  restoreFrom(src: Uint32Array, count: number): void {
+    const col = count === 0 ? this.#column : this.#ensureColumn()
+    if (col === null) return
+    if (count > col.capacity()) this.#buffers.grow(col, count)
+    const view = col.view as Uint32Array
+    view.set(src.subarray(0, count), 0)
+    if (count < view.length) view.fill(0, count, view.length)
+  }
+
   /**: reset the column to 0 at a serial flush (once per ~2.27 years). */
   resetAll(): void {
     if (this.#column !== null) (this.#column.view as Uint32Array).fill(0)

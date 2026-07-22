@@ -36,6 +36,24 @@ export interface HandleStats {
   readonly wrapTimeFormula: string
 }
 
+/**
+ * ROLLBACK-ONLY: the live prefix of the five identity/record regions plus the four allocator
+ * cursors — the state that makes a rollback restore HANDLE-STABLE (every entity keeps its original
+ * handle, every stored `eid` still resolves). The arrays are owned and sized by the caller
+ * (@ecsia/rollback); only `[0, denseLen)` of each is meaningful.
+ */
+export interface EntityIdentityImage {
+  sparse: Uint32Array
+  dense: Uint32Array
+  generation: Uint32Array
+  recordArchetypeId: Uint32Array
+  recordArchetypeRow: Uint32Array
+  aliveCount: number
+  denseLen: number
+  spawned: number
+  despawned: number
+}
+
 export class EntityStore {
   readonly layout: HandleLayout
   readonly #index: EntityIndex
@@ -214,6 +232,41 @@ export class EntityStore {
       archetypeId: this.#regions.recordArchetypeId.backing,
       archetypeRow: this.#regions.recordArchetypeRow.backing,
     }
+  }
+
+  /**
+   * ROLLBACK-ONLY (@ecsia/rollback capture): copy the live prefix of the five identity/record regions
+   * + the allocator cursors into `img`, whose arrays the caller has sized to at least `index.denseLen`.
+   * Never aliases a region view — a fallback grow can re-create it. Serial-phase only.
+   */
+  captureIdentity(img: EntityIdentityImage): void {
+    const n = this.#index.denseLen
+    img.denseLen = n
+    img.aliveCount = this.#index.aliveCount
+    img.spawned = this.#index.totalSpawned
+    img.despawned = this.#index.totalDespawned
+    const r = this.#regions
+    img.sparse.set(r.sparse.view.subarray(0, n), 0)
+    img.dense.set(r.dense.view.subarray(0, n), 0)
+    img.generation.set(r.generation.view.subarray(0, n), 0)
+    img.recordArchetypeId.set(r.recordArchetypeId.view.subarray(0, n), 0)
+    img.recordArchetypeRow.set(r.recordArchetypeRow.view.subarray(0, n), 0)
+  }
+
+  /**
+   * ROLLBACK-ONLY (@ecsia/rollback restore): write the captured identity/record prefix back IN PLACE
+   * and rewind the allocator cursors. Slots at/above the captured `denseLen` are left untouched —
+   * nothing reads them once the cursors are rewound. Serial-phase only.
+   */
+  restoreIdentity(img: EntityIdentityImage): void {
+    const n = img.denseLen
+    const r = this.#regions
+    r.sparse.view.set(img.sparse.subarray(0, n), 0)
+    r.dense.view.set(img.dense.subarray(0, n), 0)
+    r.generation.view.set(img.generation.subarray(0, n), 0)
+    r.recordArchetypeId.view.set(img.recordArchetypeId.subarray(0, n), 0)
+    r.recordArchetypeRow.view.set(img.recordArchetypeRow.subarray(0, n), 0)
+    this.#index.restoreCursors(img.aliveCount, n, img.spawned, img.despawned)
   }
 
   /** The full (generational) handle occupying `index` — the query engine's index→handle resolver. */

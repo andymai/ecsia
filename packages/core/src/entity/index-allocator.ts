@@ -103,6 +103,20 @@ export class EntityIndex {
     return this.#wrapped
   }
 
+  /**
+   * ROLLBACK-ONLY (@ecsia/rollback restore): rewind the four cursors to a captured
+   * checkpoint. Restoring the sparse/dense/generation regions WITHOUT rewinding these leaves the
+   * allocator minting past where the checkpoint ended (and `aliveCount === spawned - despawned`
+   * broken). Serial-phase only.
+   */
+  restoreCursors(aliveCount: number, denseLen: number, spawned: number, despawned: number): void {
+    const c = this.#cursors
+    c.aliveCount = aliveCount
+    c.denseLen = denseLen
+    c.spawned = spawned
+    c.despawned = despawned
+  }
+
   allocEntity(): EntityHandle {
     const c = this.#cursors
     {

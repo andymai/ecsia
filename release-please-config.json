@@ -53,6 +53,7 @@
     "packages/relations": {},
     "packages/scheduler": {},
     "packages/schema": {},
+    "packages/rollback": {},
     "packages/serialization": {},
     "packages/three": {}
   },
@@ -70,6 +71,7 @@
         "devtools",
         "react",
         "relations",
+        "rollback",
         "scheduler",
         "schema",
         "serialization",

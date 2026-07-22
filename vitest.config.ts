@@ -13,6 +13,7 @@ const alias = {
   '@ecsia/relations': pkg('relations'),
   '@ecsia/scheduler': pkg('scheduler'),
   '@ecsia/serialization': pkg('serialization'),
+  '@ecsia/rollback': pkg('rollback'),
   '@ecsia/kit': pkg('ecsia'),
   '@ecsia/three': pkg('three'),
   '@ecsia/react': pkg('react'),
