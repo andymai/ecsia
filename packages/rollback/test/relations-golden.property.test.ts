@@ -134,11 +134,12 @@ describe('@ecsia/rollback — RB-4 golden image WITH relations', () => {
     const run = startRun(mintingSchedule.length)
     const forward = simulate(run, mintingSchedule, 1, mintingSchedule.length)
 
-    // The counter rewinds but the maps do not: the pair-count / back-ref bookkeeping keeps describing
-    // pairs the restore revoked, so the replay's migrations no longer match the forward run's.
+    // The columns and the counter rewind, but the topology handed to the leg is the LAST frame's:
+    // the pair-count / back-ref bookkeeping keeps describing pairs the restore revoked, so the
+    // replay's migrations no longer match the forward run's.
     const baseline = run.images[4] as unknown as RelationLegs
     const topology = baseline.relations
-    baseline.relations = null
+    baseline.relations = (run.images[mintingSchedule.length] as unknown as RelationLegs).relations
     run.rb.restoreImage(run.images[4] as RollbackImage)
     baseline.relations = topology
 

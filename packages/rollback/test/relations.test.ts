@@ -247,6 +247,49 @@ describe('@ecsia/rollback — relations', () => {
     expect(f.rel.depthOf(child, f.ChildOf)).toBe(1)
   })
 
+  test('a surface created BEFORE createRelations still picks the leg up on a later capture', () => {
+    seq += 1
+    const Pos = defineComponent({ x: 'i32' }, { name: `rbrel_pos_${seq}` })
+    const world = createWorld({ components: [Pos], maxEntities: 64 })
+    const rb = createRollbackSurface(world)
+    // Capture while NO leg exists, so the surface probes for one and comes up empty. Resolution has
+    // to stay retryable: caching that miss would silently drop the topology from every later capture.
+    rb.captureImage(rb.newImage())
+
+    const rel = createRelations(world)
+    const Tags = rel.defineRelation(null)
+
+    const a = world.spawnWith([Pos, { x: 1 }])
+    const t = world.spawnWith([Pos, { x: 2 }])
+    rel.addPair(a, Tags, t)
+
+    const img = rb.newImage()
+    rb.captureImage(img)
+    rel.removePair(a, Tags, t)
+    expect([...rel.subjectsOf(Tags, t)]).toEqual([])
+
+    rb.restoreImage(img)
+    // The back-ref index lives ONLY in the leg's blob — the bitmask/column restore cannot repair it,
+    // so this is what proves the late-installed leg was actually found and captured through.
+    expect([...rel.subjectsOf(Tags, t)]).toEqual([a])
+    expect(rel.hasPair(a, Tags, t)).toBe(true)
+  })
+
+  test('an image captured before the relations install refuses to restore', () => {
+    seq += 1
+    const Pos = defineComponent({ x: 'i32' }, { name: `rbrel_pos_${seq}` })
+    const world = createWorld({ components: [Pos], maxEntities: 64 })
+    const rb = createRollbackSurface(world)
+    world.spawnWith([Pos, { x: 1 }])
+
+    const stale = rb.newImage()
+    rb.captureImage(stale) // no relations runtime yet: the image holds no topology
+
+    createRelations(world).defineRelation(null)
+    expect(() => rb.restoreImage(stale)).toThrow(/captured before the relations runtime was installed/)
+    expect(() => rb.restoreImage(stale)).toThrow(/Capture a fresh checkpoint after createRelations/)
+  })
+
   test('the cold-archetype and rich-field guards still throw with relations present', () => {
     const cold = fixture({ maxHotArchetypes: 1 })
     cold.spawn(1)

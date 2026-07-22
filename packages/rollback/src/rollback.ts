@@ -194,24 +194,35 @@ export function createRollbackSurface(world: World): RollbackSurface {
     return n
   }
 
+  // Memoized once resolved: a leg is installed exactly once per world and never uninstalled, so the
+  // steady state is a null check. It canNOT be resolved at construction time — createRelations(world)
+  // may run AFTER createRollbackSurface(world) — hence the re-probe while it is still absent.
+  let installedLeg: RelationsRollbackProvider | null = null
+
   /**
-   * The relations capture/restore leg, or null when the world has no relation defined. Throws rather
-   * than capturing partially if relations exist but the leg is missing — that combination means a
-   * @ecsia/relations older than this seam is attached, and a half-captured world restores silently
+   * The relations capture/restore leg, or null while no relations runtime is attached. Throws rather
+   * than capturing partially if relations are defined but the leg is missing — that combination means
+   * a @ecsia/relations older than this seam is attached, and a half-captured world restores silently
    * wrong (pair ids drift, archetype signatures diverge) instead of loudly.
    */
   const relationsLeg = (verb: string): RelationsRollbackProvider | null => {
-    const provider = world.__serialize.relations()
-    if (provider === undefined || provider.relations().length === 0) return null
+    if (installedLeg !== null) return installedLeg
     const leg = host.relations()
-    if (leg === undefined) {
+    if (leg !== undefined) {
+      installedLeg = leg
+      return leg
+    }
+    // No leg. Only an error if a relations runtime is nonetheless attached; `relations()` allocates a
+    // descriptor array, so it stays behind the cheap undefined check and off the steady-state path.
+    const provider = world.__serialize.relations()
+    if (provider !== undefined && provider.relations().length > 0) {
       throw unsupported(
         verb,
         'the world has relations defined but no relations rollback leg is installed, so the pair-id minting state would stay outside the image',
         'Upgrade @ecsia/relations to a version that installs the rollback provider.',
       )
     }
-    return leg
+    return null
   }
 
   const assertCoverable = (verb: string): void => {
@@ -327,6 +338,16 @@ export function createRollbackSurface(world: World): RollbackSurface {
       const img = image as unknown as Image
       assertOwned('restoreImage', img)
       if (img.seq === 0) throw new Error('rollback restoreImage(): the image has never been captured into')
+      if (leg !== null && img.relations === null) {
+        throw unsupported(
+          'restoreImage',
+          'this image was captured before the relations runtime was installed, so it holds no relation topology — ' +
+            'restoring it would leave the live pair maps, back-refs and pair-id counter describing a world the restored columns no longer match',
+          'Capture a fresh checkpoint after createRelations(world); an image taken before it cannot describe this world.',
+        )
+      }
+      // The inverse (an image WITH a topology and no leg) is unreachable: a leg is never uninstalled,
+      // and an image from a different surface is already refused by assertOwned.
 
       // Widest index the bitmask must be coherent over: the checkpoint's, or the current denseLen
       // when the re-sim minted past it (those slots must lose their bits).
@@ -342,7 +363,7 @@ export function createRollbackSurface(world: World): RollbackSurface {
       // Rewind the minting counter BEFORE the topology: a relation defined after the checkpoint is
       // dropped by the leg, and its ids must be re-mintable for the re-simulation to reproduce them.
       host.registry.nextComponentId = img.syntheticIdMark
-      if (leg !== null && img.relations !== null) leg.restore(img.relations)
+      if (leg !== null) leg.restore(img.relations)
       host.setTick(img.tick)
       host.resyncQueries()
     },
