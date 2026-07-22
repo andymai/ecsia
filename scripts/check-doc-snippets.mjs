@@ -135,6 +135,7 @@ async function main() {
         '@ecsia/relations': ['../../packages/relations/src/index.ts'],
         '@ecsia/scheduler': ['../../packages/scheduler/src/index.ts'],
         '@ecsia/serialization': ['../../packages/serialization/src/index.ts'],
+        '@ecsia/rollback': ['../../packages/rollback/src/index.ts'],
         '@ecsia/three': ['../../packages/three/src/index.ts'],
         '@ecsia/devtools': ['../../packages/devtools/src/index.ts'],
         '@ecsia/react': ['../../packages/react/src/index.ts'],

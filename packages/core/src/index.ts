@@ -146,6 +146,17 @@ export type {
 // / @ecsia/devtools introspection seam (read-only): the FULL archetype census + live-query
 // enumeration that __serialize (snapshot-shaped) does not reach. Imported by @ecsia/devtools via '.'.
 export type { InspectSurface, InspectArchetype, InspectQuery } from './inspect-surface.js'
+// Rollback seam (`world.__installRollback`): the core-private state a handle-stable whole-world
+// image must reach. Imported by @ecsia/rollback, which owns the image format + capture/restore.
+// TYPE-ONLY on purpose — the mechanism lives in the sibling, so a world that never rolls back
+// bundles none of it (opposite handle semantics to `__serialize`; see ./rollback-surface.ts).
+export type { RollbackHost } from './rollback-surface.js'
+export type { EntityStore, EntityIdentityImage } from './entity/index.js'
+export type { Bitmask } from './bitmask/index.js'
+export type { ArchetypeStore, Archetype } from './storage/index.js'
+export type { ChangeVersionStore } from './reactivity/index.js'
+// The leaf column memcpy (@ecsia/rollback's per-archetype capture reads through it).
+export { snapshotInto } from './memory/index.js'
 
 export { makeHandleLayout, ARCHETYPE_NONE, reserveEntityBlock, returnReservedIds } from './entity/index.js'
 export type { EntityReservation } from './entity/index.js'

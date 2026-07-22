@@ -101,6 +101,41 @@ export class Bitmask {
     return this.#words.subarray(index * this.#stride, index * this.#stride + this.#stride)
   }
 
+  /**
+   * ROLLBACK-ONLY (@ecsia/rollback capture): copy the membership words of entity indices
+   * [0, indexCount) into `out` and clone the out-of-stride overflow into `outSparse`. Returns the
+   * number of words written. There is NO rebuild-from-archetypes path for either half, so both are
+   * part of the image.
+   */
+  captureInto(out: Uint32Array, indexCount: number, outSparse: Map<number, Set<number>>): number {
+    this.#assertSerial()
+    const words = Math.min(indexCount * this.#stride, this.#words.length)
+    out.set(this.#words.subarray(0, words), 0)
+    outSparse.clear()
+    for (const [index, bits] of this.#sparse) outSparse.set(index, new Set(bits))
+    return words
+  }
+
+  /**
+   * ROLLBACK-ONLY (@ecsia/rollback restore): write the captured words back over indices
+   * [0, indexCount) and ZERO [indexCount, clearThroughIndex) — indices minted after the checkpoint
+   * must lose their bits, or a recycled slot inherits membership it never had.
+   */
+  restoreFrom(
+    src: Uint32Array,
+    indexCount: number,
+    clearThroughIndex: number,
+    sparse: ReadonlyMap<number, ReadonlySet<number>>,
+  ): void {
+    this.#assertSerial()
+    const words = Math.min(indexCount * this.#stride, this.#words.length)
+    this.#words.set(src.subarray(0, words), 0)
+    const clearEnd = Math.min(clearThroughIndex * this.#stride, this.#words.length)
+    if (clearEnd > words) this.#words.fill(0, words, clearEnd)
+    this.#sparse.clear()
+    for (const [index, bits] of sparse) this.#sparse.set(index, new Set(bits))
+  }
+
   /** Re-publish the region view after a fallback grow (the region length-tracks on the primary path). */
   rebind(): void {
     this.#words = this.#region.view

@@ -4,6 +4,7 @@
   "packages/ecsia": "0.23.0",
   "packages/react": "0.23.0",
   "packages/relations": "0.23.0",
+  "packages/rollback": "0.23.0",
   "packages/scheduler": "0.23.0",
   "packages/schema": "0.23.0",
   "packages/serialization": "0.23.0",

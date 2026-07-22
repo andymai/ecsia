@@ -302,6 +302,11 @@ export class Reactivity {
 
   // --- public predicate + delta ---------------------------------------
 
+  /** ROLLBACK-ONLY: the changeVersion column owner, so @ecsia/rollback can image its stamps. */
+  get changeVersionStore(): ChangeVersionStore {
+    return this.#changeVersion
+  }
+
   /** Enable per-row changeVersion stamping (a `.changed` predicate consumer / serializer exists). */
   enableChangeVersion(): void {
     this.#changeVersion.enabled = true

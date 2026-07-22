@@ -51,6 +51,7 @@ import type {
 } from './serialize-surface.js'
 import type { Column } from './memory/index.js'
 import type { InspectSurface, InspectArchetype, InspectQuery } from './inspect-surface.js'
+import type { RollbackHost } from './rollback-surface.js'
 import type { ComponentRuntime } from './component/index.js'
 import { Topics } from './topics/index.js'
 import type { TopicDef, TopicEventInit } from './topics/index.js'
@@ -249,6 +250,14 @@ export interface World {
    * / main-thread; @ecsia/core never imports @ecsia/devtools (acyclic boundary). Not for user code.
    */
   readonly __inspect: InspectSurface
+  /**
+   * Rollback attach seam. `@ecsia/rollback` calls this ONCE to obtain the core state a handle-stable
+   * whole-world image must reach (entity identity, the bitmask, the archetype census, changeVersion,
+   * the tick setter). Handed OUT like `__installRelations`, so core never imports the mechanism and a
+   * world that never rolls back ships none of it. Serial / main-thread. Not for user code; call
+   * createRollbackSurface(world) from @ecsia/rollback instead.
+   */
+  __installRollback(): RollbackHost
   /**
    * Merge ONE worker's staged value writes into the reactivity write log (   * ). `pairs` is the worker's raw `[index, componentId, …]` corral payload and `count` the number
    * of `(index, componentId)` entries. The scheduler drives this in ASCENDING worker-index order in
@@ -1254,6 +1263,18 @@ export function createWorld(options: WorldOptions = {}): World {
     },
     __serialize: serialize,
     __inspect: inspect,
+    __installRollback() {
+      return {
+        entities,
+        bitmask,
+        archetypes: storage.archetypes,
+        changeVersion: () => (reactivity as Reactivity).changeVersionStore,
+        setTick: (tick) => {
+          state.tick = tick >>> 0
+        },
+        resyncQueries: () => (engine as QueryEngine).rollbackResyncMembership(),
+      }
+    },
     __mergeWorkerWrites(pairs, count) {
       ;(reactivity as Reactivity).mergeWorkerWrites(pairs, count)
     },

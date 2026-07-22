@@ -233,6 +233,18 @@ export class ArchetypeStore {
     this.#archesWithHeld.clear()
   }
 
+  /**
+   * ROLLBACK-ONLY (@ecsia/rollback restore): set an archetype's occupancy directly, keeping
+   * the held-release set coherent. The caller writes the row list + columns itself; this is the one
+   * place the two occupancy words may be assigned outside alloc/remove.
+   */
+  rollbackSetOccupancy(arch: Archetype, count: number, held: number): void {
+    arch.count = count
+    arch.held = held
+    if (held > 0) this.#archesWithHeld.add(arch)
+    else this.#archesWithHeld.delete(arch)
+  }
+
   #coldAllocRow(arch: Archetype, handle: number): number {
     const index = this.#deps.handleIndex(handle)
     this.cold.archOf.set(index, arch.id)
