@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.26.0](https://github.com/andymai/ecsia/compare/relations-v0.25.0...relations-v0.26.0) (2026-07-22)
+
+
+### Features
+
+* **rollback:** capture relation topology, lifting the relations guard ([#161](https://github.com/andymai/ecsia/issues/161)) ([d15c16a](https://github.com/andymai/ecsia/commit/d15c16a1cd3cea8782f47c9dcdce2edfc8139379))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.26.0
+    * @ecsia/schema bumped to 0.26.0
+
 ## [0.25.0](https://github.com/andymai/ecsia/compare/relations-v0.24.0...relations-v0.25.0) (2026-07-22)
 
 
