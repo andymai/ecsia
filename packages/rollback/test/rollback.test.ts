@@ -4,7 +4,7 @@
 // emptied, and (d) the v1 guards fail fast instead of restoring a partial world.
 
 import { describe, expect, test } from 'vitest'
-import { createWorld, defineComponent, object, read, write } from '@ecsia/core'
+import { createWorld, defineComponent, object, onRemove, read, write } from '@ecsia/core'
 import type { EntityHandle, SerializeRelationProvider, World } from '@ecsia/core'
 import { createRollbackSurface } from '../src/index.js'
 import type { RollbackImage, RollbackSurface } from '../src/index.js'
@@ -64,7 +64,13 @@ function digest(image: RollbackImage): unknown {
     // entry for one created after an earlier capture carries no state the other image lacks.
     archetypes: [...img.archetypes.entries()]
       .filter(([, a]) => a.seq === img.seq && (a.count > 0 || a.held > 0))
-      .map(([id, a]) => [id, a.count, a.held, prefix(a.rows, a.count), a.cells.map((c) => prefix(c.data, c.length))]),
+      .map(([id, a]) => [
+        id,
+        a.count,
+        a.held,
+        prefix(a.rows, a.count + a.held), // the held (deferred-dead) range is part of the image
+        a.cells.map((c) => prefix(c.data, c.length)),
+      ]),
   }
 }
 
@@ -91,6 +97,61 @@ describe('@ecsia/rollback — capture / restore', () => {
     rb.restoreImage(img)
 
     expectIdentical(rb, img)
+  })
+
+  test('RB-6: a capture taken with deferred-dead (held) rows round-trips byte-identically', () => {
+    const { Pos, Vel } = defs()
+    const world = createWorld({ components: [Pos, Vel], maxEntities: 256 })
+    const rb = createRollbackSurface(world)
+    world.observe(onRemove(Pos), () => {}) // arms the deferred-dead row hold
+    const handles: EntityHandle[] = []
+    for (let i = 0; i < 4; i++) handles.push(world.spawnWith([Pos, { x: i, y: -i }], Vel))
+
+    // Despawn WITHOUT draining: the dying rows are held above [0, count) — `phase` is still 'serial',
+    // so this is a legal capture point.
+    world.despawn(handles[1] as EntityHandle)
+    world.despawn(handles[3] as EntityHandle)
+
+    const img = rb.newImage()
+    rb.captureImage(img)
+    const heldInImage = [...(img as unknown as ImageInternals).archetypes.values()].reduce((n, a) => n + a.held, 0)
+    expect(heldInImage).toBe(2)
+
+    rb.restoreImage(img)
+    expectIdentical(rb, img)
+  })
+
+  test('held rows keep their AT-CAPTURE values: onRemove reads the checkpoint, not post-capture bytes', () => {
+    const { Pos } = defs()
+    const world = createWorld({ components: [Pos], maxEntities: 256 })
+    const rb = createRollbackSurface(world)
+    const removed: number[] = []
+    world.observe(onRemove(Pos), (ref) => void removed.push((ref.read(Pos) as { x: number }).x))
+
+    const doomed = world.spawnWith([Pos, { x: 11, y: 0 }])
+    const keeper = world.spawnWith([Pos, { x: 22, y: 0 }])
+    world.frameReset()
+    world.despawn(doomed) // deferred: the row is HELD until the drain releases it
+
+    const img = rb.newImage()
+    rb.captureImage(img)
+
+    // Post-capture churn: the spawn evicts the held row and drops a NEW tenant's bytes into the slot
+    // the checkpoint's dead row occupied.
+    const late = world.spawnWith([Pos, { x: 99, y: 0 }])
+    world.entity(keeper).write(Pos).x = 77
+
+    rb.restoreImage(img)
+    expect(world.isAlive(late)).toBe(false)
+    expect(world.entity(keeper).read(Pos).x).toBe(22)
+
+    // Re-simulating past the restore evicts the held row again, propagating whatever the image put
+    // back into the observer's read location — post-capture bytes if the held range were not captured.
+    // (The rewound allocator re-mints `late`'s exact handle here; deterministic re-simulation is the point.)
+    world.spawnWith([Pos, { x: 55, y: 0 }])
+    world.observerDrain()
+
+    expect(removed).toEqual([11])
   })
 
   test('RB-1: restore is handle-stable — original handles, eid references and values survive', () => {

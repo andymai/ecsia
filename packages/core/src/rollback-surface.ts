@@ -25,7 +25,12 @@ export interface RollbackHost {
   readonly entities: EntityStore
   /** Membership words + the out-of-stride sparse overflow (no rebuild-from-archetypes path exists). */
   readonly bitmask: Bitmask
-  /** The FULL archetype census (`byId`) + the occupancy setter a restore commits through. */
+  /**
+   * The FULL archetype census (`byId`) + the occupancy setter a restore commits through. An image
+   * covers `[0, count + held)` of every row list / column: the deferred-dead HELD rows carry the
+   * values onRemove handlers read at the drain, so restoring the occupancy words without them would
+   * hand observers post-checkpoint bytes.
+   */
   readonly archetypes: ArchetypeStore
   /** Late-bound: reactivity is wired after storage, and the stamp column is allocated lazily. */
   changeVersion(): ChangeVersionStore

@@ -22,17 +22,26 @@ export interface RollbackImage {
  * The capture/restore handle for one world.
  *
  * WHAT AN IMAGE COVERS
- *   • per-archetype SoA columns (live rows only) + the dense row→handle list, count and held
+ *   • per-archetype SoA columns + the dense row→handle list over `[0, count + held)`, plus both
+ *     occupancy words. The HELD range (deferred-dead rows an onRemove observer has yet to read) is
+ *     part of the image: `world.phase === 'serial'` is equally true before the observer drain, so a
+ *     capture can legitimately see `held > 0` — restoring the occupancy without those rows' bytes
+ *     would fire removal observers with whatever the live world wrote there since.
  *   • the five entity identity/record regions + the four allocator cursors (handle stability)
  *   • the component bitmask: the u32 words AND the out-of-stride sparse overflow
  *   • the changeVersion stamps, when stamping is enabled
  *   • world.tick
  *
- * WHAT IT DELIBERATELY OMITS, and why that is sound: capture/restore run ONLY at a serial point
- * between frames, where every frame-transient structure is already empty — the write/shape log
- * rings, the Changed lists, the per-frame added/removed query flavors, the topic rings, and the
- * deferred-dead held rows' data. Not capturing them is what keeps the image small; it is also why
- * both verbs assert `world.phase === 'serial'`.
+ * WHAT IT DELIBERATELY OMITS: the frame-transient reactivity structures — the write/shape log rings,
+ * the Changed lists, the per-frame added/removed query flavors and the topic rings. A rollback ring
+ * checkpoints between frames, where those are empty; not capturing them is what keeps the image small.
+ *
+ * CONSEQUENCE — the EVENT STREAM is not rewound, only the STATE. Capturing mid-frame (serial phase is
+ * equally true before the observer drain) leaves those rings outside the image, so a despawn journaled
+ * after the capture still drains after a restore: the observer fires for an entity the restore brought
+ * back. Held rows ARE captured, so such an event reports its at-capture values rather than a live
+ * entity's — the values are sound, the event count/identity is not. Checkpoint at a frame boundary
+ * (after the drain) if a client must not observe revoked events.
  */
 export interface RollbackSurface {
   /** A fresh, empty image (its buffers grow on first capture). */
@@ -62,7 +71,7 @@ export interface RollbackSurface {
 interface ColumnCell {
   col: Column
   data: TypedArray
-  /** Elements written (count * stride). */
+  /** Elements written ((count + held) * stride). */
   length: number
 }
 
@@ -204,13 +213,15 @@ export function createRollbackSurface(world: World): RollbackSurface {
     entry.seq = img.seq
     entry.count = arch.count
     entry.held = arch.held
-    const count = arch.count
-    entry.rows = ensureU32(entry.rows, count)
-    entry.rows.set(arch.rows.subarray(0, count), 0)
+    // The held (deferred-dead) rows sit directly above the live region and are part of the image:
+    // their column bytes are what onRemove handlers read when the drain finally releases them.
+    const rowCount = arch.count + arch.held
+    entry.rows = ensureU32(entry.rows, rowCount)
+    entry.rows.set(arch.rows.subarray(0, rowCount), 0)
     let i = 0
     for (const set of arch.columnSets.values()) {
       for (const col of set.columns) {
-        const elements = count * col.layout.stride
+        const elements = rowCount * col.layout.stride
         let cell = entry.cells[i]
         // Re-resolve per capture: a cold→hot warm promotion attaches columns to an archetype that
         // had none, so the cell list is not fixed for an archetype id.
@@ -220,7 +231,7 @@ export function createRollbackSurface(world: World): RollbackSurface {
         } else if (cell.data.length < elements) {
           cell.data = scratchFor(col, elements)
         }
-        cell.length = snapshotInto(col, count, cell.data, 0)
+        cell.length = snapshotInto(col, rowCount, cell.data, 0)
         i += 1
       }
     }
@@ -236,7 +247,7 @@ export function createRollbackSurface(world: World): RollbackSurface {
       host.archetypes.rollbackSetOccupancy(arch, 0, 0)
       return
     }
-    arch.rows.set(entry.rows.subarray(0, entry.count), 0)
+    arch.rows.set(entry.rows.subarray(0, entry.count + entry.held), 0)
     for (const cell of entry.cells) writeBack(cell.col, cell.data, cell.length)
     host.archetypes.rollbackSetOccupancy(arch, entry.count, entry.held)
   }
