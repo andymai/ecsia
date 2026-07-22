@@ -8,6 +8,8 @@ import { createWorld, defineComponent, object, onRemove, read, write } from '@ec
 import type { EntityHandle, SerializeRelationProvider, World } from '@ecsia/core'
 import { createRollbackSurface } from '../src/index.js'
 import type { RollbackImage, RollbackSurface } from '../src/index.js'
+import { digest } from './image-digest.js'
+import type { ImageInternals } from './image-digest.js'
 
 // A ComponentDef binds to ONE world, so every test mints its own set.
 let seq = 0
@@ -17,60 +19,6 @@ function defs() {
     Pos: defineComponent({ x: 'f32', y: 'f32' }, { name: `rb_pos_${seq}` }),
     Vel: defineComponent({ dx: 'f32' }, { name: `rb_vel_${seq}` }),
     Link: defineComponent({ target: 'eid' }, { name: `rb_link_${seq}` }),
-  }
-}
-
-/** The image's private shape, read only to prove a restore is byte-identical. */
-interface ImageInternals {
-  seq: number
-  tick: number
-  identity: {
-    sparse: Uint32Array
-    dense: Uint32Array
-    generation: Uint32Array
-    recordArchetypeId: Uint32Array
-    recordArchetypeRow: Uint32Array
-    aliveCount: number
-    denseLen: number
-    spawned: number
-    despawned: number
-  }
-  bitmaskWords: Uint32Array
-  bitmaskWordCount: number
-  changeVersion: Uint32Array
-  changeVersionCount: number
-  bitmaskSparse: Map<number, Set<number>>
-  archetypes: Map<number, { seq: number; count: number; held: number; rows: Uint32Array; cells: { data: ArrayLike<number>; length: number }[] }>
-}
-
-const prefix = (a: ArrayLike<number>, n: number): number[] => Array.from(a).slice(0, n)
-
-/** Every meaningful byte + cursor + cloned map of an image, as plain comparable data. */
-function digest(image: RollbackImage): unknown {
-  const img = image as unknown as ImageInternals
-  const n = img.identity.denseLen
-  return {
-    tick: img.tick,
-    cursors: [img.identity.aliveCount, n, img.identity.spawned, img.identity.despawned],
-    sparse: prefix(img.identity.sparse, n),
-    dense: prefix(img.identity.dense, n),
-    generation: prefix(img.identity.generation, n),
-    recordArchetypeId: prefix(img.identity.recordArchetypeId, n),
-    recordArchetypeRow: prefix(img.identity.recordArchetypeRow, n),
-    bitmask: prefix(img.bitmaskWords, img.bitmaskWordCount),
-    bitmaskSparse: [...img.bitmaskSparse].map(([k, s]) => [k, [...s].sort((a, b) => a - b)]),
-    changeVersion: prefix(img.changeVersion, img.changeVersionCount),
-    // Empty archetypes are dropped: an archetype absent from an image restores to count 0, so an
-    // entry for one created after an earlier capture carries no state the other image lacks.
-    archetypes: [...img.archetypes.entries()]
-      .filter(([, a]) => a.seq === img.seq && (a.count > 0 || a.held > 0))
-      .map(([id, a]) => [
-        id,
-        a.count,
-        a.held,
-        prefix(a.rows, a.count + a.held), // the held (deferred-dead) range is part of the image
-        a.cells.map((c) => prefix(c.data, c.length)),
-      ]),
   }
 }
 
