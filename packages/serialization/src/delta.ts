@@ -326,7 +326,7 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
 // seen before has no shadow entry → its lanes differ from 0; to avoid spuriously emitting the initial
 // value, a fresh shadow cell is seeded to the current value and the row is kept (the first observation is
 // always emitted, matching "the receiver must learn the value at least once").
-interface ArchShadow {
+export interface ArchShadow {
   /** Shadow cell owner per row, as the FULL entity handle; NO_TENANT where never seeded. Cells are
    * row-positional, but rows are not stable identities — swap-pop, migration, and despawn/respawn
    * all hand a row to a new entity whose values must not be epsilon-compared against the previous
@@ -334,9 +334,17 @@ interface ArchShadow {
    * row FRESH: emitted and reseeded. */
   tenants: Uint32Array
   cols: Map<number, Float64Array>
+  /** Per-frame scratch for {@link computeRowFieldMasks}: `maskWords` u32 words per row. Carries no
+   * state across calls — only the rows passed to a given call are meaningful after it. */
+  masks: Uint32Array
+  maskWords: number
 }
 
 const NO_TENANT = 0xffff_ffff
+
+export function newArchShadow(count: number): ArchShadow {
+  return { tenants: new Uint32Array(count).fill(NO_TENANT), cols: new Map(), masks: new Uint32Array(0), maskWords: 1 }
+}
 
 function growTenants(archShadow: ArchShadow, count: number): void {
   if (archShadow.tenants.length >= count) return
@@ -345,39 +353,32 @@ function growTenants(archShadow: ArchShadow, count: number): void {
   archShadow.tenants = grown
 }
 
-function filterByEpsilon(
+// A persisted numeric column paired with its shadow cells, in the archetype's flat (component, column)
+// order. `key` is the flat index — the shadow key space, and the mapping a mask bit position resolves to.
+export interface EpsilonCol {
+  readonly key: number
+  readonly view: ArrayLike<number>
+  readonly stride: number
+  readonly fresh: boolean
+  readonly cells: Float64Array
+}
+
+// Enumerate the archetype's PERSISTED numeric columns in a stable (component, column) order, assigning
+// each a flat shadow column index. Non-persisted columns are excluded from the compare (they never reach
+// the wire, so a transient-field change must not defeat the epsilon drop) but still consume a flat index,
+// keeping the shadow key space parallel to the column order — persist flags are define-time constants, so
+// the index math is the only invariant that matters.
+function epsilonColumns(
   a: {
-    id: number
     count: number
-    rows: ArrayLike<number>
     components: readonly {
       columns: readonly ({ view: ArrayLike<number>; layout: { stride: number; element: ElementKind } } | undefined)[]
       fields: readonly { persist: boolean }[]
     }[]
   },
-  rows: readonly number[],
-  shadow: Map<number, ArchShadow>,
-  epsilon: number,
-): number[] {
-  let archShadow = shadow.get(a.id)
-  if (archShadow === undefined) {
-    archShadow = { tenants: new Uint32Array(a.count).fill(NO_TENANT), cols: new Map() }
-    shadow.set(a.id, archShadow)
-  }
-  growTenants(archShadow, a.count)
-  // Enumerate the archetype's PERSISTED numeric columns in a stable (component, column) order,
-  // assigning each a flat shadow column index. Non-persisted columns are excluded from the compare
-  // (they never reach the wire, so a transient-field change must not defeat the epsilon drop) but
-  // still consume a flat index, keeping the shadow key space parallel to the column order — persist
-  // flags are define-time constants, so the index math is the only invariant that matters.
-  interface Col {
-    readonly key: number
-    readonly view: ArrayLike<number>
-    readonly stride: number
-    readonly fresh: boolean
-    readonly cells: Float64Array
-  }
-  const cols: Col[] = []
+  archShadow: ArchShadow,
+): EpsilonCol[] {
+  const cols: EpsilonCol[] = []
   let flatIndex = 0
   for (const comp of a.components) {
     for (let i = 0; i < comp.columns.length; i++) {
@@ -399,25 +400,102 @@ function filterByEpsilon(
       flatIndex += 1
     }
   }
-  const kept: number[] = []
-  // Track which shadow cells were "seen" this emit for a fresh column, so a fresh column always emits the
-  // row's initial value (otherwise a brand-new column's first values would be silently dropped).
+  return cols
+}
+
+function growMasks(archShadow: ArchShadow, count: number, words: number): void {
+  if (archShadow.maskWords === words && archShadow.masks.length >= count * words) return
+  archShadow.maskWords = words
+  archShadow.masks = new Uint32Array(count * words)
+}
+
+/**
+ * Per-row, per-flat-column change bits vs the epsilon shadow. Bit `i` of row `r` (LSB-first across
+ * `archShadow.maskWords` u32 words per row, at `r * maskWords`) is set when `cols[i]` of that row is
+ * FRESH, the row's tenant changed (a new occupant's every column is new to the receiver), or some lane
+ * differs from the shadow by more than `epsilon`.
+ *
+ * Reads only — the shadow and tenants are updated by the caller, for EMITTED rows. Writes into a
+ * serializer-owned scratch buffer (no per-row allocation); only the rows in `rows` are written, so words
+ * for any other row are stale.
+ *
+ * CALLER CONTRACT — an empty mask does NOT mean "nothing to emit". `cols` covers only column-BACKED
+ * persisted fields, so an archetype whose persisted fields are all rich yields `cols.length === 0` and
+ * therefore zero mask words: a tenant change on such a row is invisible here and the row would be
+ * dropped by a bare `mask !== 0` test, silently stranding the new occupant on the receiver. Callers
+ * must test the tenant separately (as the epsilon filter does) rather than reducing to the mask alone.
+ */
+export function computeRowFieldMasks(
+  a: { count: number; rows: ArrayLike<number> },
+  rows: readonly number[],
+  archShadow: ArchShadow,
+  cols: readonly EpsilonCol[],
+  epsilon: number,
+): Uint32Array {
+  const words = Math.max(1, (cols.length + 31) >>> 5)
+  growMasks(archShadow, a.count, words)
+  const masks = archShadow.masks
   for (const r of rows) {
-    const occupant = a.rows[r] as number
-    const tenantChanged = archShadow.tenants[r] !== occupant
-    let exceeds = tenantChanged
-    if (!exceeds) {
-      for (const c of cols) {
+    const rowBase = r * words
+    for (let w = 0; w < words; w++) masks[rowBase + w] = 0
+    const tenantChanged = archShadow.tenants[r] !== (a.rows[r] as number)
+    for (let ci = 0; ci < cols.length; ci++) {
+      const c = cols[ci] as EpsilonCol
+      let changed = tenantChanged || c.fresh
+      if (!changed) {
         const base = r * c.stride
         for (let lane = 0; lane < c.stride; lane++) {
-          const cur = c.view[base + lane] as number
-          const prev = c.cells[base + lane] as number
-          if (c.fresh || Math.abs(cur - prev) > epsilon) {
-            exceeds = true
+          if (Math.abs((c.view[base + lane] as number) - (c.cells[base + lane] as number)) > epsilon) {
+            changed = true
             break
           }
         }
-        if (exceeds) break
+      }
+      if (changed) {
+        const w = rowBase + (ci >>> 5)
+        masks[w] = (masks[w] as number) | (1 << (ci & 31))
+      }
+    }
+  }
+  return masks
+}
+
+function filterByEpsilon(
+  a: {
+    id: number
+    count: number
+    rows: ArrayLike<number>
+    components: readonly {
+      columns: readonly ({ view: ArrayLike<number>; layout: { stride: number; element: ElementKind } } | undefined)[]
+      fields: readonly { persist: boolean }[]
+    }[]
+  },
+  rows: readonly number[],
+  shadow: Map<number, ArchShadow>,
+  epsilon: number,
+): number[] {
+  let archShadow = shadow.get(a.id)
+  if (archShadow === undefined) {
+    archShadow = newArchShadow(a.count)
+    shadow.set(a.id, archShadow)
+  }
+  growTenants(archShadow, a.count)
+  const cols = epsilonColumns(a, archShadow)
+  const masks = computeRowFieldMasks(a, rows, archShadow, cols, epsilon)
+  const words = archShadow.maskWords
+  const kept: number[] = []
+  for (const r of rows) {
+    const occupant = a.rows[r] as number
+    // A tenant change is checked separately, not read off the mask: an archetype whose only persisted
+    // fields are rich (column-less) has NO mask bits at all, and its new occupant must still emit.
+    let exceeds = archShadow.tenants[r] !== occupant
+    if (!exceeds) {
+      const rowBase = r * words
+      for (let w = 0; w < words; w++) {
+        if (masks[rowBase + w] !== 0) {
+          exceeds = true
+          break
+        }
       }
     }
     if (exceeds) {
