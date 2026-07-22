@@ -1,0 +1,45 @@
+packages/serialization/test/epsilon-shadow-identity.test.ts
+  s_8d9683fb10832a::t_75fea67e67b5cf 91-207
+  s_8d9683fb10832a::t_5d0dc047092010 7,11-13
+packages/serialization/test/epsilon-byte-identity.fixture.ts
+  s_8d9683fb10832a::t_5b7bfa7d536d8a 44-45,47-48,51-53,57,60-62,67,75,79,83
+  s_8d9683fb10832a::t_f3bf5259decd4e 63
+  s_8d9683fb10832a::t_36bde905434c4f 21,30-31
+  s_8d9683fb10832a::t_e4034bd511f5d1 1-20,22-29,32-43,46,49-50,54-56,58-59,64-66,68-74,76-78,80-82,84-90
+packages/serialization/src/delta.ts
+  s_8d9683fb10832a::t_c37122bffb1d1b 448-451
+  s_8d9683fb10832a::t_ecb0ca8ed96240 329,358
+  s_8d9683fb10832a::t_d75c4eba01cb57 371
+  s_8d9683fb10832a::t_0ebdeda2ed9ef3 473-491
+  s_8d9683fb10832a::t_55925ce055dd19 337-340,346-348,356-357,359-370,379-381,403-431,433-439,442-443,447,452-455,467,469
+  s_8d9683fb10832a::t_de5c259dd38409 345
+  s_8d9683fb10832a::t_3a9c1f7f14a322 456-458,464-466
+  s_8d9683fb10832a::t_89910ea7e8fb55 468
+  s_8d9683fb10832a::t_89440b020de05f 470-472
+  s_8d9683fb10832a::t_4b38825d79177d 492
+  s_2eaeb10bf68d42::t_3d068d999e086c 459-463
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "4e61f9a0f07e508f1c64b835b2ffe569ea528d4f",
+  "prompts": {},
+  "sessions": {
+    "s_2eaeb10bf68d42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-abf99ea99a17707b9",
+        "model": "unknown"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    },
+    "s_8d9683fb10832a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4bc81bdc-d97f-48ea-8bf0-8f57be4510ce",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
