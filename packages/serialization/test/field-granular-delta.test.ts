@@ -212,13 +212,11 @@ describe('field-granular deltas — the receiver lands exactly where component g
   })
 
   it('structural churn composes: spawn, despawn and migration keep the two receivers identical', () => {
-    const Tag = defineComponent({}, { name: 'tag' })
     const mk = (): { world: World; W: ComponentDef<Schema>; T: ComponentDef<Schema> } => {
       const W = defineComponent(wideSchema(6) as Schema, { name: 'wide' }) as ComponentDef<Schema>
       const T = defineComponent({}, { name: 'tag' }) as ComponentDef<Schema>
       return { world: createWorld({ components: [W, T] }), W, T }
     }
-    void Tag
     const src = mk()
     const ents: EntityHandle[] = []
     for (let i = 0; i < 6; i++) {
@@ -277,6 +275,185 @@ describe('field-granular deltas — the receiver lands exactly where component g
 
     const mb = remap.get(b) as EntityHandle
     expect((readRow(dst.world, dst.L, mb) as unknown as { text: string }).text).toBe('second')
+  })
+})
+
+// A frozen field-granular wire golden. Row grouping is an INTERNAL choice of key, but the groups it
+// produces — and the order it produces them in — are the emitted bytes. This pins both against a
+// grouping refactor; a failure means the block partition or its order moved.
+describe('field-granular SECTION V is byte-frozen', () => {
+  const goldenFrames = (): Uint8Array[] => {
+    const nFields = 6
+    const W = defineComponent(wideSchema(nFields) as Schema, { name: 'wide' }) as ComponentDef<Schema>
+    const Tag = defineTag('t') as unknown as ComponentDef<Schema>
+    const world = createWorld({ components: [W, Tag] })
+    // 12 entities over TWO archetypes (9 without the tag, 3 with): the 9-row one is wide enough for
+    // multi-group emission, the 3-row one always trips the degenerate guard — both paths, one stream.
+    const ents = Array.from({ length: 12 }, (_, i) => (i % 4 === 0 ? world.spawnWith(W, Tag) : world.spawnWith(W)))
+    for (const e of ents) for (let f = 0; f < nFields; f++) writeField(rowOf(world, W, e), 'f' + f, SENTINEL)
+    const ser = createDeltaSerializer(world, world.currentTick(), { granularity: 'field' })
+    const frames: Uint8Array[] = []
+    const step = (fn: () => void): void => {
+      world.advanceTick()
+      fn()
+      frames.push(ser.deltaCopy())
+    }
+    step(() => ents.forEach((e, i) => writeField(rowOf(world, W, e), 'f0', i))) // fresh: whole rows
+    step(() => ents.forEach((e) => writeField(rowOf(world, W, e), 'f2', 1))) // one uniform group
+    // TWO groups, and the SECOND one occurs first in row order — so the emission order is observable.
+    step(() => ents.forEach((e, i) => writeField(rowOf(world, W, e), i % 2 === 0 ? 'f3' : 'f1', i)))
+    step(() =>
+      ents.forEach((e, i) => {
+        writeField(rowOf(world, W, e), 'f' + (i % 3), i) // three groups…
+        if (i % 2 === 0) writeField(rowOf(world, W, e), 'f4', i) // …split further: hits the fallback
+      }),
+    )
+    step(() => ents.forEach((e, i) => (i < 7 ? writeField(rowOf(world, W, e), 'f5', i) : undefined)))
+    step(() => {
+      /* empty frame */
+    })
+    return frames
+  }
+
+  it('reproduces the golden field-granular stream', () => {
+    const frames = goldenFrames()
+    expect(frames.map((f) => f.byteLength)).toEqual([644, 336, 320, 468, 244, 36]) // fails first, and legibly
+    const h = createHash('sha256')
+    for (const f of frames) h.update(f)
+    expect(h.digest('hex')).toBe('9740fd8afc28fa271efe4b8b2534b9a9db8dcfb2f22a69de9260080c142f06e9')
+  })
+})
+
+// Two index namespaces meet here. The change mask, the persisted-column list and the wire ordinal
+// all count COLUMN-BACKED fields only (`ctor !== null`), while a component's canonical field index
+// counts every field including the rich ones — which ride SECTION R on a separate schedule. A
+// component interleaving rich and numeric fields is where an off-by-namespace bug surfaces: the
+// wire ordinal of a numeric field sitting AFTER a rich one differs from its schema field index.
+describe('field granularity across mixed rich + numeric components', () => {
+  interface Mixed {
+    world: World
+    // Rich in the MIDDLE, and a numeric field after two rich ones.
+    A: ComponentDef<Schema>
+    // Rich FIRST: every numeric column of B sits after a rich field.
+    B: ComponentDef<Schema>
+    // Rich LAST: the trailing case, where the namespaces happen to agree.
+    C: ComponentDef<Schema>
+  }
+  const mkMixed = (): Mixed => {
+    const A = defineComponent(
+      { hp: 'i32', name: 'string', pos: vec3(), meta: object<{ k: number }>(), armor: 'f32' },
+      { name: 'a' },
+    ) as ComponentDef<Schema>
+    const B = defineComponent({ label: 'string', vx: 'f32', vy: 'f64' }, { name: 'b' }) as ComponentDef<Schema>
+    const C = defineComponent({ x: 'f32', y: 'f32', note: 'string' }, { name: 'c' }) as ComponentDef<Schema>
+    return { world: createWorld({ components: [A, B, C] }), A, B, C }
+  }
+  const NUMERIC: readonly (readonly [keyof Mixed & ('A' | 'B' | 'C'), string])[] = [
+    ['A', 'hp'],
+    ['A', 'pos'],
+    ['A', 'armor'],
+    ['B', 'vx'],
+    ['B', 'vy'],
+    ['C', 'x'],
+    ['C', 'y'],
+  ]
+  const richOf = (m: Mixed, e: EntityHandle, comp: 'A' | 'B' | 'C', key: string): unknown =>
+    (m.world.entity(e).read(m[comp]) as unknown as Record<string, unknown>)[key]
+  const setRich = (m: Mixed, e: EntityHandle, comp: 'A' | 'B' | 'C', key: string, value: unknown): void => {
+    ;(m.world.entity(e).write(m[comp]) as unknown as Record<string, unknown>)[key] = value
+  }
+
+  const scenario = (): { src: Mixed; dst: Mixed; ents: EntityHandle[]; remap: Map<EntityHandle, EntityHandle> } => {
+    const src = mkMixed()
+    // Enough rows sharing a mask to clear the degenerate guard, so the SUBSET encoding is exercised.
+    const ents = Array.from({ length: 8 }, () => src.world.spawnWith(src.A, src.B, src.C))
+    for (const e of ents) {
+      for (const [comp, key] of NUMERIC) writeField(rowOf(src.world, src[comp], e), key, SENTINEL)
+      setRich(src, e, 'A', 'name', 'name-0')
+      setRich(src, e, 'A', 'meta', { k: 0 })
+      setRich(src, e, 'B', 'label', 'label-0')
+      setRich(src, e, 'C', 'note', 'note-0')
+    }
+    const dst = mkMixed()
+    const res = createSnapshotDeserializer(dst.world).load(createSnapshotSerializer(src.world).snapshotCopy(), 'replace')
+    return { src, dst, ents, remap: res.remap as Map<EntityHandle, EntityHandle> }
+  }
+
+  const expectMirrored = (s: { src: Mixed; dst: Mixed; ents: EntityHandle[]; remap: Map<EntityHandle, EntityHandle> }): void => {
+    for (const e of s.ents) {
+      const local = s.remap.get(e) as EntityHandle
+      for (const [comp, key] of NUMERIC) {
+        expect(lanesOf(readRow(s.dst.world, s.dst[comp], local), key)).toEqual(
+          lanesOf(readRow(s.src.world, s.src[comp], e), key),
+        )
+      }
+      for (const [comp, key] of [['A', 'name'], ['A', 'meta'], ['B', 'label'], ['C', 'note']] as const) {
+        expect(richOf(s.dst, local, comp, key)).toEqual(richOf(s.src, e, comp, key))
+      }
+    }
+  }
+
+  it('only a numeric field AFTER a rich one changes: it lands on the right column, nothing else moves', () => {
+    const s = scenario()
+    const ser = createDeltaSerializer(s.src.world, s.src.world.currentTick(), { granularity: 'field' })
+    applyDelta(s.dst.world, ser.deltaCopy(), s.remap)
+
+    s.src.world.advanceTick()
+    for (const e of s.ents) {
+      writeField(rowOf(s.src.world, s.src.B, e), 'vy', 42) // B: rich FIRST, so vy is wire ordinal 1
+      writeField(rowOf(s.src.world, s.src.A, e), 'armor', 7) // A: two rich fields precede armor
+    }
+    applyDelta(s.dst.world, ser.deltaCopy(), s.remap)
+
+    expectMirrored(s)
+    for (const e of s.ents) {
+      const local = s.remap.get(e) as EntityHandle
+      for (const [comp, key] of NUMERIC) {
+        if (key === 'vy' || key === 'armor') continue
+        expect(lanesOf(readRow(s.dst.world, s.dst[comp], local), key)[0]).toBe(SENTINEL)
+      }
+    }
+  })
+
+  it('only the RICH field changes: SECTION R still carries it and no numeric column is touched', () => {
+    const s = scenario()
+    const ser = createDeltaSerializer(s.src.world, s.src.world.currentTick(), { granularity: 'field' })
+    applyDelta(s.dst.world, ser.deltaCopy(), s.remap)
+
+    s.src.world.advanceTick()
+    for (const e of s.ents) {
+      setRich(s.src, e, 'A', 'name', 'renamed')
+      setRich(s.src, e, 'C', 'note', 'annotated')
+    }
+    applyDelta(s.dst.world, ser.deltaCopy(), s.remap)
+
+    expectMirrored(s)
+    for (const e of s.ents) {
+      const local = s.remap.get(e) as EntityHandle
+      expect(richOf(s.dst, local, 'A', 'name')).toBe('renamed')
+      for (const [comp, key] of NUMERIC) {
+        expect(lanesOf(readRow(s.dst.world, s.dst[comp], local), key)[0]).toBe(SENTINEL)
+      }
+    }
+  })
+
+  it('a mixed write across all three components round-trips every field', () => {
+    const s = scenario()
+    const ser = createDeltaSerializer(s.src.world, s.src.world.currentTick(), { granularity: 'field' })
+    applyDelta(s.dst.world, ser.deltaCopy(), s.remap)
+
+    for (let tick = 1; tick <= 4; tick++) {
+      s.src.world.advanceTick()
+      s.ents.forEach((e, i) => {
+        writeField(rowOf(s.src.world, s.src.A, e), 'hp', tick * 10 + i)
+        writeField(rowOf(s.src.world, s.src.A, e), 'pos', tick + i)
+        writeField(rowOf(s.src.world, s.src.C, e), 'y', tick * 3)
+        if (i % 2 === 0) writeField(rowOf(s.src.world, s.src.B, e), 'vx', tick) // a second mask group
+        if (i % 3 === 0) setRich(s.src, e, 'B', 'label', `label-${tick}`)
+      })
+      applyDelta(s.dst.world, ser.deltaCopy(), s.remap)
+      expectMirrored(s)
+    }
   })
 })
 

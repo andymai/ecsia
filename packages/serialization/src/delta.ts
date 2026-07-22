@@ -560,27 +560,54 @@ function writeFieldGranularBlocks(
   persisted: readonly PersistedComponentColumns[],
 ): number {
   const { rows, masks, words } = selected
-  const groups = new Map<string, number[]>()
+  // Grouping allocates per GROUP, never per row: a row's mask words hash to a numeric bucket key and
+  // ties are resolved by comparing the words themselves. `groups` is in first-occurrence order, which
+  // is the emission order — the wire depends on it.
+  const groups: number[][] = []
+  const buckets = new Map<number, number[]>()
   for (const r of rows) {
-    let key = ''
-    for (let w = 0; w < words; w++) key += (masks[r * words + w] as number).toString(36) + '.'
-    const g = groups.get(key)
-    if (g === undefined) groups.set(key, [r])
-    else g.push(r)
+    const base = r * words
+    let hash = masks[base] as number
+    for (let w = 1; w < words; w++) hash = (Math.imul(hash, 0x01000193) ^ (masks[base + w] as number)) | 0
+    let bucket = buckets.get(hash)
+    if (bucket === undefined) {
+      bucket = []
+      buckets.set(hash, bucket)
+    }
+    let group: number[] | undefined
+    for (const gi of bucket) {
+      const candidate = groups[gi] as number[]
+      const other = (candidate[0] as number) * words
+      let same = true
+      for (let w = 0; w < words; w++) {
+        if (masks[base + w] !== masks[other + w]) {
+          same = false
+          break
+        }
+      }
+      if (same) {
+        group = candidate
+        break
+      }
+    }
+    if (group === undefined) {
+      bucket.push(groups.length)
+      groups.push([r])
+    } else group.push(r)
   }
   const all = restrictToMask(persisted, masks, 0, 0)
-  if (groups.size * FIELD_GROUP_MIN_ROWS > rows.length) {
+  if (groups.length * FIELD_GROUP_MIN_ROWS > rows.length) {
     writeValueArchBlock(cur, a, rows, persisted, undefined, all.ordinals)
     return 1
   }
-  for (const grouped of groups.values()) {
+  for (const grouped of groups) {
     // An all-clear mask means the row was kept for a reason the columns cannot express (a tenant
     // change in a column-less archetype); emit the whole row rather than an empty block.
     const sub = restrictToMask(persisted, masks, (grouped[0] as number) * words, words)
     const cols = sub.entries.length > 0 ? sub : { entries: persisted, ordinals: all.ordinals }
     writeValueArchBlock(cur, a, grouped, cols.entries, undefined, cols.ordinals)
   }
-  return groups.size
+  return groups.length
 }
 
 // The persisted columns whose mask bit is set, plus each kept column's PER-COMPONENT persisted
