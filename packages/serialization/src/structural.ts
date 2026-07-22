@@ -179,21 +179,42 @@ export function synthEntityAdd(
   isConcealed: (handle: number, componentId: number) => boolean,
   isHidden: (handle: number) => boolean,
 ): void {
-  const s = world.__serialize
   cur.u8(DeltaOp.EntityCreate)
   cur.u32(handle >>> 0)
   for (const cid of arch.signature) {
     if (!realComponentIds.has(cid) || isConcealed(handle, cid)) continue
-    cur.u8(DeltaOp.ComponentAdd)
-    cur.u32(handle >>> 0)
-    cur.u32(cid >>> 0)
-    const dst = s.columnsOf(handle as EntityHandle, cid as ComponentId)
-    if (dst === null) {
-      cur.u16(0)
-    } else {
-      writeComponentFieldValues(cur, dst.columns as readonly { view: { [i: number]: number }; layout: { stride: number } }[], dst.fields, dst.row, isHidden)
-    }
+    emitComponentAdd(cur, world, handle, cid, isHidden)
   }
+}
+
+// One ComponentAdd op carrying the component's CURRENT values (a value-less u16 0 for a tag). Shared by
+// synthEntityAdd (enter) and the filtered stream's component-REVEAL transition. `isHidden` masks eid
+// lanes pointing at a target the client cannot see.
+export function emitComponentAdd(
+  cur: WriteCursor,
+  world: World,
+  handle: number,
+  componentId: number,
+  isHidden?: (handle: number) => boolean,
+): void {
+  const s = world.__serialize
+  cur.u8(DeltaOp.ComponentAdd)
+  cur.u32(handle >>> 0)
+  cur.u32(componentId >>> 0)
+  const dst = s.columnsOf(handle as EntityHandle, componentId as ComponentId)
+  if (dst === null) {
+    cur.u16(0)
+  } else {
+    writeComponentFieldValues(cur, dst.columns as readonly { view: { [i: number]: number }; layout: { stride: number } }[], dst.fields, dst.row, isHidden)
+  }
+}
+
+// One ComponentRemove op — the filtered stream's component-CONCEAL transition (a component that became
+// concealed on a still-visible entity). Idempotent on the receiver if it never held the component.
+export function emitComponentRemove(cur: WriteCursor, handle: number, componentId: number): void {
+  cur.u8(DeltaOp.ComponentRemove)
+  cur.u32(handle >>> 0)
+  cur.u32(componentId >>> 0)
 }
 
 // `isHidden`, when supplied (filtered view stream), masks an `eid` field's value to NO_ENTITY (-1)

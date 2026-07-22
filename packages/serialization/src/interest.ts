@@ -38,7 +38,7 @@ import {
 } from './format.js'
 import type { PersistedComponentColumns } from './format.js'
 import { collectChangedRows, writeValueArchBlock } from './delta.js'
-import { emitEntityDestroy, emitStructuralRecord, synthEntityAdd } from './structural.js'
+import { emitComponentAdd, emitComponentRemove, emitEntityDestroy, emitStructuralRecord, synthEntityAdd } from './structural.js'
 import { writeRegistrySection } from './snapshot.js'
 import { writePairPayload } from './payload.js'
 import type { ReplicationMessage } from './replication.js'
@@ -147,9 +147,25 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
   const deltaCur = new WriteCursor(8 * 1024)
   const baselineCur = new WriteCursor(16 * 1024)
   let prevVisible = new Set<number>()
+  // Per still-tracked visible entity, the REAL component ids concealed as of its last emitted message
+  // (SPARSE — absent ⇒ nothing concealed). Drives component reveal/conceal transitions across ticks;
+  // only needed when `conceal` is dynamic, since a static `hideComponents` set never flips for a
+  // stably-present component. Left empty (and never consulted) when `conceal` is undefined.
+  const concealedByEntity = new Map<number, Set<number>>()
+  const dynamicConceal = conceal !== undefined
 
   function isConcealed(handle: number, componentId: number): boolean {
     return hide.has(componentId) || (conceal !== undefined && conceal(handle as EntityHandle, componentId as ComponentId))
+  }
+
+  function concealedSetOf(arch: SerializeArchetype, handle: number, realComponentIds: ReadonlySet<number>): Set<number> {
+    const set = new Set<number>()
+    for (const cid of arch.signature) if (realComponentIds.has(cid) && isConcealed(handle, cid)) set.add(cid)
+    return set
+  }
+  function trackConcealed(handle: number, concealed: Set<number>): void {
+    if (concealed.size > 0) concealedByEntity.set(handle, concealed)
+    else concealedByEntity.delete(handle)
   }
 
   function materializeVisible(): Set<number> {
@@ -215,11 +231,35 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
       const loc = shared.resolveArch(h)
       if (loc === undefined) continue // cold archetype — v1 limitation
       synthEntityAdd(cur, world, loc.arch, h, shared.realComponentIds, isConcealed, isHidden)
+      if (dynamicConceal) trackConcealed(h, concealedSetOf(loc.arch, h, shared.realComponentIds))
     }
     // (3) Leave: a conceal-flagged destroy for each still-alive entity that left the view.
     for (const h of sortedAsc(left)) {
+      if (dynamicConceal) concealedByEntity.delete(h)
       if (shared.realDestroyed.has(h)) continue
       emitEntityDestroy(cur, h, true)
+    }
+    // (4) Component-level transitions on STILL-VISIBLE entities whose per-entity conceal state flipped
+    // this tick: a REVEALED component needs an explicit add (its unchanged value isn't in SECTION V),
+    // a NEWLY-CONCEALED one an explicit remove (else stale data lingers on the client). Only reachable
+    // when `conceal` is dynamic. Deterministic: entities by handle, components in signature order.
+    if (dynamicConceal) {
+      const stillVisible: number[] = []
+      for (const h of nowVisible) if (prevVisible.has(h) && !entered.has(h)) stillVisible.push(h)
+      stillVisible.sort((a, b) => a - b)
+      for (const h of stillVisible) {
+        const loc = shared.resolveArch(h)
+        if (loc === undefined) continue
+        const nowConcealed = concealedSetOf(loc.arch, h, shared.realComponentIds)
+        const prev = concealedByEntity.get(h)
+        for (const cid of loc.arch.signature) {
+          const was = prev?.has(cid) ?? false
+          const now = nowConcealed.has(cid)
+          if (was && !now) emitComponentAdd(cur, world, h, cid, isHidden) // revealed → full current values
+          else if (!was && now) emitComponentRemove(cur, h, cid) // newly concealed → drop on the client
+        }
+        trackConcealed(h, nowConcealed)
+      }
     }
     let flags = FLAG_IS_DELTA | FLAG_IS_FILTERED
     if (cur.pos > structStart) flags |= FLAG_HAS_STRUCTURAL
@@ -292,6 +332,9 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
     const groups: Group[] = []
     const groupByKey = new Map<string, Group>()
     let aliveCount = 0
+    // A baseline is a full resync: rebuild the concealment tracking from scratch so the next delta
+    // chains from exactly the non-concealed components this image emits.
+    if (dynamicConceal) concealedByEntity.clear()
     for (const a of s.archetypes()) {
       for (let r = 0; r < a.count; r++) {
         const h = a.rows[r] as number
@@ -300,6 +343,7 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
         for (const cid of a.signature) {
           if (realComponentIds.has(cid) && isConcealed(h, cid)) concealed.add(cid)
         }
+        if (dynamicConceal) trackConcealed(h, concealed)
         const key = a.id + '|' + [...concealed].sort((x, y) => x - y).join(',')
         let g = groupByKey.get(key)
         if (g === undefined) {

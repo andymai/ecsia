@@ -252,6 +252,69 @@ describe('interest — component concealment strips a hidden component from a vi
   })
 })
 
+describe('interest — dynamic concealment emits component transitions on a still-visible entity', () => {
+  it('conceal-after-reveal: Hand becomes concealed → a ComponentRemove drops it; later changes never appear', () => {
+    const P = defP()
+    const H = defHand()
+    const V = defineTag('vis') as unknown as ComponentDef<Schema>
+    const src = createWorld({ components: [P, H, V] })
+    const P2 = defP()
+    const H2 = defHand()
+    const V2 = defineTag('vis') as unknown as ComponentDef<Schema>
+    const dst = createWorld({ components: [P2, H2, V2] })
+    const stream = createReplicationStream(src)
+    const receiver = createReplicationReceiver(dst)
+    let hideHand = false
+    const view = stream.view({ visible: src.query(has(V)), conceal: (_e, c) => hideHand && c === (H.id as ComponentId) })
+
+    const a = src.spawnWith(P, H, V)
+    ;(src.entity(a).write(P) as { x: number }).x = 1
+    ;(src.entity(a).write(H) as { secret: number }).secret = 5
+    receiver.apply(view.baseline())
+    const localA = receiver.remap.get(a) as EntityHandle
+    expect(dst.has(localA, H2)).toBe(true) // revealed at baseline
+    expect((dst.entity(localA).read(H2) as { secret: number }).secret).toBeCloseTo(5)
+
+    src.advanceTick()
+    hideHand = true // Hand becomes concealed — no value change this tick
+    receiver.apply(view.delta())
+    expect(dst.has(localA, H2)).toBe(false) // ComponentRemove dropped it
+
+    src.advanceTick()
+    ;(src.entity(a).write(H) as { secret: number }).secret = 999 // a further concealed change
+    receiver.apply(view.delta())
+    expect(dst.has(localA, H2)).toBe(false)
+  })
+
+  it('reveal-after-conceal: Hand becomes revealed → a ComponentAdd carries its CURRENT value even if unchanged', () => {
+    const P = defP()
+    const H = defHand()
+    const V = defineTag('vis') as unknown as ComponentDef<Schema>
+    const src = createWorld({ components: [P, H, V] })
+    const P2 = defP()
+    const H2 = defHand()
+    const V2 = defineTag('vis') as unknown as ComponentDef<Schema>
+    const dst = createWorld({ components: [P2, H2, V2] })
+    const stream = createReplicationStream(src)
+    const receiver = createReplicationReceiver(dst)
+    let hideHand = true
+    const view = stream.view({ visible: src.query(has(V)), conceal: (_e, c) => hideHand && c === (H.id as ComponentId) })
+
+    const a = src.spawnWith(P, H, V)
+    ;(src.entity(a).write(P) as { x: number }).x = 1
+    ;(src.entity(a).write(H) as { secret: number }).secret = 7
+    receiver.apply(view.baseline())
+    const localA = receiver.remap.get(a) as EntityHandle
+    expect(dst.has(localA, H2)).toBe(false) // concealed at baseline
+
+    src.advanceTick()
+    hideHand = false // reveal — Hand's value is NOT touched this tick
+    receiver.apply(view.delta())
+    expect(dst.has(localA, H2)).toBe(true) // ComponentAdd materialized it
+    expect((dst.entity(localA).read(H2) as { secret: number }).secret).toBeCloseTo(7) // current value
+  })
+})
+
 describe('interest — a relation pair to a HIDDEN entity does not leak the hidden handle', () => {
   it('a PairAdd from a visible subject to an invisible target is dropped from the view (no target handle on the wire)', () => {
     const P = defP()
