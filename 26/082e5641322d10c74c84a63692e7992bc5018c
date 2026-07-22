@@ -1,0 +1,70 @@
+packages/serialization/src/delta.ts
+  s_8d9683fb10832a::t_f64807030bff4a 17,36
+  s_8d9683fb10832a::t_c3825e7363650d 161,166-167,183
+  s_8d9683fb10832a::t_b487b41a765cc4 696-699,705,725-734
+  s_8d9683fb10832a::t_7838daab3ea4f5 677-695,700-704,706-724,735-740
+packages/serialization/src/replication.ts
+  s_8d9683fb10832a::t_9e6b0ccac63a42 178-186
+  s_8d9683fb10832a::t_23f30825ec678b 94-105
+  s_8d9683fb10832a::t_47c49209151ec0 25-26
+  s_8d9683fb10832a::t_ae24e492e2c7e4 122-145
+packages/serialization/src/index.ts
+  s_8d9683fb10832a::t_9e3e36d564b0b0 59-62
+  s_8d9683fb10832a::t_ca5be2f57cd0d5 72-73
+packages/ecsia/src/index.ts
+  s_8d9683fb10832a::t_7ff42edc2791f2 207-209
+packages/serialization/test/m10-interest.unit.test.ts
+  s_8d9683fb10832a::t_a187be8976712b 9,12-19
+  s_8d9683fb10832a::t_89362dbccab01d 254-262,266,268-276,279-280,282-283
+  s_8d9683fb10832a::t_79af7697311618 284-352
+  s_8d9683fb10832a::t_1ced15c30288ee 1-8,10-11,20-133,135-253
+  s_8d9683fb10832a::t_d7aa8a2f5e3498 134
+  s_8d9683fb10832a::t_edb539060a337d 263-265,267,277-278,281
+website/guide/serialization.md
+  s_8d9683fb10832a::t_6cbc3ed17d9e83 242-250
+  s_8d9683fb10832a::t_c93c5df1d10de9 189-241
+packages/serialization/test/m10-interest.property.test.ts
+  s_8d9683fb10832a::t_9c9822063f1b13 1-139,141-142,151,159-160,163-168
+  s_8d9683fb10832a::t_b8c6ea49183eb4 140,143-150,152-158,161-162
+packages/serialization/src/structural.ts
+  s_8d9683fb10832a::t_ba997d8e14368d 12,14
+  s_8d9683fb10832a::t_6801dfb1373028 256-259
+  s_8d9683fb10832a::t_4d9f9c16e4dbdd 199-202,208,219,221-223
+  s_8d9683fb10832a::t_185dcbaf8f5198 101,121
+  s_8d9683fb10832a::t_f8214ef0f4b592 89-100,102-120,123-179,181-193,203
+  s_8d9683fb10832a::t_156e758faa9502 180,194
+packages/serialization/src/interest.ts
+  s_8d9683fb10832a::t_6641aefda2aa0a 210,217
+  s_8d9683fb10832a::t_04005e97cb9e61 1-14,22,24,26-187,191-200,209,211-216,218-263,265-305,310-375,389-451
+  s_8d9683fb10832a::t_014ee3dd4d38cc 306-309
+  s_8d9683fb10832a::t_9824170459e008 15-21
+  s_8d9683fb10832a::t_8e69732582d7d2 203-208
+  s_8d9683fb10832a::t_7f7fadeb462af4 188-190
+  s_8d9683fb10832a::t_0062b9ec56fb0c 23,25
+  s_8d9683fb10832a::t_775cfc2ed42bd8 201-202
+  s_8d9683fb10832a::t_25a756a5a620ae 376-388
+  s_8d9683fb10832a::t_f1e7d89248471d 264
+bundle-budget.json
+  s_8d9683fb10832a::t_6ac799fe62c197 13-14
+packages/serialization/src/snapshot.ts
+  s_8d9683fb10832a::t_44c3891afd6f48 66-110
+  s_8d9683fb10832a::t_8afda0a1198bb3 152
+packages/serialization/src/format.ts
+  s_8d9683fb10832a::t_d04d59ca7a306b 37-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "26082e5641322d10c74c84a63692e7992bc5018c",
+  "prompts": {},
+  "sessions": {
+    "s_8d9683fb10832a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4bc81bdc-d97f-48ea-8bf0-8f57be4510ce",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
