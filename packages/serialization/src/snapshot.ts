@@ -20,6 +20,7 @@ import {
   writeString,
 } from './format.js'
 import { writePairPayload } from './payload.js'
+import { compressImage, type Compressor } from './compression.js'
 import { encodeRichValue, richKindOrdinal, type OnUnserializable } from './rich.js'
 
 export interface SnapshotOptions {
@@ -29,6 +30,12 @@ export interface SnapshotOptions {
   readonly initialOutputBytes?: number
   /** Policy for a rich value JSON cannot encode. Default: SKIP + dev-warn. */
   readonly onUnserializable?: OnUnserializable
+  /**
+   * Opt-in compression applied at the `snapshotCopy()` boundary only (never `snapshot()`, which
+   * returns a reused-buffer view). Undefined ⇒ raw bytes, byte-identical to before. The receiver
+   * auto-detects the envelope; bundled compressors decode with no config (see {@link Compressor}).
+   */
+  readonly compressor?: Compressor
 }
 
 /**
@@ -265,7 +272,7 @@ export function createSnapshotSerializer(world: World, opts: SnapshotOptions = {
     },
     snapshotCopy(): Uint8Array {
       write()
-      return cur.bytesCopy()
+      return opts.compressor !== undefined ? compressImage(cur.bytesView(), opts.compressor) : cur.bytesCopy()
     },
   }
 }

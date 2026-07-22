@@ -177,6 +177,8 @@ import {
   createReplicationReceiver as _mkRepReceiver,
 } from '@ecsia/serialization'
 export { attachWorld, encodeReplicationMessage, decodeReplicationMessage } from '@ecsia/serialization'
+export { zeroRunCompressor, BUNDLED_COMPRESSORS } from '@ecsia/serialization'
+export type { Compressor } from '@ecsia/serialization'
 import type {
   SnapshotSerializer as _SnapshotSerializer,
   SnapshotDeserializer as _SnapshotDeserializer,

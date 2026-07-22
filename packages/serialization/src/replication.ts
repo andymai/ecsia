@@ -22,6 +22,7 @@ import { createSnapshotSerializer } from './snapshot.js'
 import { createSnapshotDeserializer } from './deserialize.js'
 import { createDeltaSerializer, applyDelta } from './delta.js'
 import type { DeltaOptions } from './delta.js'
+import type { Compressor } from './compression.js'
 import type { OnUnserializable } from './rich.js'
 
 /** One replication stream emission: the envelope fields + the unchanged snapshot/delta image. */
@@ -48,6 +49,12 @@ export interface ReplicationStreamOptions {
   readonly epsilon?: number
   /** Policy for a rich value JSON cannot encode. Default: SKIP + dev-warn. */
   readonly onUnserializable?: OnUnserializable
+  /**
+   * Opt-in compression for every emitted message's bytes (baseline snapshots and deltas). The
+   * receiver auto-detects it; a {@link createReplicationReceiver} needs matching `compressors` only
+   * for a non-bundled compressor. Undefined ⇒ raw bytes, unchanged wire.
+   */
+  readonly compressor?: Compressor
 }
 
 /**
@@ -89,8 +96,12 @@ export function createReplicationStream(world: World, opts: ReplicationStreamOpt
   const deltaOpts: DeltaOptions = {
     ...(opts.epsilon !== undefined ? { epsilon: opts.epsilon } : {}),
     ...(opts.onUnserializable !== undefined ? { onUnserializable: opts.onUnserializable } : {}),
+    ...(opts.compressor !== undefined ? { compressor: opts.compressor } : {}),
   }
-  const snap = createSnapshotSerializer(world, opts.onUnserializable !== undefined ? { onUnserializable: opts.onUnserializable } : {})
+  const snap = createSnapshotSerializer(world, {
+    ...(opts.onUnserializable !== undefined ? { onUnserializable: opts.onUnserializable } : {}),
+    ...(opts.compressor !== undefined ? { compressor: opts.compressor } : {}),
+  })
   const ser = createDeltaSerializer(world, world.currentTick(), deltaOpts)
   let seq = 0
 
@@ -161,9 +172,17 @@ export interface ReplicationReceiver {
   readonly remap: ReadonlyMap<EntityHandle, EntityHandle>
 }
 
-export function createReplicationReceiver(world: World): ReplicationReceiver {
+export interface ReplicationReceiverOptions {
+  /**
+   * Custom compressors to recognise (in addition to the bundled set). Only needed when the producer
+   * stream used a non-bundled {@link Compressor}; raw and bundled-compressed streams need nothing.
+   */
+  readonly compressors?: readonly Compressor[]
+}
+
+export function createReplicationReceiver(world: World, opts: ReplicationReceiverOptions = {}): ReplicationReceiver {
   const s = world.__serialize
-  const deser = createSnapshotDeserializer(world)
+  const deser = createSnapshotDeserializer(world, opts.compressors !== undefined ? { compressors: opts.compressors } : {})
   const remap = new Map<EntityHandle, EntityHandle>()
   let lastAppliedTick = -1
   // Set when a delta threw mid-apply: the world holds partially-applied state that only a
@@ -194,7 +213,7 @@ export function createReplicationReceiver(world: World): ReplicationReceiver {
       if (lastAppliedTick >= 0 && msg.baselineTick === lastAppliedTick) {
         try {
           // applyDelta extends the mutable remap with handles for entities this delta created.
-          lastAppliedTick = applyDelta(world, msg.bytes, remap)
+          lastAppliedTick = applyDelta(world, msg.bytes, remap, opts.compressors)
         } catch {
           poisoned = true
           return { applied: false, needBaseline: true, tick: lastAppliedTick }

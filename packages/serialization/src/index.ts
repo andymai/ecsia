@@ -14,7 +14,20 @@ export type { WorldBootstrap, WorkerWorldView, ColumnsAdded, SerializedRegistry 
 export { createSnapshotSerializer } from './snapshot.js'
 export type { SnapshotSerializer, SnapshotOptions } from './snapshot.js'
 export { createSnapshotDeserializer } from './deserialize.js'
-export type { SnapshotDeserializer, DeserializeResult } from './deserialize.js'
+export type { SnapshotDeserializer, DeserializeResult, DeserializeOptions } from './deserialize.js'
+
+// ---- Optional compression at the *Copy() boundary ----
+export {
+  zeroRunCompressor,
+  BUNDLED_COMPRESSORS,
+  compressImage,
+  decompressImage,
+  isCompressed,
+  COMPRESSION_MAGIC,
+  COMPRESSION_HEADER_BYTES,
+  STORED_COMPRESSOR_ID,
+} from './compression.js'
+export type { Compressor } from './compression.js'
 
 // ---- Copy delta (Layer 3, version-stamp driven) ----
 export { createDeltaSerializer, applyDelta } from './delta.js'
@@ -38,6 +51,7 @@ export type {
   ReplicationStream,
   ReplicationStreamOptions,
   ReplicationReceiver,
+  ReplicationReceiverOptions,
   ReplicationApplyResult,
 } from './replication.js'
 

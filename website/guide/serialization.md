@@ -189,6 +189,42 @@ other re-broadcast each other's entities as their own and spawn duplicates. For 
 elect one peer as the server and send inputs upstream. **Per-client filtering** (interest
 management) is not built in: every client receives the whole world.
 
+## Compression (optional)
+
+Snapshot and delta images are little-endian, block-structured byte buffers — they compress well,
+but nothing is compressed unless you ask. Pass a `compressor` and every `*Copy()` image (and every
+replication message) is wrapped in a small envelope the receiver decodes transparently:
+
+```ts
+import {
+  createWorld, defineComponent,
+  createReplicationStream, createReplicationReceiver,
+  zeroRunCompressor,
+} from '@ecsia/kit'
+
+const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
+
+const server = createWorld({ components: [Position], maxEntities: 1 << 16 })
+// Opt in: every baseline snapshot and delta is compressed at the copy boundary.
+const stream = createReplicationStream(server, { compressor: zeroRunCompressor })
+
+const mirror = createWorld({ components: [Position], maxEntities: 1 << 16 })
+// The receiver auto-detects the envelope — no configuration for the bundled compressor.
+const receiver = createReplicationReceiver(mirror)
+```
+
+The bundled `zeroRunCompressor` is **dependency-free** — a zero-run + literal encoding tuned for the
+long zero runs in default/sparse SoA columns. It never bloats a payload: if compression would not
+shrink an image, the envelope stores it verbatim (a 12-byte header, nothing more). Leaving
+`compressor` unset keeps the wire **byte-identical** to before — compression is strictly opt-in.
+
+Bring your own algorithm (gzip, zstd, …) by implementing the `Compressor` interface (`id`,
+`compress`, `decompress`). The receiver auto-decodes the bundled compressor; a **custom** one must be
+registered on the reading side — `createReplicationReceiver(world, { compressors: [myCodec] })`, or
+the `{ compressors }` option on `createSnapshotDeserializer` / the fourth argument to `applyDelta`.
+The lower-level `createSnapshotSerializer` / `createDeltaSerializer` in `@ecsia/serialization` take
+the same `compressor` option directly.
+
 ## Skipping transient fields
 
 Some component data has no business in a save file: derived values, per-frame caches, debug
