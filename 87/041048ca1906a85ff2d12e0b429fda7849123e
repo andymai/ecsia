@@ -1,0 +1,50 @@
+packages/serialization/src/replication.ts
+  s_8d9683fb10832a::t_bbf15a12f5c9c3 25
+  s_8d9683fb10832a::t_34c26cfef0beb2 52-57
+  s_8d9683fb10832a::t_c6a8c083f030d0 216
+  s_8d9683fb10832a::t_d412174e460a38 175-183,185
+  s_8d9683fb10832a::t_21a43bf4481130 99,101-104
+packages/serialization/src/index.ts
+  s_8d9683fb10832a::t_cd91ab1bcbce3e 17-30
+  s_8d9683fb10832a::t_9957c5f888ea93 54
+packages/serialization/src/delta.ts
+  s_8d9683fb10832a::t_66658a24019368 58-63
+  s_8d9683fb10832a::t_7f86f4a5769adc 470-475,481-482
+  s_8d9683fb10832a::t_82431b810cf98e 334
+  s_8d9683fb10832a::t_95af419b92e2a6 37
+packages/serialization/src/compression.ts
+  s_8d9683fb10832a::t_0401dbbb87dc26 1-204
+packages/serialization/test/m10-compression.unit.test.ts
+  s_8d9683fb10832a::t_fc8f2eaf1218e8 1-117,124-127,141,160-164,170-171,174-177,179,185,189-190
+  s_8d9683fb10832a::t_c4de65679d0918 118-123,128-140,142-159,165-169,172-173,178,180-184,186-188
+packages/serialization/test/m10-compression.property.test.ts
+  s_8d9683fb10832a::t_717a477f6c992f 1-42
+packages/ecsia/src/index.ts
+  s_8d9683fb10832a::t_c5f34ab7ac6710 180-181
+packages/serialization/src/snapshot.ts
+  s_8d9683fb10832a::t_be10fabf4ff25f 23
+  s_8d9683fb10832a::t_28b80a87e104f6 33-38
+  s_8d9683fb10832a::t_4e7c8da90e1c27 275
+packages/serialization/src/deserialize.ts
+  s_8d9683fb10832a::t_304993bb738b28 63,66,70-71
+  s_8d9683fb10832a::t_abcce91032d635 26
+  s_8d9683fb10832a::t_0c7b76f35f7a02 39-47
+website/guide/serialization.md
+  s_8d9683fb10832a::t_2590d59da27102 192-227
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "87041048ca1906a85ff2d12e0b429fda7849123e",
+  "prompts": {},
+  "sessions": {
+    "s_8d9683fb10832a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4bc81bdc-d97f-48ea-8bf0-8f57be4510ce",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
