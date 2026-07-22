@@ -34,6 +34,7 @@ import {
   writeJsonBytes,
 } from './format.js'
 import { applyStructuralOps, writeDeltaStructuralSection } from './structural.js'
+import { compressImage, decompressImage, type Compressor, type DecompressOptions } from './compression.js'
 import { encodeRichValue, richKindOrdinal, type OnUnserializable } from './rich.js'
 
 export interface DeltaOptions {
@@ -54,6 +55,12 @@ export interface DeltaOptions {
    * this serializer instance for its lifetime. Opt-in precisely because the cost is real.
    */
   readonly epsilon?: number
+  /**
+   * Opt-in compression applied at the `deltaCopy()` boundary only (never `delta()`, which returns a
+   * reused-buffer view). Undefined ⇒ raw bytes, byte-identical to before. {@link applyDelta}
+   * auto-detects and decompresses; bundled compressors need no receiver config.
+   */
+  readonly compressor?: Compressor
 }
 
 /**
@@ -324,7 +331,7 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
     },
     deltaCopy(): Uint8Array {
       write()
-      return cur.bytesCopy()
+      return opts.compressor !== undefined ? compressImage(cur.bytesView(), opts.compressor) : cur.bytesCopy()
     },
     get sinceTick(): number {
       return baseline
@@ -460,13 +467,19 @@ function filterByEpsilon(
 //
 // LIMITATION — RF-NOREMAP: an `EntityHandle` inside an `object<T>` is applied as a
 // raw producer number, NOT remapped. Use an `eid` column or a stable application id instead.
-export function applyDelta(world: World, bytes: Uint8Array, remap: ReadonlyMap<EntityHandle, EntityHandle>): number {
+export function applyDelta(
+  world: World,
+  bytes: Uint8Array,
+  remap: ReadonlyMap<EntityHandle, EntityHandle>,
+  decompress?: DecompressOptions,
+): number {
   if (world.phase !== 'serial') {
     throw new Error('applyDelta must run while the world is in its serial phase (outside scheduler.update / worker waves)')
   }
   const s = world.__serialize
   const work = new Map(remap)
-  const cur = new ReadCursor(bytes)
+  // Transparently decompress a compression-wrapped image; a raw delta passes through unchanged.
+  const cur = new ReadCursor(decompressImage(bytes, decompress))
   const magic = cur.u32()
   if (magic !== SNAPSHOT_MAGIC) throw new Error('serialization: bad magic (not an ecsia delta)')
   // Pre-v4 deltas are rejected loudly: v3 changed the header layout (schemaHash word at byte 8 —

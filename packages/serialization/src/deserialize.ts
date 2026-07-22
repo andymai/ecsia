@@ -23,6 +23,8 @@ import {
   readString,
 } from './format.js'
 import { readPairPayload } from './payload.js'
+import { decompressImage, type Compressor } from './compression.js'
+import type { DecompressOptions } from './compression.js'
 
 export interface DeserializeResult {
   /** Old-handle → new-handle remap table (the entity-ID remap). */
@@ -33,6 +35,20 @@ export interface DeserializeResult {
 
 export interface SnapshotDeserializer {
   load(bytes: Uint8Array, mode?: 'replace' | 'merge'): DeserializeResult
+}
+
+export interface DeserializeOptions {
+  /**
+   * Custom compressors to recognise on the wire (in addition to the bundled set, which is always
+   * understood). Only needed if the producer used a non-bundled {@link Compressor}; raw and
+   * bundled-compressed images decode with no config.
+   */
+  readonly compressors?: readonly Compressor[]
+  /**
+   * Hard cap on a compressed image's declared decompressed size (decompression-bomb guard). Default
+   * is generous; tighten it when loading images from an untrusted source. See `DecompressOptions`.
+   */
+  readonly maxBytes?: number
 }
 
 interface ProducerComponent {
@@ -50,13 +66,19 @@ interface ArchetypeRecord {
   readonly signature: number[]
 }
 
-export function createSnapshotDeserializer(world: World): SnapshotDeserializer {
+export function createSnapshotDeserializer(world: World, opts: DeserializeOptions = {}): SnapshotDeserializer {
   const s = world.__serialize
 
-  function load(bytes: Uint8Array, mode: 'replace' | 'merge' = 'replace'): DeserializeResult {
+  function load(rawBytes: Uint8Array, mode: 'replace' | 'merge' = 'replace'): DeserializeResult {
     if (world.phase !== 'serial') {
       throw new Error('load() must run while the world is in its serial phase (outside scheduler.update / worker waves)')
     }
+    // Transparently decompress a compression-wrapped image; a raw snapshot passes through unchanged.
+    const decompressOpts: DecompressOptions = {
+      ...(opts.compressors !== undefined ? { compressors: opts.compressors } : {}),
+      ...(opts.maxBytes !== undefined ? { maxBytes: opts.maxBytes } : {}),
+    }
+    const bytes = decompressImage(rawBytes, decompressOpts)
     // The type narrows mode for TS callers, but a JS caller passing e.g. 'overwrite' would fall
     // through every `mode === 'replace'` branch and silently MERGE — destructive surprise on a
     // load-a-save path. Fail loud instead.

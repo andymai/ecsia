@@ -189,6 +189,47 @@ other re-broadcast each other's entities as their own and spawn duplicates. For 
 elect one peer as the server and send inputs upstream. **Per-client filtering** (interest
 management) is not built in: every client receives the whole world.
 
+## Compression (optional)
+
+Snapshot and delta images are little-endian, block-structured byte buffers — they compress well,
+but nothing is compressed unless you ask. Pass a `compressor` and every `*Copy()` image (and every
+replication message) is wrapped in a small envelope the receiver decodes transparently:
+
+```ts
+import {
+  createWorld, defineComponent,
+  createReplicationStream, createReplicationReceiver,
+  zeroRunCompressor,
+} from '@ecsia/kit'
+
+const Position = defineComponent({ x: 'f32', y: 'f32' }, { name: 'position' })
+
+const server = createWorld({ components: [Position], maxEntities: 1 << 16 })
+// Opt in: every baseline snapshot and delta is compressed at the copy boundary.
+const stream = createReplicationStream(server, { compressor: zeroRunCompressor })
+
+const mirror = createWorld({ components: [Position], maxEntities: 1 << 16 })
+// The receiver auto-detects the envelope — no configuration for the bundled compressor.
+const receiver = createReplicationReceiver(mirror)
+```
+
+The bundled `zeroRunCompressor` is **dependency-free** — a zero-run + literal encoding tuned for the
+long zero runs in default/sparse SoA columns. It never bloats a payload: if compression would not
+shrink an image, the envelope stores it verbatim (a 12-byte header, nothing more). Leaving
+`compressor` unset keeps the wire **byte-identical** to before — compression is strictly opt-in.
+
+Bring your own algorithm (gzip, zstd, …) by implementing the `Compressor` interface (`id`,
+`compress`, `decompress`). The receiver auto-decodes the bundled compressor; a **custom** one must be
+registered on the reading side — `createReplicationReceiver(world, { compressors: [myCodec] })`, the
+`{ compressors }` option on `createSnapshotDeserializer`, or the `{ compressors }` options argument to
+`applyDelta`. The lower-level `createSnapshotSerializer` / `createDeltaSerializer` in
+`@ecsia/serialization` take the same `compressor` option directly.
+
+Decompression trusts the size an image *declares*, so the read side caps it: an envelope claiming
+more than `maxBytes` decompressed (default 1 GiB) is rejected **before** allocating, defusing a
+decompression bomb. Loading images from an **untrusted** peer? Pass a tighter `maxBytes` on
+`createReplicationReceiver` / `createSnapshotDeserializer` / `applyDelta`.
+
 ## Skipping transient fields
 
 Some component data has no business in a save file: derived values, per-frame caches, debug

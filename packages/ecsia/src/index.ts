@@ -177,6 +177,8 @@ import {
   createReplicationReceiver as _mkRepReceiver,
 } from '@ecsia/serialization'
 export { attachWorld, encodeReplicationMessage, decodeReplicationMessage } from '@ecsia/serialization'
+export { zeroRunCompressor, BUNDLED_COMPRESSORS } from '@ecsia/serialization'
+export type { Compressor } from '@ecsia/serialization'
 import type {
   SnapshotSerializer as _SnapshotSerializer,
   SnapshotDeserializer as _SnapshotDeserializer,
@@ -185,6 +187,9 @@ import type {
   ReplicationStream as _ReplicationStream,
   ReplicationStreamOptions as _ReplicationStreamOptions,
   ReplicationReceiver as _ReplicationReceiver,
+  ReplicationReceiverOptions as _ReplicationReceiverOptions,
+  DecompressOptions as _DecompressOptions,
+  DeserializeOptions as _DeserializeOptions,
 } from '@ecsia/serialization'
 export type {
   SnapshotSerializer,
@@ -195,13 +200,21 @@ export type {
   ReplicationStream,
   ReplicationStreamOptions,
   ReplicationReceiver,
+  ReplicationReceiverOptions,
   ReplicationApplyResult,
+  DecompressOptions,
+  DeserializeOptions,
 } from '@ecsia/serialization'
 
 export const createSnapshotSerializer: (world: World) => _SnapshotSerializer = ((world: World) =>
   _mkSnapSer(world as unknown as _CoreWorld)) as (world: World) => _SnapshotSerializer
-export const createSnapshotDeserializer: (world: World) => _SnapshotDeserializer = ((world: World) =>
-  _mkSnapDe(world as unknown as _CoreWorld)) as (world: World) => _SnapshotDeserializer
+export const createSnapshotDeserializer: (world: World, opts?: _DeserializeOptions) => _SnapshotDeserializer = ((
+  world: World,
+  opts?: _DeserializeOptions,
+) => _mkSnapDe(world as unknown as _CoreWorld, opts)) as (
+  world: World,
+  opts?: _DeserializeOptions,
+) => _SnapshotDeserializer
 export const createDeltaSerializer: (world: World, sinceTick: number) => _DeltaSerializer = ((
   world: World,
   sinceTick: number,
@@ -210,11 +223,17 @@ export const applyDelta: (
   world: World,
   bytes: Uint8Array,
   remap: ReadonlyMap<EntityHandle, EntityHandle>,
-) => number = ((world: World, bytes: Uint8Array, remap: ReadonlyMap<EntityHandle, EntityHandle>) =>
-  _applyDelta(world as unknown as _CoreWorld, bytes, remap)) as (
+  decompress?: _DecompressOptions,
+) => number = ((
   world: World,
   bytes: Uint8Array,
   remap: ReadonlyMap<EntityHandle, EntityHandle>,
+  decompress?: _DecompressOptions,
+) => _applyDelta(world as unknown as _CoreWorld, bytes, remap, decompress)) as (
+  world: World,
+  bytes: Uint8Array,
+  remap: ReadonlyMap<EntityHandle, EntityHandle>,
+  decompress?: _DecompressOptions,
 ) => number
 export const bootstrapForWorker: (world: World) => _WorldBootstrap = ((world: World) =>
   _bootstrap(world as unknown as _CoreWorld)) as (world: World) => _WorldBootstrap
@@ -225,8 +244,13 @@ export const createReplicationStream: (world: World, opts?: _ReplicationStreamOp
   world: World,
   opts?: _ReplicationStreamOptions,
 ) => _ReplicationStream
-export const createReplicationReceiver: (world: World) => _ReplicationReceiver = ((world: World) =>
-  _mkRepReceiver(world as unknown as _CoreWorld)) as (world: World) => _ReplicationReceiver
+export const createReplicationReceiver: (world: World, opts?: _ReplicationReceiverOptions) => _ReplicationReceiver = ((
+  world: World,
+  opts?: _ReplicationReceiverOptions,
+) => _mkRepReceiver(world as unknown as _CoreWorld, opts)) as (
+  world: World,
+  opts?: _ReplicationReceiverOptions,
+) => _ReplicationReceiver
 
 // ---------------------------------------------------------------------------
 // Branded types + inference helpers / escape hatch
