@@ -101,6 +101,32 @@ const ser = createDeltaSerializer(world, since, { epsilon: 0.001 })
 const patch = ser.deltaCopy()
 ```
 
+### Field granularity (lower-level option)
+
+By default a changed row sends **all** of its persisted numeric fields: the change stamp is
+per-entity, so that is everything the serializer knows for free. `granularity: 'field'` narrows
+the value section to the columns that actually moved — the win grows with the width of your
+components (a 16-field transform where one field ticks). Rows whose changed columns match are
+grouped, so the encoding costs no per-row overhead.
+
+Field granularity compares against the last emitted values, so it allocates the same private
+copy `epsilon` does (with `epsilon` unset the comparison is exact). Trading memory for bandwidth
+is the whole point, which is why it is opt-in.
+
+```ts
+import { createDeltaSerializer, createReplicationStream } from '@ecsia/serialization'
+import type { World } from '@ecsia/core'
+
+declare const world: World
+
+// Only the fields that moved ride the wire…
+const ser = createDeltaSerializer(world, 0, { granularity: 'field' })
+const patch = ser.deltaCopy()
+
+// …or the same option on a replication stream's unfiltered deltas.
+const stream = createReplicationStream(world, { granularity: 'field', epsilon: 0.001 })
+```
+
 ## Replication
 
 Snapshots and deltas are the payloads; **replication** is the recipe that keeps a second

@@ -14,8 +14,11 @@ import type { WriteCursor, ReadCursor } from './cursor.js'
 // range-checks `MIN_SUPPORTED_VERSION <= v <= SERIALIZATION_FORMAT_VERSION` and per-section-gates
 // the v2-only growth. DELTAS are different: each wire-semantics break is rejected loudly via
 // `DELTA_MIN_SUPPORTED_VERSION` (pre-publish, zero compat burden). Old readers reject new images
-// via their strict version checks.
-export const SERIALIZATION_FORMAT_VERSION = 4
+// via their strict version checks. v5 adds the field-granular SECTION V (FLAG_FIELD_GRANULAR): the
+// only wire change is a per-column `u16 wireFieldIndex` in the blocks of an image that sets the flag,
+// so DELTA_MIN_SUPPORTED_VERSION stays at 4 (a v5 reader still reads v4 images verbatim) while a v4-max
+// reader rejects a v5 image through its `version > SERIALIZATION_FORMAT_VERSION` check.
+export const SERIALIZATION_FORMAT_VERSION = 5
 /** Oldest SNAPSHOT wire version a current reader accepts (per-section gated). */
 export const MIN_SUPPORTED_VERSION = 1
 /** The version in which the RICH section + its header offset word first appear. */
@@ -38,6 +41,10 @@ export const FLAG_HAS_RICH = 8
  * absent entities/components as "not visible", never a protocol error. Unfiltered streams never set
  * it; the apply path needs no branch (a filtered image is a structurally valid delta/snapshot). */
 export const FLAG_IS_FILTERED = 16
+/** Delta header (v5): SECTION V is FIELD-GRANULAR — every column in every block carries its
+ * `u16 wireFieldIndex` ahead of the element/stride pair, and a block's columns are the subset the
+ * block's rows actually changed. Unset ⇒ the v4 grammar, every persisted column of every row. */
+export const FLAG_FIELD_GRANULAR = 32
 
 // Structural-op header high bit: on an EntityDestroy/ComponentRemove written by a filtered view it
 // marks CONCEALED (left this view's interest, still alive on the host) rather than a real removal.

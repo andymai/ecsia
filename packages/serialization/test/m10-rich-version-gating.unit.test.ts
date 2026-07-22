@@ -38,8 +38,8 @@ describe('RICH — version gating', () => {
     const src = createWorld({ components: asComps(P) })
     src.spawnWith(P)
     const bytes = createSnapshotSerializer(src).snapshotCopy()
-    expect(new DataView(bytes.buffer, bytes.byteOffset).getUint16(4, true)).toBe(4)
-    expect(SERIALIZATION_FORMAT_VERSION).toBe(4)
+    expect(new DataView(bytes.buffer, bytes.byteOffset).getUint16(4, true)).toBe(5)
+    expect(SERIALIZATION_FORMAT_VERSION).toBe(5)
     expect(MIN_SUPPORTED_VERSION).toBe(1)
   })
 
