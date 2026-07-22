@@ -37,6 +37,22 @@ export const COMPRESSION_MAGIC = 0x45435a50 // 'ECZP' — distinct from SNAPSHOT
 export const COMPRESSION_HEADER_BYTES = 12
 /** The reserved "stored" id: payload is the raw image (compression made it no smaller). */
 export const STORED_COMPRESSOR_ID = 0
+/**
+ * Default hard cap on a compressed image's DECLARED decompressed size. A hostile envelope can
+ * declare a `rawByteLength` up to 4 GiB (0xffffffff) while carrying a few bytes — a decompression
+ * bomb that would force a massive allocation. `decompressImage` rejects a declared size above this
+ * cap BEFORE allocating. 1 GiB is generous for legitimate whole-world snapshots yet kills the
+ * 4 GiB crash; applications syncing with UNTRUSTED peers should pass a much tighter `maxBytes`.
+ */
+export const DEFAULT_MAX_DECOMPRESSED_BYTES = 1 << 30
+
+export interface DecompressOptions {
+  /** Custom compressors to recognise, in addition to the always-understood bundled set. */
+  readonly compressors?: readonly Compressor[]
+  /** Reject an image declaring more than this many decompressed bytes (bomb guard).
+   *  Default {@link DEFAULT_MAX_DECOMPRESSED_BYTES}. */
+  readonly maxBytes?: number
+}
 
 // A minimal growable byte sink (the shared WriteCursor has no varint and different concerns).
 class ByteSink {
@@ -167,14 +183,22 @@ export function compressImage(image: Uint8Array, compressor: Compressor): Uint8A
 
 /**
  * Inverse of {@link compressImage}. A NON-compressed image (no envelope magic) passes through
- * unchanged — so raw snapshot/delta bytes are handled transparently. `extra` compressors are merged
- * with the bundled set for custom-id lookup.
+ * unchanged — so raw snapshot/delta bytes are handled transparently. Custom `compressors` are merged
+ * with the bundled set for id lookup; `maxBytes` bounds the declared decompressed size (bomb guard).
  */
-export function decompressImage(bytes: Uint8Array, extra?: readonly Compressor[]): Uint8Array {
+export function decompressImage(bytes: Uint8Array, opts: DecompressOptions = {}): Uint8Array {
   if (!isCompressed(bytes)) return bytes
   const dv = new DataView(bytes.buffer, bytes.byteOffset, COMPRESSION_HEADER_BYTES)
   const id = dv.getUint8(4)
   const rawByteLength = dv.getUint32(8, true)
+  const maxBytes = opts.maxBytes ?? DEFAULT_MAX_DECOMPRESSED_BYTES
+  // Guard BEFORE any allocation: a hostile envelope can declare a 4 GiB rawByteLength with a tiny
+  // payload (a decompression bomb). Reject an over-cap declaration rather than attempt the allocation.
+  if (rawByteLength > maxBytes) {
+    throw new Error(
+      `serialization: compressed image declares ${rawByteLength} decompressed bytes, above the ${maxBytes}-byte cap — refusing to allocate. Raise maxBytes if this image is trusted and legitimately that large.`,
+    )
+  }
   const payload = bytes.subarray(COMPRESSION_HEADER_BYTES)
   if (id === STORED_COMPRESSOR_ID) {
     if (payload.byteLength !== rawByteLength) {
@@ -182,7 +206,7 @@ export function decompressImage(bytes: Uint8Array, extra?: readonly Compressor[]
     }
     return payload
   }
-  const compressor = findCompressor(id, extra)
+  const compressor = findCompressor(id, opts.compressors)
   if (compressor === undefined) {
     throw new Error(
       `serialization: no Compressor registered for id ${id} — pass it via the deserializer/receiver 'compressors' option (bundled ids: ${BUNDLED_COMPRESSORS.map((c) => c.id).join(', ')})`,

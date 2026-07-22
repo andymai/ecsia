@@ -26,8 +26,9 @@ export {
   COMPRESSION_MAGIC,
   COMPRESSION_HEADER_BYTES,
   STORED_COMPRESSOR_ID,
+  DEFAULT_MAX_DECOMPRESSED_BYTES,
 } from './compression.js'
-export type { Compressor } from './compression.js'
+export type { Compressor, DecompressOptions } from './compression.js'
 
 // ---- Copy delta (Layer 3, version-stamp driven) ----
 export { createDeltaSerializer, applyDelta } from './delta.js'

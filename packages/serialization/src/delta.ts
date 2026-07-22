@@ -34,7 +34,7 @@ import {
   writeJsonBytes,
 } from './format.js'
 import { applyStructuralOps, writeDeltaStructuralSection } from './structural.js'
-import { compressImage, decompressImage, type Compressor } from './compression.js'
+import { compressImage, decompressImage, type Compressor, type DecompressOptions } from './compression.js'
 import { encodeRichValue, richKindOrdinal, type OnUnserializable } from './rich.js'
 
 export interface DeltaOptions {
@@ -471,7 +471,7 @@ export function applyDelta(
   world: World,
   bytes: Uint8Array,
   remap: ReadonlyMap<EntityHandle, EntityHandle>,
-  compressors?: readonly Compressor[],
+  decompress?: DecompressOptions,
 ): number {
   if (world.phase !== 'serial') {
     throw new Error('applyDelta must run while the world is in its serial phase (outside scheduler.update / worker waves)')
@@ -479,7 +479,7 @@ export function applyDelta(
   const s = world.__serialize
   const work = new Map(remap)
   // Transparently decompress a compression-wrapped image; a raw delta passes through unchanged.
-  const cur = new ReadCursor(decompressImage(bytes, compressors))
+  const cur = new ReadCursor(decompressImage(bytes, decompress))
   const magic = cur.u32()
   if (magic !== SNAPSHOT_MAGIC) throw new Error('serialization: bad magic (not an ecsia delta)')
   // Pre-v4 deltas are rejected loudly: v3 changed the header layout (schemaHash word at byte 8 —

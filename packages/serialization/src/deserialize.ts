@@ -24,6 +24,7 @@ import {
 } from './format.js'
 import { readPairPayload } from './payload.js'
 import { decompressImage, type Compressor } from './compression.js'
+import type { DecompressOptions } from './compression.js'
 
 export interface DeserializeResult {
   /** Old-handle → new-handle remap table (the entity-ID remap). */
@@ -43,6 +44,11 @@ export interface DeserializeOptions {
    * bundled-compressed images decode with no config.
    */
   readonly compressors?: readonly Compressor[]
+  /**
+   * Hard cap on a compressed image's declared decompressed size (decompression-bomb guard). Default
+   * is generous; tighten it when loading images from an untrusted source. See `DecompressOptions`.
+   */
+  readonly maxBytes?: number
 }
 
 interface ProducerComponent {
@@ -68,7 +74,11 @@ export function createSnapshotDeserializer(world: World, opts: DeserializeOption
       throw new Error('load() must run while the world is in its serial phase (outside scheduler.update / worker waves)')
     }
     // Transparently decompress a compression-wrapped image; a raw snapshot passes through unchanged.
-    const bytes = decompressImage(rawBytes, opts.compressors)
+    const decompressOpts: DecompressOptions = {
+      ...(opts.compressors !== undefined ? { compressors: opts.compressors } : {}),
+      ...(opts.maxBytes !== undefined ? { maxBytes: opts.maxBytes } : {}),
+    }
+    const bytes = decompressImage(rawBytes, decompressOpts)
     // The type narrows mode for TS callers, but a JS caller passing e.g. 'overwrite' would fall
     // through every `mode === 'replace'` branch and silently MERGE — destructive surprise on a
     // load-a-save path. Fail loud instead.

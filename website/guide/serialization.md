@@ -220,10 +220,15 @@ shrink an image, the envelope stores it verbatim (a 12-byte header, nothing more
 
 Bring your own algorithm (gzip, zstd, …) by implementing the `Compressor` interface (`id`,
 `compress`, `decompress`). The receiver auto-decodes the bundled compressor; a **custom** one must be
-registered on the reading side — `createReplicationReceiver(world, { compressors: [myCodec] })`, or
-the `{ compressors }` option on `createSnapshotDeserializer` / the fourth argument to `applyDelta`.
-The lower-level `createSnapshotSerializer` / `createDeltaSerializer` in `@ecsia/serialization` take
-the same `compressor` option directly.
+registered on the reading side — `createReplicationReceiver(world, { compressors: [myCodec] })`, the
+`{ compressors }` option on `createSnapshotDeserializer`, or the `{ compressors }` options argument to
+`applyDelta`. The lower-level `createSnapshotSerializer` / `createDeltaSerializer` in
+`@ecsia/serialization` take the same `compressor` option directly.
+
+Decompression trusts the size an image *declares*, so the read side caps it: an envelope claiming
+more than `maxBytes` decompressed (default 1 GiB) is rejected **before** allocating, defusing a
+decompression bomb. Loading images from an **untrusted** peer? Pass a tighter `maxBytes` on
+`createReplicationReceiver` / `createSnapshotDeserializer` / `applyDelta`.
 
 ## Skipping transient fields
 

@@ -178,11 +178,20 @@ export interface ReplicationReceiverOptions {
    * stream used a non-bundled {@link Compressor}; raw and bundled-compressed streams need nothing.
    */
   readonly compressors?: readonly Compressor[]
+  /**
+   * Hard cap on a message's declared decompressed size (decompression-bomb guard). Tighten it when
+   * the peer is untrusted. Default is generous — see `DecompressOptions`.
+   */
+  readonly maxBytes?: number
 }
 
 export function createReplicationReceiver(world: World, opts: ReplicationReceiverOptions = {}): ReplicationReceiver {
   const s = world.__serialize
-  const deser = createSnapshotDeserializer(world, opts.compressors !== undefined ? { compressors: opts.compressors } : {})
+  const decompressOpts = {
+    ...(opts.compressors !== undefined ? { compressors: opts.compressors } : {}),
+    ...(opts.maxBytes !== undefined ? { maxBytes: opts.maxBytes } : {}),
+  }
+  const deser = createSnapshotDeserializer(world, decompressOpts)
   const remap = new Map<EntityHandle, EntityHandle>()
   let lastAppliedTick = -1
   // Set when a delta threw mid-apply: the world holds partially-applied state that only a
@@ -213,7 +222,7 @@ export function createReplicationReceiver(world: World, opts: ReplicationReceive
       if (lastAppliedTick >= 0 && msg.baselineTick === lastAppliedTick) {
         try {
           // applyDelta extends the mutable remap with handles for entities this delta created.
-          lastAppliedTick = applyDelta(world, msg.bytes, remap, opts.compressors)
+          lastAppliedTick = applyDelta(world, msg.bytes, remap, decompressOpts)
         } catch {
           poisoned = true
           return { applied: false, needBaseline: true, tick: lastAppliedTick }

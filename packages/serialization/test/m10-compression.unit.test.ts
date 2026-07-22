@@ -111,7 +111,21 @@ describe('compressImage / decompressImage envelope', () => {
     const wrapped = compressImage(raw, stripTrailingZeros)
     expect(wrapped[4]).toBe(77) // used the custom id (it shrank)
     expect(() => decompressImage(wrapped)).toThrow(/no Compressor registered for id 77/)
-    expect(bytesOf(decompressImage(wrapped, [stripTrailingZeros]))).toEqual(bytesOf(raw))
+    expect(bytesOf(decompressImage(wrapped, { compressors: [stripTrailingZeros] }))).toEqual(bytesOf(raw))
+  })
+
+  it('rejects a declared decompressed size above the cap BEFORE allocating (bomb guard)', () => {
+    // A hostile envelope: tiny payload, but the rawByteLength word claims a huge size.
+    const raw = new Uint8Array(4096)
+    raw[0] = 1
+    const wrapped = compressImage(raw, zeroRunCompressor)
+    const bomb = wrapped.slice()
+    new DataView(bomb.buffer).setUint32(8, 0xffffffff, true) // claim ~4 GiB decompressed
+    expect(() => decompressImage(bomb)).toThrow(/above the .* cap — refusing to allocate/)
+    // An explicit low cap rejects even a modest legitimate declaration.
+    expect(() => decompressImage(wrapped, { maxBytes: 8 })).toThrow(/refusing to allocate/)
+    // Raising the cap lets a legitimate image through.
+    expect(bytesOf(decompressImage(wrapped, { maxBytes: 1 << 20 }))).toEqual(bytesOf(raw))
   })
 })
 
