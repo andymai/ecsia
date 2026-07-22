@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.23.0](https://github.com/andymai/ecsia/compare/serialization-v0.22.0...serialization-v0.23.0) (2026-07-22)
+
+
+### Features
+
+* **serialization:** per-client interest management (filtered replication) ([#155](https://github.com/andymai/ecsia/issues/155)) ([8864631](https://github.com/andymai/ecsia/commit/8864631aff217c7296fecdfc86d06bc4e72196ac))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.23.0
+    * @ecsia/schema bumped to 0.23.0
+  * devDependencies
+    * @ecsia/relations bumped to 0.23.0
+
 ## [0.22.0](https://github.com/andymai/ecsia/compare/serialization-v0.21.2...serialization-v0.22.0) (2026-07-22)
 
 
