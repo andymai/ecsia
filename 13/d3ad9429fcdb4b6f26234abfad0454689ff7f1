@@ -28,6 +28,7 @@ packages/core/src/index.ts
   s_8d9683fb10832a::t_45c1f81e779465 149-159
 packages/rollback/package.json
   s_8d9683fb10832a::t_fea94704a49f66 1-2,4-53
+  s_8d9683fb10832a::t_189f9101ef89b1 3
 packages/rollback/test/rollback.test.ts
   s_8d9683fb10832a::t_ac3d9932e01d3c 1-81,83-98,100-159,161-186,188-217,219-230,232-243,245-246,253-257,259-265,267-280,282-292,294-300,302-325,327-351,353-368
   s_8d9683fb10832a::t_1ffedc7c6e96ba 82,99,160,187,218,231,244,247-252,258,266,281,293,301,326,352
@@ -65,6 +66,8 @@ packages/rollback/tsconfig.json
   s_8d9683fb10832a::t_56c34006ca0d53 1-9
 pnpm-lock.yaml
   s_8d9683fb10832a::t_d2328b36883d3e 162-170
+.release-please-manifest.json
+  s_8d9683fb10832a::t_3672b514f70ef1 7
 ---
 {
   "schema_version": "authorship/3.0.0",
