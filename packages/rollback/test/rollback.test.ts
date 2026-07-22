@@ -1,7 +1,7 @@
 // createRollbackSurface: handle-stable whole-world capture/restore. The properties under test are
 // (a) restore is byte-identical to the checkpoint, (b) it preserves entity IDENTITY (original
 // handles, live eid references, query results), (c) archetypes created after the checkpoint are
-// emptied, and (d) the v1 guards fail fast instead of restoring a partial world.
+// emptied, and (d) the remaining guards fail fast instead of restoring a partial world.
 
 import { describe, expect, test } from 'vitest'
 import { createWorld, defineComponent, object, onRemove, read, write } from '@ecsia/core'
@@ -268,19 +268,20 @@ describe('@ecsia/rollback — capture / restore', () => {
     expect(() => rb.restoreImage(rb.newImage())).toThrow(/never been captured/)
   })
 
-  describe('v1 guards', () => {
-    test('a world with a relation defined refuses to capture', () => {
+  describe('guards', () => {
+    test('relations without an installed rollback leg refuse to capture', () => {
       const { Pos } = defs()
       const world = createWorld({ components: [Pos], maxEntities: 64 })
       const rb = createRollbackSurface(world)
-      // The relations runtime installs its provider through this seam; one defined relation is enough.
+      // Relations present to the serialization seam but no capture/restore leg — the shape an older
+      // @ecsia/relations presents. Half-capturing it would drift pair ids silently.
       world.__installRelations().setSerializationProvider({
         relations: () => [{ name: 'ChildOf', id: 0, exclusive: true, hasPayload: false, presenceId: 0, payloadSchema: null }],
       } as unknown as SerializeRelationProvider)
 
       const img = rb.newImage()
-      expect(() => rb.captureImage(img)).toThrow(/relation state/)
-      expect(() => rb.captureImage(img)).toThrow(/pair-id/)
+      expect(() => rb.captureImage(img)).toThrow(/no relations rollback leg/)
+      expect(() => rb.captureImage(img)).toThrow(/pair-id minting state/)
     })
 
     test('cold-archetype residents refuse to capture', () => {

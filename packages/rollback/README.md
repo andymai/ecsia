@@ -19,9 +19,14 @@ confirmed input contradicts a prediction — rewinds and re-simulates automatica
 Images are reusable: after the live set stops growing, capturing into an existing image
 allocates nothing, so a ring of images costs no per-frame garbage.
 
-> **Status:** 0.x. v1 refuses (loudly) to capture a world that uses relations, has
-> entities in cold archetypes, or registers a rich (`'string'` / `object<T>`) field —
-> that state is not in the image, and failing fast beats restoring a partial world.
+Relations are covered: an image carries the pair-id minting state (including the
+synthetic-id counter a re-simulation must resume from), the back-ref / forward indices, and
+the non-exclusive overflow payload tables — so a rewound world re-mints the *same* pair ids
+and lands in the *same* archetype signatures.
+
+> **Status:** 0.x. Capture still refuses (loudly) on a world with entities in cold
+> archetypes or a registered rich (`'string'` / `object<T>`) field — that state is not in
+> the image, and failing fast beats restoring a partial world.
 
 ## Install
 
