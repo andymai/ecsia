@@ -1,0 +1,87 @@
+packages/core/src/entity/store.ts
+  s_8d9683fb10832a::t_b954a4a6ecb57b 42-43,238-240,249-253,257-259
+  s_8d9683fb10832a::t_552bfaef57bd35 237,241-248,254-256,260-271
+  s_8d9683fb10832a::t_b4b5bbc13a125a 39-41,44-56
+pnpm-lock.yaml
+  s_8d9683fb10832a::t_d2328b36883d3e 162-170
+typedoc.json
+  s_8d9683fb10832a::t_e257c81333d2d9 10-11
+packages/core/src/index.ts
+  s_8d9683fb10832a::t_45c1f81e779465 149-159
+packages/rollback/tsconfig.json
+  s_8d9683fb10832a::t_56c34006ca0d53 1-9
+packages/rollback/README.md
+  s_8d9683fb10832a::t_6f6adc964c638c 1-28,30-31,33-48
+  s_8d9683fb10832a::t_d68874a4e919dc 29,32
+packages/core/src/reactivity/reactivity.ts
+  s_8d9683fb10832a::t_16b7b5822daf3d 306-309
+  s_8d9683fb10832a::t_e9ee8a43488c8f 305
+packages/rollback/package.json
+  s_8d9683fb10832a::t_189f9101ef89b1 3
+  s_8d9683fb10832a::t_fea94704a49f66 1-2,4-53
+packages/core/src/bitmask/bitmask.ts
+  s_8d9683fb10832a::t_e9ee8a43488c8f 105,120
+  s_8d9683fb10832a::t_d7233d575bde8c 104,106-119,121-138
+packages/rollback/test/rollback.test.ts
+  s_8d9683fb10832a::t_1ffedc7c6e96ba 82,99,160,187,218,231,244,247-252,258,266,281,293,301,326,352
+  s_8d9683fb10832a::t_ac3d9932e01d3c 1-81,83-98,100-159,161-186,188-217,219-230,232-243,245-246,253-257,259-265,267-280,282-292,294-300,302-325,327-351,353-368
+.release-please-manifest.json
+  s_8d9683fb10832a::t_3672b514f70ef1 7
+vitest.config.ts
+  s_8d9683fb10832a::t_efb73b7dc0db18 16
+packages/rollback/src/index.ts
+  s_8d9683fb10832a::t_2b9fad0635eb42 1-11
+packages/core/src/rollback-surface.ts
+  s_8d9683fb10832a::t_af928309372c05 1-4,7-13,15,17-20,22-31,34-35
+  s_8d9683fb10832a::t_1cb0c3e344aa6d 5-6,14,16,21,32-33,36
+packages/rollback/src/rollback.ts
+  s_8d9683fb10832a::t_48cb95d3a86c50 1-7,9-210,212-303
+  s_8d9683fb10832a::t_b9105931b9d1c5 8,211
+packages/core/src/reactivity/change-version.ts
+  s_8d9683fb10832a::t_e9ee8a43488c8f 77
+  s_8d9683fb10832a::t_78878def10287c 76,78-88,94,97,101-102
+  s_8d9683fb10832a::t_e444e5ace25895 89-93,95-96,98-100
+packages/core/src/world.ts
+  s_8d9683fb10832a::t_f9d291c869e2bc 54,253-258,260,1266-1277
+  s_8d9683fb10832a::t_f5e2aa703bc954 259
+packages/core/src/storage/store.ts
+  s_8d9683fb10832a::t_a7fb72220410a0 236,238-247
+  s_8d9683fb10832a::t_e9ee8a43488c8f 237
+scripts/check-doc-snippets.mjs
+  s_8d9683fb10832a::t_d68874a4e919dc 138
+packages/rollback/LICENSE
+  s_8d9683fb10832a::t_5f735863adfb0a 1-21
+tsconfig.json
+  s_8d9683fb10832a::t_efb73b7dc0db18 9
+release-please-config.json
+  s_8d9683fb10832a::t_454057937f84a1 56,74
+packages/core/src/entity/index.ts
+  s_8d9683fb10832a::t_b5d39e356be13f 17
+packages/core/src/query/engine.ts
+  s_8d9683fb10832a::t_e9ee8a43488c8f 236
+  s_8d9683fb10832a::t_7a2d34f377a351 152-153
+  s_8d9683fb10832a::t_fcabfc9d6467d1 235,237-248
+  s_8d9683fb10832a::t_53deab26f360bf 139-143
+  s_8d9683fb10832a::t_d46f8fa5c67a92 163-164
+packages/core/src/entity/index-allocator.ts
+  s_8d9683fb10832a::t_e9ee8a43488c8f 107,110
+  s_8d9683fb10832a::t_7df2909b96ffa8 106,108-109,111-119
+tsconfig.tests.json
+  s_8d9683fb10832a::t_efb73b7dc0db18 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "0232cb0f1716820c5685c2a19d0550032def6dd2",
+  "prompts": {},
+  "sessions": {
+    "s_8d9683fb10832a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4bc81bdc-d97f-48ea-8bf0-8f57be4510ce",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
