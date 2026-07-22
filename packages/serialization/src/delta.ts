@@ -418,6 +418,12 @@ function growMasks(archShadow: ArchShadow, count: number, words: number): void {
  * Reads only — the shadow and tenants are updated by the caller, for EMITTED rows. Writes into a
  * serializer-owned scratch buffer (no per-row allocation); only the rows in `rows` are written, so words
  * for any other row are stale.
+ *
+ * CALLER CONTRACT — an empty mask does NOT mean "nothing to emit". `cols` covers only column-BACKED
+ * persisted fields, so an archetype whose persisted fields are all rich yields `cols.length === 0` and
+ * therefore zero mask words: a tenant change on such a row is invisible here and the row would be
+ * dropped by a bare `mask !== 0` test, silently stranding the new occupant on the receiver. Callers
+ * must test the tenant separately (as the epsilon filter does) rather than reducing to the mask alone.
  */
 export function computeRowFieldMasks(
   a: { count: number; rows: ArrayLike<number> },
