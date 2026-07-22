@@ -14,7 +14,7 @@
 
 import type { ComponentId, EntityHandle, FieldDescriptor } from '@ecsia/schema'
 import { encodeEid, elementBytes } from '@ecsia/core'
-import type { ElementKind, World } from '@ecsia/core'
+import type { ElementKind, SerializeArchetype, World } from '@ecsia/core'
 import { WriteCursor, ReadCursor } from './cursor.js'
 import {
   DELTA_MIN_SUPPORTED_VERSION,
@@ -33,6 +33,7 @@ import {
   readJsonBytes,
   writeJsonBytes,
 } from './format.js'
+import type { PersistedComponentColumns } from './format.js'
 import { applyStructuralOps, writeDeltaStructuralSection } from './structural.js'
 import { compressImage, decompressImage, type Compressor, type DecompressOptions } from './compression.js'
 import { encodeRichValue, richKindOrdinal, type OnUnserializable } from './rich.js'
@@ -157,14 +158,13 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
     const archs = s.archetypes()
     // The FULL changeVersion-selected row set per archetype (the same scan SECTION R rides). Epsilon
     // filters SECTION V's subset below but NEVER SECTION R, so this is computed once and reused.
-    const changedRowsByArch = new Map<number, number[]>()
+    const changedRowsByArch = collectChangedRows(world, baseline)
     const archCountAt = cur.pos
     cur.u32(0) // changedArchetypeCount (back-patched)
     let changedArchetypeCount = 0
     for (const a of archs) {
-      const allRows: number[] = [...world.changedRows(a.id, baseline)]
-      if (allRows.length === 0) continue
-      changedRowsByArch.set(a.id, allRows)
+      const allRows = changedRowsByArch.get(a.id)
+      if (allRows === undefined) continue
       // Epsilon (RF-SHADOW-FREE): keep a row only if SOME numeric lane exceeds tolerance vs the
       // serializer-owned shadow; else drop it from SECTION V. NOTE: `baseline` advances to `target`
       // at the end of write(), so a dropped row is re-considered only if a LATER write re-stamps it —
@@ -180,28 +180,7 @@ export function createDeltaSerializer(world: World, sinceTick: number, opts: Del
       const persisted = persistedColumnsOf(a)
       if (persisted.length === 0) continue
       changedArchetypeCount += 1
-      cur.u32(a.id)
-      cur.u32(rows.length)
-      // Per changed row: the FULL entity handle (the boundary-stable row identity).
-      for (const r of rows) cur.u32(a.rows[r] as number)
-      cur.u16(persisted.length)
-      for (const pc of persisted) {
-        const comp = a.components[pc.compIndex]
-        if (comp === undefined) continue
-        cur.u32(comp.componentId as number)
-        cur.u16(pc.colIndices.length)
-        for (const ci of pc.colIndices) {
-          const col = comp.columns[ci]
-          if (col === undefined) continue
-          const stride = col.layout.stride
-          // U8 element ordinal + u8 stride, then per CHANGED row the stride elements at the
-          // column's NATIVE element width (a raw byte copy — no f64 widening, no per-row allocation).
-          cur.u8(elementOrdinal(col.layout.element))
-          cur.u8(stride)
-          const view = col.view as unknown as { subarray(s: number, e: number): ArrayBufferView }
-          for (const r of rows) cur.copyBytes(view.subarray(r * stride, (r + 1) * stride))
-        }
-      }
+      writeValueArchBlock(cur, a, rows, persisted)
     }
     cur.patchU32(archCountAt, changedArchetypeCount)
 
@@ -692,6 +671,70 @@ function reinterpret(element: ElementKind, buffer: ArrayBufferLike, off: number,
       return new Float64Array(buffer, off, elems)
     default:
       throw new Error(`serialization: unknown element '${element as string}'`)
+  }
+}
+
+// The changeVersion-selected changed-row set per hot archetype (id-ascending), for the SECTION V +
+// SECTION R scan. Non-destructive (version compare), so the filtered view stream (interest.ts) can
+// share ONE call across all views per tick (invariant IM-5). Only archetypes with >=1 changed row
+// appear; the caller epsilon-filters / masks the subset it emits.
+export function collectChangedRows(world: World, baseline: number): Map<number, number[]> {
+  const s = world.__serialize
+  const map = new Map<number, number[]>()
+  for (const a of s.archetypes()) {
+    const rows: number[] = [...world.changedRows(a.id, baseline)]
+    if (rows.length > 0) map.set(a.id, rows)
+  }
+  return map
+}
+
+// One SECTION V archetype block: id, the changed-row handles, then per PERSISTED component the SoA
+// column bytes for those rows. `rows` and `persisted` are already the selected/masked subsets — the
+// filtered view stream (interest.ts) passes a visible-row subset and a non-concealed-column subset,
+// and may emit several blocks with the same archetype id (the receiver keys rows by handle, ignoring
+// the id), so this stays byte-identical for the unfiltered whole-archetype call.
+// `isHidden`, when supplied (filtered view stream), masks any `eid` lane whose stored handle is not
+// visible to the client to NO_ENTITY — an eid holds the target's RAW producer handle (encodeEid is
+// identity), so emitting one bulk would leak a concealed entity's existence. Absent (the unfiltered
+// serializer) the eid column is bulk-copied exactly as before, so shipped output stays byte-identical.
+export function writeValueArchBlock(
+  cur: WriteCursor,
+  a: SerializeArchetype,
+  rows: readonly number[],
+  persisted: readonly PersistedComponentColumns[],
+  isHidden?: (handle: number) => boolean,
+): void {
+  cur.u32(a.id)
+  cur.u32(rows.length)
+  // Per changed row: the FULL entity handle (the boundary-stable row identity).
+  for (const r of rows) cur.u32(a.rows[r] as number)
+  cur.u16(persisted.length)
+  for (const pc of persisted) {
+    const comp = a.components[pc.compIndex]
+    if (comp === undefined) continue
+    cur.u32(comp.componentId as number)
+    cur.u16(pc.colIndices.length)
+    for (const ci of pc.colIndices) {
+      const col = comp.columns[ci]
+      if (col === undefined) continue
+      const stride = col.layout.stride
+      // U8 element ordinal + u8 stride, then per row the stride elements at the column's NATIVE
+      // element width (a raw byte copy — no f64 widening, no per-row allocation).
+      cur.u8(elementOrdinal(col.layout.element))
+      cur.u8(stride)
+      if (isHidden !== undefined && comp.fields[ci]?.token === 'eid') {
+        const eview = col.view as unknown as { [i: number]: number }
+        for (const r of rows) {
+          for (let lane = 0; lane < stride; lane++) {
+            const stored = eview[r * stride + lane] as number
+            cur.u32(stored !== -1 && isHidden(stored >>> 0) ? 0xffffffff : stored >>> 0)
+          }
+        }
+        continue
+      }
+      const view = col.view as unknown as { subarray(s: number, e: number): ArrayBufferView }
+      for (const r of rows) cur.copyBytes(view.subarray(r * stride, (r + 1) * stride))
+    }
   }
 }
 

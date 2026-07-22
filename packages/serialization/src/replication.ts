@@ -22,6 +22,8 @@ import { createSnapshotSerializer } from './snapshot.js'
 import { createSnapshotDeserializer } from './deserialize.js'
 import { createDeltaSerializer, applyDelta } from './delta.js'
 import type { DeltaOptions } from './delta.js'
+import { createStateView, gatherSharedChangeset } from './interest.js'
+import type { SharedChangeset, StateView, StateViewOptions } from './interest.js'
 import type { Compressor } from './compression.js'
 import type { OnUnserializable } from './rich.js'
 
@@ -89,6 +91,18 @@ export interface ReplicationStream {
    * any external-command inbox after `update()`, then emit.
    */
   tick(): ReplicationMessage
+  /**
+   * Open a per-client FILTERED view over the same shared changeset (interest management). The host
+   * scans changed rows + structural ops ONCE per tick and each view MASKS that shared set, so cost is
+   * proportional to what a client sees change — never `O(views × world)`. See {@link StateViewOptions}.
+   *
+   * LOCKSTEP CONTRACT: drive every live view once per serial flush — `view.delta()` for existing
+   * views, `view.baseline()` for a joiner — at the SAME flush, exactly as the unfiltered
+   * `tick()`/`baseline()` pair chains (all views share one advancing baseline cursor). Within a flush,
+   * emit existing views' deltas BEFORE a joiner's baseline. The unfiltered `tick()`/`baseline()` keep
+   * their own independent cursor and stay byte-for-byte identical whether or not views are attached.
+   */
+  view(opts: StateViewOptions): StateView
 }
 
 export function createReplicationStream(world: World, opts: ReplicationStreamOptions = {}): ReplicationStream {
@@ -104,6 +118,30 @@ export function createReplicationStream(world: World, opts: ReplicationStreamOpt
   })
   const ser = createDeltaSerializer(world, world.currentTick(), deltaOpts)
   let seq = 0
+
+  // The views' shared changeset (interest.ts): ONE per tick, memoized on the current tick, its window
+  // (sharedSince, currentTick] advancing at each tick boundary. Independent of `ser`, so the
+  // unfiltered path stays byte-identical whether or not views exist. Enabling the structural journal
+  // is idempotent; a view stream needs it for the shared drain even if `includeStructural` were off.
+  s.enableStructuralJournal()
+  let sharedSince = world.currentTick()
+  let sharedCache: SharedChangeset | undefined
+  function gatherShared(): SharedChangeset {
+    const target = world.currentTick()
+    if (sharedCache !== undefined && sharedCache.target === target) return sharedCache
+    if (sharedCache !== undefined) sharedSince = sharedCache.target
+    sharedCache = gatherSharedChangeset(world, sharedSince)
+    return sharedCache
+  }
+  function noteBaseline(tick: number): void {
+    // A view baselined at `tick`; align the shared cursor so its next delta chains from `tick`. When a
+    // gather already happened this flush (other views delta'd first) the tick-boundary advance handles
+    // it; otherwise advance manually so a baseline-only flush still chains.
+    if (sharedCache === undefined || sharedCache.target !== tick) {
+      sharedSince = tick
+      sharedCache = undefined
+    }
+  }
 
   function baselineMessage(): ReplicationMessage {
     // The snapshot delivers EXACT values, but the epsilon shadow holds last-EMITTED ones — a
@@ -136,6 +174,15 @@ export function createReplicationStream(world: World, opts: ReplicationStreamOpt
       const baselineTick = ser.sinceTick
       const tick = world.currentTick()
       return { seq: seq++, kind: 'delta', schemaHash: s.schemaHash(), baselineTick, tick, bytes: ser.deltaCopy() }
+    },
+    view(opts: StateViewOptions): StateView {
+      return createStateView(world, opts, {
+        gatherShared,
+        currentTick: () => world.currentTick(),
+        schemaHash: () => s.schemaHash(),
+        nextSeq: () => seq++,
+        noteBaseline,
+      })
     },
   }
 }
