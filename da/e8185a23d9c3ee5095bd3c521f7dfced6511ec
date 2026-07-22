@@ -1,0 +1,27 @@
+packages/serialization/src/delta.ts
+  s_8d9683fb10832a::t_d594749dfd0606 563-567,569-596,599,603,610
+packages/serialization/test/field-granular-delta.test.ts
+  s_8d9683fb10832a::t_be344d768405d1 320
+  s_8d9683fb10832a::t_5a7d89d6e9d745 301-302,308
+  s_8d9683fb10832a::t_bd94643b0882db 323
+  s_8d9683fb10832a::t_b1444364f69db7 327-459
+  s_8d9683fb10832a::t_26a89c90b18265 287,289,293
+  s_8d9683fb10832a::t_73faf58e612f57 290-292,303-304,307,311
+  s_8d9683fb10832a::t_236d68901a82e2 281-286,288,294-300,305-306,309-310,312-319,321-322,324-326
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "dae8185a23d9c3ee5095bd3c521f7dfced6511ec",
+  "prompts": {},
+  "sessions": {
+    "s_8d9683fb10832a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4bc81bdc-d97f-48ea-8bf0-8f57be4510ce",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
