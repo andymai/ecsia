@@ -1,0 +1,28 @@
+packages/rollback/test/relations.test.ts
+  s_8d9683fb10832a::t_cae4416d42da64 254-258
+  s_8d9683fb10832a::t_bd118409aab157 250-253,259-268,270-271,275-292
+  s_8d9683fb10832a::t_d5dd70f1094a4c 269,272-274
+packages/rollback/test/relations-golden.property.test.ts
+  s_8d9683fb10832a::t_ae094f8ce7e495 137-139,142
+packages/rollback/src/rollback.ts
+  s_8d9683fb10832a::t_6682a9ab5f5712 341-348,366
+  s_8d9683fb10832a::t_9a4466a45dd541 209
+  s_8d9683fb10832a::t_248b97d88a4814 349-350
+  s_8d9683fb10832a::t_be9a4dc0dba518 197-201,203-205,211-218,225
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "33ac3dc17cebf349dfe2d0f4ac3b3735bf301b8f",
+  "prompts": {},
+  "sessions": {
+    "s_8d9683fb10832a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4bc81bdc-d97f-48ea-8bf0-8f57be4510ce",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
