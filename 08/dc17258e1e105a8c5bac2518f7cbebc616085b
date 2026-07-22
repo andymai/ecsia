@@ -1,0 +1,71 @@
+packages/serialization/src/format.ts
+  s_8d9683fb10832a::t_00ae7e2927d9df 17-20
+  s_8d9683fb10832a::t_8af1b9ceefbd75 44-47
+  s_8d9683fb10832a::t_0001b0aff0e40b 21
+packages/serialization/test/epsilon-shadow-identity.test.ts
+  s_8d9683fb10832a::t_b2e3e01a1addb6 132-135,139-147,150-151
+  s_8d9683fb10832a::t_81845828239867 73-100
+  s_8d9683fb10832a::t_0f1858ceb9fabe 12
+packages/serialization/test/field-granular-delta.test.ts
+  s_8d9683fb10832a::t_3a5102acfbcf31 23-25,61-66
+  s_8d9683fb10832a::t_032794e3a9b3a5 142-144
+  s_8d9683fb10832a::t_25a770d2c28ddb 121-126,128-131
+  s_8d9683fb10832a::t_64148541910c94 1-10,13-15,18-22,38-60,67-69,72-89,103-120,127,132-141,145-167,172,174-207,211-282,356-362,366-373,378,383-413
+  s_8d9683fb10832a::t_c16ae23e001397 90-102
+  s_8d9683fb10832a::t_23352041a049a4 70-71
+  s_8d9683fb10832a::t_f501d7a4ef5313 339,341
+  s_8d9683fb10832a::t_4aeddcd2e6278b 363-365,374-377,379-380,382
+  s_8d9683fb10832a::t_39f7ea966058ee 208-210
+  s_8d9683fb10832a::t_75b05f0f6dbbf8 11-12,16-17,26-37
+  s_8d9683fb10832a::t_3dcf97bab7e094 283-338,340,342-355
+  s_8d9683fb10832a::t_1b814209fe2fff 168-171,173
+  s_8d9683fb10832a::t_b46cfbbf10341d 381
+packages/serialization/src/delta.ts
+  s_8d9683fb10832a::t_bf9e183578b3c1 80,95
+  s_8d9683fb10832a::t_0bad9d0fc6f973 540
+  s_8d9683fb10832a::t_8c2373a0fb9965 111-114
+  s_8d9683fb10832a::t_27fe96b43ca53b 96-99,487
+  s_8d9683fb10832a::t_11fd125fe9ea3d 713-714,723
+  s_8d9683fb10832a::t_35cdfc48d00374 485-486,488-493,506-507
+  s_8d9683fb10832a::t_90ecd38939812c 571
+  s_8d9683fb10832a::t_1c3da04d5f48e4 886-888
+  s_8d9683fb10832a::t_66c8908abf3478 895,902-903,908-910,915-917
+  s_8d9683fb10832a::t_e619332237b1d8 66-76
+  s_8d9683fb10832a::t_64007f7b0490c6 158-160
+  s_8d9683fb10832a::t_cc6fb3aa075539 695
+  s_8d9683fb10832a::t_04d76a042db3dd 200-203
+  s_8d9683fb10832a::t_a6464d22ab9f2d 190-191
+  s_8d9683fb10832a::t_8e5c9a4c4b0451 21
+  s_8d9683fb10832a::t_eff44167514270 535-539,541,547-570,572-614
+  s_8d9683fb10832a::t_1eb7e8814a70bc 715
+packages/serialization/test/wire-hardening.unit.test.ts
+  s_8d9683fb10832a::t_e8686edc792271 87-130
+  s_8d9683fb10832a::t_7d460fa12ee37f 16
+packages/serialization/test/m10-rich-version-gating.unit.test.ts
+  s_8d9683fb10832a::t_bbef5a200807cf 41-42
+website/guide/serialization.md
+  s_8d9683fb10832a::t_75958c26a71f5d 104-129
+bundle-budget.json
+  s_8d9683fb10832a::t_fe46f66efd3e45 13-14
+packages/serialization/test/m10-persist.unit.test.ts
+  s_8d9683fb10832a::t_bbef5a200807cf 301
+packages/serialization/src/replication.ts
+  s_8d9683fb10832a::t_3f72d66674b4f6 60-65
+  s_8d9683fb10832a::t_5e3c83e30cb868 120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "08dc17258e1e105a8c5bac2518f7cbebc616085b",
+  "prompts": {},
+  "sessions": {
+    "s_8d9683fb10832a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4bc81bdc-d97f-48ea-8bf0-8f57be4510ce",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
