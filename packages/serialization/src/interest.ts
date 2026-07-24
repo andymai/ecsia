@@ -62,11 +62,12 @@ export interface StateViewOptions {
   /** Per-entity component concealment, layered over `hideComponents`. MUST be pure and deterministic
    * (invariant IM-4). Called for a visible entity's real components only. */
   readonly conceal?: (entity: EntityHandle, component: ComponentId) => boolean
-  /** #166 PROTOTYPE: `'field'` emits only the fields that changed since this client last saw the entity
-   * (via a view-owned exact shadow), instead of the whole component. No-conceal / no-eid path only.
-   * Default `'component'` (unchanged). */
+  /** `'field'` (#166) emits only the columns that changed since this client last saw the entity,
+   * instead of the whole component — driven by a shared, compute-once field-mask shadow. Views with
+   * concealment (`hideComponents`/`conceal`) or eid fields fall back to `'component'` grain. Default
+   * `'component'` (unchanged). */
   readonly granularity?: 'component' | 'field'
-  /** #167 PROTOTYPE: maintain membership incrementally via enter()/leave() instead of re-scanning
+  /** `true` (#167) maintains membership incrementally via enter()/leave() instead of re-scanning
    * `visible` each delta(). `visible` seeds the initial set at baseline(); after that the caller drives
    * transitions. Default false (per-tick query re-scan, unchanged). */
   readonly incremental?: boolean
@@ -169,18 +170,32 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
   const pendingLeft = new Set<number>()
   let seeded = false
   // Visibility bitmap keyed by the handle's slot index (incremental mode only): the field-granular
-  // filter tests visibility once per world-changed row per view — a dense byte array read beats the
+  // filter tests visibility once per world-changed row per view — a dense byte-array read beats the
   // Set hash lookup that dominated the profile. Maintained O(1) on enter()/leave(); no per-tick
-  // rebuild. Costs maxEntities bytes/view (the memory-for-speed trade of the incremental path).
+  // rebuild. Grown lazily (doubling, capped at the index space), so it costs bytes proportional to the
+  // highest slot index a member has occupied — the room's live entity count — not `maxEntities`.
   const indexMask = world.handleLayout.indexMask
-  const visibleBits = incremental ? new Uint8Array(indexMask + 1) : undefined
+  let visibleBits = incremental ? new Uint8Array(256) : undefined
+  function markVisible(handle: number, on: boolean): void {
+    if (visibleBits === undefined) return
+    const idx = (handle & indexMask) >>> 0
+    if (idx >= visibleBits.length) {
+      if (!on) return // clearing an out-of-range (never-set) bit is a no-op
+      let len = visibleBits.length
+      while (len <= idx) len *= 2
+      const grown = new Uint8Array(Math.min(len, indexMask + 1))
+      grown.set(visibleBits)
+      visibleBits = grown
+    }
+    visibleBits[idx] = on ? 1 : 0
+  }
   function seedMembers(): void {
     memberSet.clear()
     visibleBits?.fill(0)
     for (const e of opts.visible) {
       const h = e.handle as number
       memberSet.add(h)
-      if (visibleBits !== undefined) visibleBits[(h & indexMask) >>> 0] = 1
+      markVisible(h, true)
     }
     seeded = true
   }
@@ -327,12 +342,11 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
     const archCountAt = cur.pos
     cur.u32(0)
     let changedArchetypeCount = 0
-    // #166 PROTOTYPE: field-granular filtered SECTION V. Per archetype, take the shared changed rows,
-    // keep only visible-non-entered, then emit ONLY the fields that changed since this client last saw
-    // them. Encode-only, and gated on NO concealment of any kind — `writeFieldGranularBlocks` emits
-    // every persisted column, so it neither drops `hideComponents`/`conceal`-hidden components nor
-    // masks eid lanes. When any concealment applies, fall through to the component-granular path, which
-    // handles both. This is the no-conceal, no-eid case — exactly the movement workload this measures.
+    // #166 field-granular filtered SECTION V. Per archetype, take the shared changed rows, keep only
+    // visible-non-entered, and emit ONLY the columns that changed since this client last saw them.
+    // Gated on NO concealment of any kind: `writeFieldGranularBlocks` emits every persisted column, so
+    // it neither drops `hideComponents`/`conceal`-hidden components nor masks eid lanes. When any
+    // concealment applies, fall through to the component-granular path below, which handles both.
     if (fieldGranular && !dynamicConceal && hide.size === 0) {
       // The field-change masks are computed ONCE by the stream over the world's changed rows (shared
       // shadow); each view only MASKS that shared selection down to its visible rows — no per-view
@@ -349,7 +363,8 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
           const bits = visibleBits
           for (const r of sel.rows) {
             const h = a.rows[r] as number
-            if (bits[(h & indexMask) >>> 0] === 1 && !entered.has(h)) visibleRows.push(r)
+            const idx = (h & indexMask) >>> 0
+            if (idx < bits.length && bits[idx] === 1 && !entered.has(h)) visibleRows.push(r)
           }
         } else {
           for (const r of sel.rows) {
@@ -607,14 +622,14 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
       memberSet.add(h)
       pendingEntered.add(h)
       pendingLeft.delete(h)
-      if (visibleBits !== undefined) visibleBits[(h & indexMask) >>> 0] = 1
+      markVisible(h, true)
     },
     leave(handle: EntityHandle): void {
       const h = handle as number
       memberSet.delete(h)
       pendingLeft.add(h)
       pendingEntered.delete(h)
-      if (visibleBits !== undefined) visibleBits[(h & indexMask) >>> 0] = 0
+      markVisible(h, false)
     },
     get visibleEntities(): ReadonlySet<EntityHandle> {
       return prevVisible as ReadonlySet<number> as ReadonlySet<EntityHandle>

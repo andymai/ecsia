@@ -288,6 +288,90 @@ describe('interest — component concealment strips a hidden component from a vi
   })
 })
 
+describe('interest — field-granular filtered deltas round-trip through the decoder', () => {
+  it('granularity:"field" (incremental) replicates changed fields and leaves the rest intact', () => {
+    const P = defP() // { x: f32, y: f32 }
+    const V = defineTag('vis') as unknown as ComponentDef<Schema>
+    const src = createWorld({ components: [P, V] })
+    const P2 = defP()
+    const V2 = defineTag('vis') as unknown as ComponentDef<Schema>
+    const dst = createWorld({ components: [P2, V2] })
+    const stream = createReplicationStream(src)
+    const receiver = createReplicationReceiver(dst)
+    const view = stream.view({ visible: src.query(has(V)), granularity: 'field', incremental: true })
+    const y = (h: EntityHandle): number => (dst.entity(h).read(P2) as { y: number }).y
+
+    const a = src.spawnWith(P, V)
+    ;(src.entity(a).write(P) as { x: number; y: number }).x = 3
+    ;(src.entity(a).write(P) as { x: number; y: number }).y = 7
+    receiver.apply(view.baseline())
+    const localA = receiver.remap.get(a) as EntityHandle
+    expect(x(dst, localA, P2)).toBeCloseTo(3)
+    expect(y(localA)).toBeCloseTo(7)
+
+    // change ONLY x — the field-granular delta must carry x and leave y (7) intact on the mirror
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { x: number }).x = 30
+    receiver.apply(view.delta())
+    expect(x(dst, localA, P2)).toBeCloseTo(30)
+    expect(y(localA)).toBeCloseTo(7)
+
+    // change ONLY y
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { y: number }).y = 70
+    receiver.apply(view.delta())
+    expect(x(dst, localA, P2)).toBeCloseTo(30)
+    expect(y(localA)).toBeCloseTo(70)
+  })
+
+  it('the shared field-mask shadow serves a late-joining client correctly (interleaved baseline/delta)', () => {
+    const P = defP()
+    const V = defineTag('vis') as unknown as ComponentDef<Schema>
+    const src = createWorld({ components: [P, V] })
+    const mkDst = () => {
+      const P2 = defP()
+      const V2 = defineTag('vis') as unknown as ComponentDef<Schema>
+      return { w: createWorld({ components: [P2, V2] }), P2 }
+    }
+    const stream = createReplicationStream(src)
+    const yOf = (w: ReturnType<typeof createWorld>, h: EntityHandle, P2: ComponentDef<Schema>): number =>
+      (w.entity(h).read(P2) as { y: number }).y
+
+    const A = mkDst()
+    const rA = createReplicationReceiver(A.w)
+    const viewA = stream.view({ visible: src.query(has(V)), granularity: 'field' })
+
+    const a = src.spawnWith(P, V)
+    ;(src.entity(a).write(P) as { x: number; y: number }).x = 1
+    ;(src.entity(a).write(P) as { x: number; y: number }).y = 2
+    rA.apply(viewA.baseline())
+
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { x: number }).x = 10
+    rA.apply(viewA.delta())
+
+    // Client B joins mid-stream: a new view baselines (resetting the shared cursor) while A keeps
+    // delta'ing. Both must end up correct despite sharing ONE field-mask shadow.
+    const B = mkDst()
+    const rB = createReplicationReceiver(B.w)
+    const viewB = stream.view({ visible: src.query(has(V)), granularity: 'field' })
+    rB.apply(viewB.baseline())
+    const lA = rA.remap.get(a) as EntityHandle
+    const lB = rB.remap.get(a) as EntityHandle
+    expect(x(A.w, lA, A.P2)).toBeCloseTo(10)
+    expect(x(B.w, lB, B.P2)).toBeCloseTo(10)
+
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { x: number }).x = 20
+    rA.apply(viewA.delta())
+    rB.apply(viewB.delta())
+    expect(x(A.w, lA, A.P2)).toBeCloseTo(20)
+    expect(x(B.w, lB, B.P2)).toBeCloseTo(20)
+    expect(yOf(A.w, lA, A.P2)).toBeCloseTo(2) // y never changed on either mirror
+    expect(yOf(B.w, lB, B.P2)).toBeCloseTo(2)
+  })
+})
+
 describe('interest — dynamic concealment emits component transitions on a still-visible entity', () => {
   it('conceal-after-reveal: Hand becomes concealed → a ComponentRemove drops it; later changes never appear', () => {
     const P = defP()
