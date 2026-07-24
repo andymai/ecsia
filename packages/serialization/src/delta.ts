@@ -484,13 +484,13 @@ export function computeRowFieldMasks(
 
 /** The epsilon filter's result: the kept rows plus the masks that justified keeping them, so a
  * field-granular caller can group the rows without recomputing the compare. */
-interface EpsilonSelection {
+export interface EpsilonSelection {
   readonly rows: number[]
   readonly masks: Uint32Array
   readonly words: number
 }
 
-function selectByEpsilon(
+export function selectByEpsilon(
   a: {
     id: number
     count: number
@@ -553,7 +553,7 @@ function selectByEpsilon(
 // archetype falls back to a single whole-row block — legal because blocks are self-describing.
 const FIELD_GROUP_MIN_ROWS = 4
 
-function writeFieldGranularBlocks(
+export function writeFieldGranularBlocks(
   cur: WriteCursor,
   a: SerializeArchetype,
   selected: EpsilonSelection,
@@ -954,8 +954,11 @@ export function writeValueArchBlock(
         }
         continue
       }
-      const view = col.view as unknown as { subarray(s: number, e: number): ArrayBufferView }
-      for (const r of rows) cur.copyBytes(view.subarray(r * stride, (r + 1) * stride))
+      // Take the column's byte view ONCE, then copy each row's slice alloc-free (no per-row subarray).
+      const tv = col.view as unknown as { buffer: ArrayBufferLike; byteOffset: number; byteLength: number }
+      const srcU8 = new Uint8Array(tv.buffer, tv.byteOffset, tv.byteLength)
+      const strideBytes = stride * col.layout.elementBytes
+      for (const r of rows) cur.copyRawBytes(srcU8, r * strideBytes, strideBytes)
     }
   }
 }

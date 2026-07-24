@@ -25,6 +25,7 @@ import { ShapeKind } from '@ecsia/core'
 import type { SerializeArchetype, SerializeStructuralRecord, World } from '@ecsia/core'
 import { WriteCursor } from './cursor.js'
 import {
+  FLAG_FIELD_GRANULAR,
   FLAG_HAS_RELATIONS,
   FLAG_HAS_STRUCTURAL,
   FLAG_IS_DELTA,
@@ -37,7 +38,8 @@ import {
   elementOrdinal,
 } from './format.js'
 import type { PersistedComponentColumns } from './format.js'
-import { collectChangedRows, writeValueArchBlock } from './delta.js'
+import { collectChangedRows, writeFieldGranularBlocks, writeValueArchBlock } from './delta.js'
+import type { EpsilonSelection } from './delta.js'
 import { emitComponentAdd, emitComponentRemove, emitEntityDestroy, emitStructuralRecord, synthEntityAdd } from './structural.js'
 import { writeRegistrySection } from './snapshot.js'
 import { writePairPayload } from './payload.js'
@@ -60,6 +62,15 @@ export interface StateViewOptions {
   /** Per-entity component concealment, layered over `hideComponents`. MUST be pure and deterministic
    * (invariant IM-4). Called for a visible entity's real components only. */
   readonly conceal?: (entity: EntityHandle, component: ComponentId) => boolean
+  /** `'field'` (#166) emits only the columns that changed since this client last saw the entity,
+   * instead of the whole component — driven by a shared, compute-once field-mask shadow. Views with
+   * concealment (`hideComponents`/`conceal`) or eid fields fall back to `'component'` grain. Default
+   * `'component'` (unchanged). */
+  readonly granularity?: 'component' | 'field'
+  /** `true` (#167) maintains membership incrementally via enter()/leave() instead of re-scanning
+   * `visible` each delta(). `visible` seeds the initial set at baseline(); after that the caller drives
+   * transitions. Default false (per-tick query re-scan, unchanged). */
+  readonly incremental?: boolean
 }
 
 export interface StateView {
@@ -69,6 +80,10 @@ export interface StateView {
   /** A full filtered baseline for a (re)joining client: only the currently-visible entities, with
    * concealed components stripped (kind:'baseline'). Resets this view's `prevVisible`. */
   baseline(): ReplicationMessage
+  /** #167 incremental membership (only meaningful when the view was created `incremental`): the caller
+   * pushes AOI transitions instead of the view re-scanning a query each tick. No-op otherwise. */
+  enter(handle: EntityHandle): void
+  leave(handle: EntityHandle): void
   /** The entity set the view emitted as visible on its last delta()/baseline(). */
   readonly visibleEntities: ReadonlySet<EntityHandle>
 }
@@ -136,14 +151,54 @@ export interface StateViewDeps {
   nextSeq(): number
   /** A view took a filtered baseline at `tick`: align the shared cursor so its next delta chains. */
   noteBaseline(tick: number): void
+  /** #166+shared-shadow: per-tick field-change masks over the WORLD's changed rows, computed ONCE by
+   * the stream (one shared shadow) and masked per view (invariant IM-5). Keyed by archetype id. */
+  sharedFieldMasks(): ReadonlyMap<number, EpsilonSelection>
 }
 
-export function createStateView(world: World, opts: StateViewOptions, deps: StateViewDeps): StateView {
+export function createStateView(world: World, opts: StateViewOptions, deps: StateViewDeps, fieldGranular = false, incremental = false): StateView {
   assertPlatformLittleEndian()
   const s = world.__serialize
   const hide = new Set<number>((opts.hideComponents ?? []) as readonly number[])
   const conceal = opts.conceal
   const persistedColumnsOf = createPersistedColumnsCache()
+  // #167: incremental membership. Instead of rebuilding a Set from `opts.visible` every delta()
+  // (O(members)/tick), keep a persistent member set the caller mutates via enter()/leave(), and carry
+  // the tick's transitions in pending sets — so per-tick membership work is O(changes), not O(members).
+  const memberSet = new Set<number>()
+  const pendingEntered = new Set<number>()
+  const pendingLeft = new Set<number>()
+  let seeded = false
+  // Visibility bitmap keyed by the handle's slot index (incremental mode only): the field-granular
+  // filter tests visibility once per world-changed row per view — a dense byte-array read beats the
+  // Set hash lookup that dominated the profile. Maintained O(1) on enter()/leave(); no per-tick
+  // rebuild. Grown lazily (doubling, capped at the index space), so it costs bytes proportional to the
+  // highest slot index a member has occupied — the room's live entity count — not `maxEntities`.
+  const indexMask = world.handleLayout.indexMask
+  let visibleBits = incremental ? new Uint8Array(256) : undefined
+  function markVisible(handle: number, on: boolean): void {
+    if (visibleBits === undefined) return
+    const idx = (handle & indexMask) >>> 0
+    if (idx >= visibleBits.length) {
+      if (!on) return // clearing an out-of-range (never-set) bit is a no-op
+      let len = visibleBits.length
+      while (len <= idx) len *= 2
+      const grown = new Uint8Array(Math.min(len, indexMask + 1))
+      grown.set(visibleBits)
+      visibleBits = grown
+    }
+    visibleBits[idx] = on ? 1 : 0
+  }
+  function seedMembers(): void {
+    memberSet.clear()
+    visibleBits?.fill(0)
+    for (const e of opts.visible) {
+      const h = e.handle as number
+      memberSet.add(h)
+      markVisible(h, true)
+    }
+    seeded = true
+  }
   const deltaCur = new WriteCursor(8 * 1024)
   const baselineCur = new WriteCursor(16 * 1024)
   let prevVisible = new Set<number>()
@@ -174,11 +229,29 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
     return set
   }
 
-  function writeFilteredDelta(shared: SharedChangeset, nowVisible: Set<number>): Uint8Array {
-    const entered = new Set<number>()
-    for (const h of nowVisible) if (!prevVisible.has(h)) entered.add(h)
-    const left = new Set<number>()
-    for (const h of prevVisible) if (!nowVisible.has(h)) left.add(h)
+  function writeFilteredDelta(
+    shared: SharedChangeset,
+    nowVisible: Set<number>,
+    precomputed?: { entered: Set<number>; left: Set<number> },
+    reuse = false,
+  ): Uint8Array {
+    // #167: query mode diffs prev↔now (O(members) every tick); incremental mode takes entered/left
+    // from the caller's enter()/leave() and never rebuilds or snapshots the membership set.
+    let entered: Set<number>
+    let left: Set<number>
+    if (precomputed !== undefined) {
+      entered = precomputed.entered
+      left = precomputed.left
+    } else {
+      entered = new Set<number>()
+      for (const h of nowVisible) if (!prevVisible.has(h)) entered.add(h)
+      left = new Set<number>()
+      for (const h of prevVisible) if (!nowVisible.has(h)) left.add(h)
+    }
+    // "Was visible last tick" for a still-alive destroy: prevVisible in query mode; in incremental
+    // mode an entity visible last tick is either still a member or in `left`.
+    const wasVisibleLastTick = (h: number): boolean =>
+      precomputed !== undefined ? nowVisible.has(h) || left.has(h) : prevVisible.has(h)
 
     const cur = deltaCur
     cur.reset()
@@ -211,7 +284,7 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
       const h = rec.handle
       const k = rec.kind as number
       const destroyLike = k === ShapeKind.Destroy || k === ShapeKind.Remove || k === ShapeKind.RemovePair
-      const visible = nowVisible.has(h) || (destroyLike && prevVisible.has(h))
+      const visible = nowVisible.has(h) || (destroyLike && wasVisibleLastTick(h))
       if (!visible) continue
       if ((entered.has(h) && !shared.realCreated.has(h)) || (left.has(h) && !shared.realDestroyed.has(h))) continue
       // A real destroy tears the whole entity down, so its own component removes this tick are moot.
@@ -269,46 +342,95 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
     const archCountAt = cur.pos
     cur.u32(0)
     let changedArchetypeCount = 0
-    for (const a of s.archetypes()) {
-      const allRows = shared.changedRowsByArch.get(a.id)
-      if (allRows === undefined) continue
-      const persisted = persistedColumnsOf(a)
-      if (persisted.length === 0) continue
-      // Group the kept rows by their concealment mask so each emitted block has a UNIFORM column set
-      // (a component may be concealed per-entity). No concealment ⇒ one group, the whole archetype.
-      const groups = new Map<string, { rows: number[]; keptPersisted: PersistedComponentColumns[] }>()
-      for (const r of allRows) {
-        const h = a.rows[r] as number
-        if (!nowVisible.has(h) || entered.has(h)) continue
-        let key = ''
-        const kept: PersistedComponentColumns[] = []
-        for (const pc of persisted) {
-          const comp = a.components[pc.compIndex]
-          if (comp === undefined) continue
-          if (isConcealed(h, comp.componentId as number)) {
-            key += (comp.componentId as number) + ','
-            continue
-          }
-          kept.push(pc)
+    // #166 field-granular filtered SECTION V: emit ONLY the columns that changed since this client last
+    // saw them. FLAG_FIELD_GRANULAR is per-delta, so field grain is used only when the WHOLE delta can
+    // be: opted in, no concealment (writeFieldGranularBlocks emits every persisted column, so it can't
+    // drop concealed ones), and no eid column among the emitting archetypes (it emits raw eid handles —
+    // it can't mask a target outside the view). Anything else falls through to the component-granular
+    // path below, which strips concealed columns and masks eid lanes via isHidden.
+    const sharedMasks = fieldGranular && !dynamicConceal && hide.size === 0 ? deps.sharedFieldMasks() : undefined
+    let useField = sharedMasks !== undefined
+    if (sharedMasks !== undefined) {
+      for (const a of s.archetypes()) {
+        const sel = sharedMasks.get(a.id)
+        if (sel === undefined || sel.rows.length === 0) continue
+        if (archHasEidColumn(a, persistedColumnsOf(a))) {
+          useField = false
+          break
         }
-        let g = groups.get(key)
-        if (g === undefined) {
-          g = { rows: [], keptPersisted: kept }
-          groups.set(key, g)
-        }
-        g.rows.push(r)
       }
-      for (const g of groups.values()) {
-        if (g.keptPersisted.length === 0) continue
-        changedArchetypeCount += 1
-        writeValueArchBlock(cur, a, g.rows, g.keptPersisted, isHidden)
+    }
+    if (useField && sharedMasks !== undefined) {
+      // Masks are computed ONCE by the stream over the world's changed rows (shared shadow); each view
+      // only MASKS that selection down to its visible rows. Enters get a full baseline above.
+      for (const a of s.archetypes()) {
+        const sel = sharedMasks.get(a.id)
+        if (sel === undefined || sel.rows.length === 0) continue
+        const persisted = persistedColumnsOf(a)
+        if (persisted.length === 0) continue
+        const visibleRows: number[] = []
+        if (visibleBits !== undefined) {
+          const bits = visibleBits
+          for (const r of sel.rows) {
+            const h = a.rows[r] as number
+            const idx = (h & indexMask) >>> 0
+            if (idx < bits.length && bits[idx] === 1 && !entered.has(h)) visibleRows.push(r)
+          }
+        } else {
+          for (const r of sel.rows) {
+            const h = a.rows[r] as number
+            if (nowVisible.has(h) && !entered.has(h)) visibleRows.push(r)
+          }
+        }
+        if (visibleRows.length === 0) continue
+        changedArchetypeCount += writeFieldGranularBlocks(cur, a, { rows: visibleRows, masks: sel.masks, words: sel.words }, persisted)
+      }
+      flags |= FLAG_FIELD_GRANULAR
+    } else {
+      for (const a of s.archetypes()) {
+        const allRows = shared.changedRowsByArch.get(a.id)
+        if (allRows === undefined) continue
+        const persisted = persistedColumnsOf(a)
+        if (persisted.length === 0) continue
+        // Group the kept rows by their concealment mask so each emitted block has a UNIFORM column set
+        // (a component may be concealed per-entity). No concealment ⇒ one group, the whole archetype.
+        const groups = new Map<string, { rows: number[]; keptPersisted: PersistedComponentColumns[] }>()
+        for (const r of allRows) {
+          const h = a.rows[r] as number
+          if (!nowVisible.has(h) || entered.has(h)) continue
+          let key = ''
+          const kept: PersistedComponentColumns[] = []
+          for (const pc of persisted) {
+            const comp = a.components[pc.compIndex]
+            if (comp === undefined) continue
+            if (isConcealed(h, comp.componentId as number)) {
+              key += (comp.componentId as number) + ','
+              continue
+            }
+            kept.push(pc)
+          }
+          let g = groups.get(key)
+          if (g === undefined) {
+            g = { rows: [], keptPersisted: kept }
+            groups.set(key, g)
+          }
+          g.rows.push(r)
+        }
+        for (const g of groups.values()) {
+          if (g.keptPersisted.length === 0) continue
+          changedArchetypeCount += 1
+          writeValueArchBlock(cur, a, g.rows, g.keptPersisted, isHidden)
+        }
       }
     }
     cur.patchU32(archCountAt, changedArchetypeCount)
     cur.patchU8(flagsAt, flags)
 
-    prevVisible = nowVisible
-    return cur.bytesCopy()
+    if (precomputed === undefined) prevVisible = nowVisible
+    // #167 opt: the streaming host sends each view's bytes before the next tick, so the incremental
+    // path returns a view into the reused cursor buffer instead of allocating a per-view copy. Valid
+    // until this view's next delta(); each view owns its own deltaCur, so sibling views are unaffected.
+    return reuse ? cur.bytesView() : cur.bytesCopy()
   }
 
   function writeFilteredSnapshot(nowVisible: Set<number>): Uint8Array {
@@ -473,6 +595,19 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
     delta(): ReplicationMessage {
       assertSerial('StateView.delta()')
       const shared = deps.gatherShared()
+      if (incremental) {
+        if (!seeded) seedMembers()
+        // A journal gap degrades to a filtered baseline (G3); a baseline reseeds and clears pending.
+        if (shared.gap) {
+          pendingEntered.clear()
+          pendingLeft.clear()
+          return makeBaseline(memberSet)
+        }
+        const bytes = writeFilteredDelta(shared, memberSet, { entered: pendingEntered, left: pendingLeft }, true)
+        pendingEntered.clear()
+        pendingLeft.clear()
+        return { seq: deps.nextSeq(), kind: 'delta', schemaHash: deps.schemaHash(), baselineTick: shared.since, tick: shared.target, bytes }
+      }
       const nowVisible = materializeVisible()
       // A producer-side journal gap means (since, target] cannot be structurally reconstructed — the
       // view degrades to a filtered baseline, exactly as the unfiltered stream's tick() does (G3).
@@ -482,14 +617,50 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
     },
     baseline(): ReplicationMessage {
       assertSerial('StateView.baseline()')
+      if (incremental) {
+        seedMembers()
+        pendingEntered.clear()
+        pendingLeft.clear()
+        return makeBaseline(memberSet)
+      }
       return makeBaseline(materializeVisible())
     },
+    // #167 incremental membership. The caller (which already computes AOI enter/leave) pushes changes
+    // here instead of the view re-scanning a query each tick. No-op unless the view is incremental.
+    enter(handle: EntityHandle): void {
+      const h = handle as number
+      memberSet.add(h)
+      pendingEntered.add(h)
+      pendingLeft.delete(h)
+      markVisible(h, true)
+    },
+    leave(handle: EntityHandle): void {
+      const h = handle as number
+      memberSet.delete(h)
+      pendingLeft.add(h)
+      pendingEntered.delete(h)
+      markVisible(h, false)
+    },
     get visibleEntities(): ReadonlySet<EntityHandle> {
-      return prevVisible as ReadonlySet<number> as ReadonlySet<EntityHandle>
+      // Incremental mode drives membership through enter()/leave(), and writeFilteredDelta doesn't
+      // update prevVisible on that path — so memberSet is the live visible set. Query mode uses the
+      // per-delta prevVisible snapshot.
+      return (incremental ? memberSet : prevVisible) as ReadonlySet<number> as ReadonlySet<EntityHandle>
     },
   }
 }
 
 function sortedAsc(set: ReadonlySet<number>): number[] {
   return [...set].sort((a, b) => a - b)
+}
+
+// Whether any persisted column of the archetype is an `eid` lane. The field-granular writer emits raw
+// handles, so an archetype with one can't go through it without disclosing a target outside the view.
+function archHasEidColumn(a: SerializeArchetype, persisted: readonly PersistedComponentColumns[]): boolean {
+  for (const pc of persisted) {
+    const comp = a.components[pc.compIndex]
+    if (comp === undefined) continue
+    for (const ci of pc.colIndices) if (comp.fields[ci]?.token === 'eid') return true
+  }
+  return false
 }

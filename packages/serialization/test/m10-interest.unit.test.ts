@@ -250,6 +250,150 @@ describe('interest — component concealment strips a hidden component from a vi
     expect(x(dst, localA, P2)).toBeCloseTo(30)
     expect(dst.has(localA, H2)).toBe(false)
   })
+
+  it('granularity:"field" never serializes a hidden component onto the wire', () => {
+    // Byte-level, not round-trip: the leak is that the ENCODER writes the hidden component's value
+    // into the delta (a client reading raw bytes sees it), regardless of what the reference decoder
+    // materializes. With a hidden component the field-granular path MUST fall through to the
+    // component-granular path, which strips it.
+    const P = defP()
+    const H = defHand()
+    const V = defineTag('vis') as unknown as ComponentDef<Schema>
+    const src = createWorld({ components: [P, H, V] })
+    const stream = createReplicationStream(src)
+    const view = stream.view({ visible: src.query(has(V)), hideComponents: [H.id as ComponentId], granularity: 'field' })
+
+    const a = src.spawnWith(P, H, V)
+    ;(src.entity(a).write(P) as { x: number }).x = 1
+    ;(src.entity(a).write(H) as { secret: number }).secret = 1
+    view.baseline()
+
+    src.advanceTick()
+    const VISIBLE = 7.5 // exactly representable in f32
+    const SECRET = 123456 // exactly representable in f32; distinctive on the wire
+    ;(src.entity(a).write(P) as { x: number }).x = VISIBLE
+    ;(src.entity(a).write(H) as { secret: number }).secret = SECRET
+    const bytes = view.delta().bytes
+
+    const f32 = (v: number): Uint8Array => new Uint8Array(new Float32Array([v]).buffer)
+    const contains = (hay: Uint8Array, needle: Uint8Array): boolean => {
+      outer: for (let i = 0; i + needle.length <= hay.length; i++) {
+        for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) continue outer
+        return true
+      }
+      return false
+    }
+    expect(contains(bytes, f32(VISIBLE))).toBe(true) // sanity: the visible field IS on the wire
+    expect(contains(bytes, f32(SECRET))).toBe(false) // the hidden component MUST NOT be on the wire
+  })
+})
+
+describe('interest — field-granular filtered deltas round-trip through the decoder', () => {
+  it('granularity:"field" (incremental) replicates changed fields and leaves the rest intact', () => {
+    const P = defP() // { x: f32, y: f32 }
+    const V = defineTag('vis') as unknown as ComponentDef<Schema>
+    const src = createWorld({ components: [P, V] })
+    const P2 = defP()
+    const V2 = defineTag('vis') as unknown as ComponentDef<Schema>
+    const dst = createWorld({ components: [P2, V2] })
+    const stream = createReplicationStream(src)
+    const receiver = createReplicationReceiver(dst)
+    const view = stream.view({ visible: src.query(has(V)), granularity: 'field', incremental: true })
+    const y = (h: EntityHandle): number => (dst.entity(h).read(P2) as { y: number }).y
+
+    const a = src.spawnWith(P, V)
+    ;(src.entity(a).write(P) as { x: number; y: number }).x = 3
+    ;(src.entity(a).write(P) as { x: number; y: number }).y = 7
+    receiver.apply(view.baseline())
+    const localA = receiver.remap.get(a) as EntityHandle
+    expect(x(dst, localA, P2)).toBeCloseTo(3)
+    expect(y(localA)).toBeCloseTo(7)
+
+    // change ONLY x — the field-granular delta must carry x and leave y (7) intact on the mirror
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { x: number }).x = 30
+    receiver.apply(view.delta())
+    expect(x(dst, localA, P2)).toBeCloseTo(30)
+    expect(y(localA)).toBeCloseTo(7)
+
+    // change ONLY y
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { y: number }).y = 70
+    receiver.apply(view.delta())
+    expect(x(dst, localA, P2)).toBeCloseTo(30)
+    expect(y(localA)).toBeCloseTo(70)
+  })
+
+  it('the shared field-mask shadow serves a late-joining client correctly (interleaved baseline/delta)', () => {
+    const P = defP()
+    const V = defineTag('vis') as unknown as ComponentDef<Schema>
+    const src = createWorld({ components: [P, V] })
+    const mkDst = () => {
+      const P2 = defP()
+      const V2 = defineTag('vis') as unknown as ComponentDef<Schema>
+      return { w: createWorld({ components: [P2, V2] }), P2 }
+    }
+    const stream = createReplicationStream(src)
+    const yOf = (w: ReturnType<typeof createWorld>, h: EntityHandle, P2: ComponentDef<Schema>): number =>
+      (w.entity(h).read(P2) as { y: number }).y
+
+    const A = mkDst()
+    const rA = createReplicationReceiver(A.w)
+    const viewA = stream.view({ visible: src.query(has(V)), granularity: 'field' })
+
+    const a = src.spawnWith(P, V)
+    ;(src.entity(a).write(P) as { x: number; y: number }).x = 1
+    ;(src.entity(a).write(P) as { x: number; y: number }).y = 2
+    rA.apply(viewA.baseline())
+
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { x: number }).x = 10
+    rA.apply(viewA.delta())
+
+    // Client B joins mid-stream: a new view baselines (resetting the shared cursor) while A keeps
+    // delta'ing. Both must end up correct despite sharing ONE field-mask shadow.
+    const B = mkDst()
+    const rB = createReplicationReceiver(B.w)
+    const viewB = stream.view({ visible: src.query(has(V)), granularity: 'field' })
+    rB.apply(viewB.baseline())
+    const lA = rA.remap.get(a) as EntityHandle
+    const lB = rB.remap.get(a) as EntityHandle
+    expect(x(A.w, lA, A.P2)).toBeCloseTo(10)
+    expect(x(B.w, lB, B.P2)).toBeCloseTo(10)
+
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { x: number }).x = 20
+    rA.apply(viewA.delta())
+    rB.apply(viewB.delta())
+    expect(x(A.w, lA, A.P2)).toBeCloseTo(20)
+    expect(x(B.w, lB, B.P2)).toBeCloseTo(20)
+    expect(yOf(A.w, lA, A.P2)).toBeCloseTo(2) // y never changed on either mirror
+    expect(yOf(B.w, lB, B.P2)).toBeCloseTo(2)
+  })
+
+  it('incremental visibleEntities reflects live membership (not a stale prevVisible)', () => {
+    const P = defP()
+    const V = defineTag('vis') as unknown as ComponentDef<Schema>
+    const src = createWorld({ components: [P, V] })
+    const stream = createReplicationStream(src)
+    const view = stream.view({ visible: src.query(has(V)), incremental: true })
+
+    const a = src.spawnWith(P, V)
+    const b = src.spawnWith(P, V)
+    // delta BEFORE any baseline: membership is seeded from the query, and visibleEntities must report
+    // it — not the initial empty prevVisible.
+    view.delta()
+    expect(view.visibleEntities.has(a)).toBe(true)
+    expect(view.visibleEntities.has(b)).toBe(true)
+
+    // a caller-driven leave() must be reflected on the next read.
+    view.leave(b)
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { x: number }).x = 1
+    view.delta()
+    expect(view.visibleEntities.has(a)).toBe(true)
+    expect(view.visibleEntities.has(b)).toBe(false)
+  })
 })
 
 describe('interest — dynamic concealment emits component transitions on a still-visible entity', () => {
@@ -385,6 +529,30 @@ describe('interest — an eid field on a VISIBLE entity does not leak a HIDDEN t
     expect(containsSubsequence(d.bytes.subarray(32), secretBytes)).toBe(false) // skip the 32-byte delta header
     receiver.apply(d)
     expect((dst.entity(localSeen).read(Link2) as { who: number | null }).who).toBe(null)
+  })
+
+  it('granularity:"field" also masks the hidden target (an eid archetype falls through to component grain)', () => {
+    const P = defP()
+    const Link = defLink()
+    const V = defineTag('vis') as unknown as ComponentDef<Schema>
+    const src = createWorld({ components: [P, Link, V] })
+    const stream = createReplicationStream(src)
+    const view = stream.view({ visible: src.query(has(V)), granularity: 'field' })
+
+    for (let i = 0; i < 500; i++) src.spawnWith(P)
+    const secret = src.spawnWith(P) // hidden
+    const seen = src.spawnWith(P, Link, V)
+    ;(src.entity(seen).write(Link) as { who: number }).who = secret as number
+    ;(src.entity(seen).write(P) as { x: number }).x = 7
+    view.baseline()
+
+    src.advanceTick()
+    ;(src.entity(seen).write(Link) as { who: number }).who = secret as number
+    ;(src.entity(seen).write(P) as { x: number }).x = 8
+    const d = view.delta()
+    // The field-granular writer can't mask eid targets; the delta must fall through to component grain,
+    // which nulls the hidden handle. So `secret` must not appear in the bytes.
+    expect(containsSubsequence(d.bytes.subarray(32), handleBytes(secret))).toBe(false)
   })
 })
 

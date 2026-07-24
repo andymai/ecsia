@@ -20,8 +20,8 @@ import type { World } from '@ecsia/core'
 import { WriteCursor, ReadCursor } from './cursor.js'
 import { createSnapshotSerializer } from './snapshot.js'
 import { createSnapshotDeserializer } from './deserialize.js'
-import { createDeltaSerializer, applyDelta } from './delta.js'
-import type { DeltaOptions } from './delta.js'
+import { createDeltaSerializer, applyDelta, selectByEpsilon } from './delta.js'
+import type { ArchShadow, DeltaOptions, EpsilonSelection } from './delta.js'
 import { createStateView, gatherSharedChangeset } from './interest.js'
 import type { SharedChangeset, StateView, StateViewOptions } from './interest.js'
 import type { Compressor } from './compression.js'
@@ -149,6 +149,25 @@ export function createReplicationStream(world: World, opts: ReplicationStreamOpt
       sharedCache = undefined
     }
   }
+  // Field-granular masks over the WORLD's changed rows, computed ONCE per tick against ONE stream-owned
+  // shadow and reused by every field-granular view (IM-5 compute-once/mask-per-client). One shared
+  // shadow, not one per view — so field granularity costs no extra per-view diff and no per-view memory.
+  const fieldShadow = new Map<number, ArchShadow>()
+  let fieldMasks: Map<number, EpsilonSelection> | undefined
+  let fieldMasksTick = -1
+  function sharedFieldMasks(): ReadonlyMap<number, EpsilonSelection> {
+    const shared = gatherShared()
+    if (fieldMasks !== undefined && fieldMasksTick === shared.target) return fieldMasks
+    const out = new Map<number, EpsilonSelection>()
+    for (const a of s.archetypes()) {
+      const allRows = shared.changedRowsByArch.get(a.id)
+      if (allRows === undefined || allRows.length === 0) continue
+      out.set(a.id, selectByEpsilon(a, allRows, fieldShadow, 0, true))
+    }
+    fieldMasks = out
+    fieldMasksTick = shared.target
+    return out
+  }
 
   function baselineMessage(): ReplicationMessage {
     // The snapshot delivers EXACT values, but the epsilon shadow holds last-EMITTED ones — a
@@ -183,13 +202,20 @@ export function createReplicationStream(world: World, opts: ReplicationStreamOpt
       return { seq: seq++, kind: 'delta', schemaHash: s.schemaHash(), baselineTick, tick, bytes: ser.deltaCopy() }
     },
     view(opts: StateViewOptions): StateView {
-      return createStateView(world, opts, {
-        gatherShared,
-        currentTick: () => world.currentTick(),
-        schemaHash: () => s.schemaHash(),
-        nextSeq: () => seq++,
-        noteBaseline,
-      })
+      return createStateView(
+        world,
+        opts,
+        {
+          gatherShared,
+          currentTick: () => world.currentTick(),
+          schemaHash: () => s.schemaHash(),
+          nextSeq: () => seq++,
+          noteBaseline,
+          sharedFieldMasks,
+        },
+        opts.granularity === 'field',
+        opts.incremental === true,
+      )
     },
   }
 }
