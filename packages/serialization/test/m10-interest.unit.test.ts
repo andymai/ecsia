@@ -506,6 +506,30 @@ describe('interest — an eid field on a VISIBLE entity does not leak a HIDDEN t
     receiver.apply(d)
     expect((dst.entity(localSeen).read(Link2) as { who: number | null }).who).toBe(null)
   })
+
+  it('granularity:"field" also masks the hidden target (an eid archetype falls through to component grain)', () => {
+    const P = defP()
+    const Link = defLink()
+    const V = defineTag('vis') as unknown as ComponentDef<Schema>
+    const src = createWorld({ components: [P, Link, V] })
+    const stream = createReplicationStream(src)
+    const view = stream.view({ visible: src.query(has(V)), granularity: 'field' })
+
+    for (let i = 0; i < 500; i++) src.spawnWith(P)
+    const secret = src.spawnWith(P) // hidden
+    const seen = src.spawnWith(P, Link, V)
+    ;(src.entity(seen).write(Link) as { who: number }).who = secret as number
+    ;(src.entity(seen).write(P) as { x: number }).x = 7
+    view.baseline()
+
+    src.advanceTick()
+    ;(src.entity(seen).write(Link) as { who: number }).who = secret as number
+    ;(src.entity(seen).write(P) as { x: number }).x = 8
+    const d = view.delta()
+    // The field-granular writer can't mask eid targets; the delta must fall through to component grain,
+    // which nulls the hidden handle. So `secret` must not appear in the bytes.
+    expect(containsSubsequence(d.bytes.subarray(32), handleBytes(secret))).toBe(false)
+  })
 })
 
 describe('interest — an exclusive relation to a HIDDEN target does not leak the target handle', () => {

@@ -342,17 +342,27 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
     const archCountAt = cur.pos
     cur.u32(0)
     let changedArchetypeCount = 0
-    // #166 field-granular filtered SECTION V. Per archetype, take the shared changed rows, keep only
-    // visible-non-entered, and emit ONLY the columns that changed since this client last saw them.
-    // Gated on NO concealment of any kind: `writeFieldGranularBlocks` emits every persisted column, so
-    // it neither drops `hideComponents`/`conceal`-hidden components nor masks eid lanes. When any
-    // concealment applies, fall through to the component-granular path below, which handles both.
-    if (fieldGranular && !dynamicConceal && hide.size === 0) {
-      // The field-change masks are computed ONCE by the stream over the world's changed rows (shared
-      // shadow); each view only MASKS that shared selection down to its visible rows — no per-view
-      // shadow diff. Correct for continuously-visible entities (all live views share the window);
-      // enters get a full baseline in the structural section above, not a masked delta.
-      const sharedMasks = deps.sharedFieldMasks()
+    // #166 field-granular filtered SECTION V: emit ONLY the columns that changed since this client last
+    // saw them. FLAG_FIELD_GRANULAR is per-delta, so field grain is used only when the WHOLE delta can
+    // be: opted in, no concealment (writeFieldGranularBlocks emits every persisted column, so it can't
+    // drop concealed ones), and no eid column among the emitting archetypes (it emits raw eid handles —
+    // it can't mask a target outside the view). Anything else falls through to the component-granular
+    // path below, which strips concealed columns and masks eid lanes via isHidden.
+    const sharedMasks = fieldGranular && !dynamicConceal && hide.size === 0 ? deps.sharedFieldMasks() : undefined
+    let useField = sharedMasks !== undefined
+    if (sharedMasks !== undefined) {
+      for (const a of s.archetypes()) {
+        const sel = sharedMasks.get(a.id)
+        if (sel === undefined || sel.rows.length === 0) continue
+        if (archHasEidColumn(a, persistedColumnsOf(a))) {
+          useField = false
+          break
+        }
+      }
+    }
+    if (useField && sharedMasks !== undefined) {
+      // Masks are computed ONCE by the stream over the world's changed rows (shared shadow); each view
+      // only MASKS that selection down to its visible rows. Enters get a full baseline above.
       for (const a of s.archetypes()) {
         const sel = sharedMasks.get(a.id)
         if (sel === undefined || sel.rows.length === 0) continue
@@ -639,4 +649,15 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
 
 function sortedAsc(set: ReadonlySet<number>): number[] {
   return [...set].sort((a, b) => a - b)
+}
+
+// Whether any persisted column of the archetype is an `eid` lane. The field-granular writer emits raw
+// handles, so an archetype with one can't go through it without disclosing a target outside the view.
+function archHasEidColumn(a: SerializeArchetype, persisted: readonly PersistedComponentColumns[]): boolean {
+  for (const pc of persisted) {
+    const comp = a.components[pc.compIndex]
+    if (comp === undefined) continue
+    for (const ci of pc.colIndices) if (comp.fields[ci]?.token === 'eid') return true
+  }
+  return false
 }
