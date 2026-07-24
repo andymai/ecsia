@@ -79,6 +79,17 @@ export class WriteCursor {
     this.#pos += bytes.byteLength
   }
 
+  /** Copy `len` raw bytes from `srcU8` at `srcByteOffset`, with NO per-call allocation. The hot value
+   * path copies one small row-slice at a time; taking the column's byte view ONCE and looping here
+   * avoids the per-row `subarray()` + `Uint8Array()` churn `copyBytes` incurs. Byte-identical output. */
+  copyRawBytes(srcU8: Uint8Array, srcByteOffset: number, len: number): void {
+    this.#ensure(len)
+    const dst = this.#u8
+    const d = this.#pos
+    for (let k = 0; k < len; k++) dst[d + k] = srcU8[srcByteOffset + k] as number
+    this.#pos += len
+  }
+
   /** A view onto the reused buffer for [0, pos). Valid only until the next serialize call. */
   bytesView(): Uint8Array {
     return this.#u8.subarray(0, this.#pos)

@@ -954,8 +954,11 @@ export function writeValueArchBlock(
         }
         continue
       }
-      const view = col.view as unknown as { subarray(s: number, e: number): ArrayBufferView }
-      for (const r of rows) cur.copyBytes(view.subarray(r * stride, (r + 1) * stride))
+      // Take the column's byte view ONCE, then copy each row's slice alloc-free (no per-row subarray).
+      const tv = col.view as unknown as { buffer: ArrayBufferLike; byteOffset: number; byteLength: number }
+      const srcU8 = new Uint8Array(tv.buffer, tv.byteOffset, tv.byteLength)
+      const strideBytes = stride * col.layout.elementBytes
+      for (const r of rows) cur.copyRawBytes(srcU8, r * strideBytes, strideBytes)
     }
   }
 }
