@@ -250,6 +250,42 @@ describe('interest — component concealment strips a hidden component from a vi
     expect(x(dst, localA, P2)).toBeCloseTo(30)
     expect(dst.has(localA, H2)).toBe(false)
   })
+
+  it('granularity:"field" never serializes a hidden component onto the wire', () => {
+    // Byte-level, not round-trip: the leak is that the ENCODER writes the hidden component's value
+    // into the delta (a client reading raw bytes sees it), regardless of what the reference decoder
+    // materializes. With a hidden component the field-granular path MUST fall through to the
+    // component-granular path, which strips it.
+    const P = defP()
+    const H = defHand()
+    const V = defineTag('vis') as unknown as ComponentDef<Schema>
+    const src = createWorld({ components: [P, H, V] })
+    const stream = createReplicationStream(src)
+    const view = stream.view({ visible: src.query(has(V)), hideComponents: [H.id as ComponentId], granularity: 'field' })
+
+    const a = src.spawnWith(P, H, V)
+    ;(src.entity(a).write(P) as { x: number }).x = 1
+    ;(src.entity(a).write(H) as { secret: number }).secret = 1
+    view.baseline()
+
+    src.advanceTick()
+    const VISIBLE = 7.5 // exactly representable in f32
+    const SECRET = 123456 // exactly representable in f32; distinctive on the wire
+    ;(src.entity(a).write(P) as { x: number }).x = VISIBLE
+    ;(src.entity(a).write(H) as { secret: number }).secret = SECRET
+    const bytes = view.delta().bytes
+
+    const f32 = (v: number): Uint8Array => new Uint8Array(new Float32Array([v]).buffer)
+    const contains = (hay: Uint8Array, needle: Uint8Array): boolean => {
+      outer: for (let i = 0; i + needle.length <= hay.length; i++) {
+        for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) continue outer
+        return true
+      }
+      return false
+    }
+    expect(contains(bytes, f32(VISIBLE))).toBe(true) // sanity: the visible field IS on the wire
+    expect(contains(bytes, f32(SECRET))).toBe(false) // the hidden component MUST NOT be on the wire
+  })
 })
 
 describe('interest — dynamic concealment emits component transitions on a still-visible entity', () => {

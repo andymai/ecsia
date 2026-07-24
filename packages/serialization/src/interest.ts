@@ -328,12 +328,12 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
     cur.u32(0)
     let changedArchetypeCount = 0
     // #166 PROTOTYPE: field-granular filtered SECTION V. Per archetype, take the shared changed rows,
-    // keep only visible-non-entered, then selectByEpsilon(perField) against this view's own shadow to
-    // emit ONLY the fields that changed since this client last saw them. Encode-only; gated on
-    // !dynamicConceal (writeFieldGranularBlocks omits the per-entity concealment grouping and the eid
-    // hide-masking writeValueArchBlock applies, so it is correct only for the no-conceal, no-eid case —
-    // which is exactly the movement workload this measures).
-    if (fieldGranular && !dynamicConceal) {
+    // keep only visible-non-entered, then emit ONLY the fields that changed since this client last saw
+    // them. Encode-only, and gated on NO concealment of any kind — `writeFieldGranularBlocks` emits
+    // every persisted column, so it neither drops `hideComponents`/`conceal`-hidden components nor
+    // masks eid lanes. When any concealment applies, fall through to the component-granular path, which
+    // handles both. This is the no-conceal, no-eid case — exactly the movement workload this measures.
+    if (fieldGranular && !dynamicConceal && hide.size === 0) {
       // The field-change masks are computed ONCE by the stream over the world's changed rows (shared
       // shadow); each view only MASKS that shared selection down to its visible rows — no per-view
       // shadow diff. Correct for continuously-visible entities (all live views share the window);
