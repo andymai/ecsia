@@ -370,6 +370,30 @@ describe('interest — field-granular filtered deltas round-trip through the dec
     expect(yOf(A.w, lA, A.P2)).toBeCloseTo(2) // y never changed on either mirror
     expect(yOf(B.w, lB, B.P2)).toBeCloseTo(2)
   })
+
+  it('incremental visibleEntities reflects live membership (not a stale prevVisible)', () => {
+    const P = defP()
+    const V = defineTag('vis') as unknown as ComponentDef<Schema>
+    const src = createWorld({ components: [P, V] })
+    const stream = createReplicationStream(src)
+    const view = stream.view({ visible: src.query(has(V)), incremental: true })
+
+    const a = src.spawnWith(P, V)
+    const b = src.spawnWith(P, V)
+    // delta BEFORE any baseline: membership is seeded from the query, and visibleEntities must report
+    // it — not the initial empty prevVisible.
+    view.delta()
+    expect(view.visibleEntities.has(a)).toBe(true)
+    expect(view.visibleEntities.has(b)).toBe(true)
+
+    // a caller-driven leave() must be reflected on the next read.
+    view.leave(b)
+    src.advanceTick()
+    ;(src.entity(a).write(P) as { x: number }).x = 1
+    view.delta()
+    expect(view.visibleEntities.has(a)).toBe(true)
+    expect(view.visibleEntities.has(b)).toBe(false)
+  })
 })
 
 describe('interest — dynamic concealment emits component transitions on a still-visible entity', () => {

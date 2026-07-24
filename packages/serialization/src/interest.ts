@@ -642,7 +642,10 @@ export function createStateView(world: World, opts: StateViewOptions, deps: Stat
       markVisible(h, false)
     },
     get visibleEntities(): ReadonlySet<EntityHandle> {
-      return prevVisible as ReadonlySet<number> as ReadonlySet<EntityHandle>
+      // Incremental mode drives membership through enter()/leave(), and writeFilteredDelta doesn't
+      // update prevVisible on that path — so memberSet is the live visible set. Query mode uses the
+      // per-delta prevVisible snapshot.
+      return (incremental ? memberSet : prevVisible) as ReadonlySet<number> as ReadonlySet<EntityHandle>
     },
   }
 }
