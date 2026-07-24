@@ -1,0 +1,21 @@
+packages/serialization/src/delta.ts
+  s_7ae41b06f00856::t_c10de2bc1765e9 957-961
+packages/serialization/src/cursor.ts
+  s_7ae41b06f00856::t_c70c59418252fc 82-92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "098788935b5d2064e83c903cb6170094265d5de3",
+  "prompts": {},
+  "sessions": {
+    "s_7ae41b06f00856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d22277ee-2b84-449e-ae3d-b228c2e24789",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
