@@ -484,13 +484,13 @@ export function computeRowFieldMasks(
 
 /** The epsilon filter's result: the kept rows plus the masks that justified keeping them, so a
  * field-granular caller can group the rows without recomputing the compare. */
-interface EpsilonSelection {
+export interface EpsilonSelection {
   readonly rows: number[]
   readonly masks: Uint32Array
   readonly words: number
 }
 
-function selectByEpsilon(
+export function selectByEpsilon(
   a: {
     id: number
     count: number
@@ -553,7 +553,7 @@ function selectByEpsilon(
 // archetype falls back to a single whole-row block — legal because blocks are self-describing.
 const FIELD_GROUP_MIN_ROWS = 4
 
-function writeFieldGranularBlocks(
+export function writeFieldGranularBlocks(
   cur: WriteCursor,
   a: SerializeArchetype,
   selected: EpsilonSelection,
