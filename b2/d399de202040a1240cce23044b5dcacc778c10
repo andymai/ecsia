@@ -1,0 +1,22 @@
+packages/serialization/test/m10-interest.unit.test.ts
+  s_7ae41b06f00856::t_4ef991e1784779 253,259-266,270-271,288
+  s_7ae41b06f00856::t_49af14ff368285 254-258,267-269,272-287
+packages/serialization/src/interest.ts
+  s_7ae41b06f00856::t_30a9bdbf4f9cee 331-336
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "b2d399de202040a1240cce23044b5dcacc778c10",
+  "prompts": {},
+  "sessions": {
+    "s_7ae41b06f00856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d22277ee-2b84-449e-ae3d-b228c2e24789",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
