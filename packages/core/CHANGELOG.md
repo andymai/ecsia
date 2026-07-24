@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.28.0](https://github.com/andymai/ecsia/compare/core-v0.27.0...core-v0.28.0) (2026-07-24)
+
+
+### Miscellaneous
+
+* **core:** Synchronize ecsia versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.28.0
+
 ## [0.27.0](https://github.com/andymai/ecsia/compare/core-v0.26.0...core-v0.27.0) (2026-07-22)
 
 
