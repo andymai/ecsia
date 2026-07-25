@@ -1,0 +1,21 @@
+demo/src/main.ts
+  s_21cd80512020e1::t_f61cd8b8678962 49-54
+  s_21cd80512020e1::t_b3ba7170275b4c 579-581,583-588
+  s_21cd80512020e1::t_f859102918b84a 221-240
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "36f13176b7f139ec8fce3575842e07b4f1f2f028",
+  "prompts": {},
+  "sessions": {
+    "s_21cd80512020e1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "723e2811-e43b-4bb2-b1de-85cbe4089fc1",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
