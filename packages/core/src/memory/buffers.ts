@@ -291,6 +291,14 @@ export class Buffers {
       fillRange(view, 0, view.length, layout.fillOnInit)
     }
     this.#registry.set(key, col)
+    // A NEW shared-backed column is invisible to workers whose view set was captured at bootstrap
+    // (a lazily-created archetype after pool startup). Journal the creation exactly like a
+    // re-backing so the pool broadcasts it at the next wave fence — without this, worker
+    // readField/writeField on the new archetype silently no-op against a missing column.
+    if (isSharedBacking(backing)) {
+      this.#growGeneration += 1
+      this.#pendingGrowth.set(key, { key, backing, layout })
+    }
     return col
   }
 
@@ -320,6 +328,12 @@ export class Buffers {
     }
     this.#registry.set(key, reg)
     this.#regionElement.set(key, element)
+    // Same creation-journal as column(): a region minted after pool bootstrap (e.g. a topic
+    // registered by a re-plan) must reach the workers' region map at the next wave fence.
+    if (isSharedBacking(backing)) {
+      this.#growGeneration += 1
+      this.#pendingGrowth.set(key, { key, backing, element })
+    }
     return reg
   }
 

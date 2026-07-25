@@ -296,17 +296,26 @@ describe('both growth flavors forced', () => {
     spawnInto(thr, 0, SEED) // column exists (64 rows) when the pool captures the manifest
     const thrSched = thrScheduler(thr, 2)
     pool = await makePool(thr, 2)
-    expect(growthGen(thr)).toBe(0)
+    // Column CREATION journals a notice (late-archetype broadcast), so the generation is nonzero
+    // after setup; the invariant under test is that in-place growth never advances it FURTHER.
+    const gen0 = growthGen(thr)
 
     spawnInto(thr, SEED, N - SEED) // 64 → 1024 AFTER capture: in-place `sab.grow()`, within reservation
-    expect(growthGen(thr)).toBe(0) // CURE INVARIANT: in-place growth never advances the generation
+    expect(growthGen(thr)).toBe(gen0) // CURE INVARIANT: in-place growth never advances the generation
 
     refSched.update(1)
     await thrSched.updateThreaded(pool, 1)
 
     expect(thr.world.phase).toBe('serial')
     assertHealthMatches(thr, ref, N) // every row (incl. the post-capture in-place-grown ones) matches
-    expect(growthGen(thr)).toBe(0) // still zero after the wave — the steady-state fence never fired
+
+    // The first wave may mint lazy shared regions (journaled at creation — intended); a SECOND wave
+    // over unchanged shapes must leave the generation alone: the steady-state fence never re-fires.
+    const genSteady = growthGen(thr)
+    refSched.update(1)
+    await thrSched.updateThreaded(pool, 1)
+    assertHealthMatches(thr, ref, N)
+    expect(growthGen(thr)).toBe(genSteady)
   })
 
   // RE-BACKING with an EXPLICIT SENTINEL read-back. The worker pool runs Regen+Copy. We:
@@ -477,6 +486,12 @@ describe('steady-state overhead guard: no re-backing application across N no-gro
     const thrSched = thrScheduler(thr, 2)
     pool = await makePoolForWorld(proxiedWorld, thr.Health, 2)
 
+    // Settling waves: creation journals notices now (late-archetype broadcast) — wave 1 drains the
+    // setup-time creations and may itself lazily mint shared regions (log rings), which wave 2
+    // drains. Steady state begins after both.
+    await thrSched.updateThreaded(pool, 1)
+    await thrSched.updateThreaded(pool, 1)
+    drainCalls = 0
     const genStart = thr.world.__columnGrowth().generation // capture via the real log (drain not called)
 
     for (let w = 0; w < WAVES; w++) await thrSched.updateThreaded(pool, 1)
@@ -485,11 +500,11 @@ describe('steady-state overhead guard: no re-backing application across N no-gro
     expect(drainCalls).toBe(0) // the re-backing fence never fired across WAVES no-growth waves
     expect(thr.world.__columnGrowth().generation).toBe(genStart) // generation unchanged → zero re-wraps
 
-    // Every entity still got exactly WAVES increments (the pool DID run the waves — the guard isn't
-    // trivially green because nothing ran).
+    // Every entity still got exactly WAVES + 2 increments (the settling waves plus the measured
+    // waves — the guard isn't trivially green because nothing ran).
     for (let i = 0; i < N; i++) {
       const hp = (thr.world.entity(thr.handles[i]!).read(thr.Health) as { hp: number }).hp
-      expect(hp).toBe(i + WAVES)
+      expect(hp).toBe(i + WAVES + 2)
     }
   })
 })

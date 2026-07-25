@@ -144,6 +144,10 @@ export const createStableIndex: <C extends _ComponentDef<_Schema>, F extends key
 import { createScheduler as _mkSched } from '@ecsia/scheduler'
 import type { SchedulerHandle as _SchedulerHandle, CreateSchedulerOptions as _CreateSchedulerOptions, SystemDef as _SystemDef } from '@ecsia/scheduler'
 export type { SchedulerHandle, CreateSchedulerOptions, SchedulerThreadingOptions, SystemDef, SystemContext, OrderingHint } from '@ecsia/scheduler'
+// Browser threading types: `threading.createWorker` takes a BrowserWorkerLike factory; the worker
+// FILE gets its kernels bundle type from here (the runtime `ecsiaWorker` entry is deliberately not
+// re-exported — a worker file imports '@ecsia/scheduler/worker' directly so its bundle stays lean).
+export type { BrowserWorkerLike, WorkerKernelsBundle } from '@ecsia/scheduler'
 
 /** Build the wave scheduler over a world's systems. Accepts the public World facade. */
 export const createScheduler: (

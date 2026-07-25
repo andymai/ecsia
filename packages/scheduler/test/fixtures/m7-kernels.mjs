@@ -81,6 +81,18 @@ function loggerPureKernel(view) {
   view.commands.publish(Echo, { count: pureSeen })
 }
 
+// A dt-SENSITIVE float kernel: x += dt * 3 into an f32 column. Exists to pin the work-descriptor's
+// dt transport precision — an f32 dt slot hands the worker fround(dt) while the serial twin computes
+// with the exact f64, silently breaking serial-equivalence for any dt that isn't f32-exact (1/60).
+const Drift = defineComponent({ x: 'f32' }, { name: 'drift' })
+function driftKernel(view, indices, dt) {
+  const id = Drift.id
+  for (let i = 0; i < indices.length; i++) {
+    const idx = indices[i]
+    view.writeField(idx, id, 0, view.readField(idx, id, 0) + dt * 3)
+  }
+}
+
 export function buildWorkerKernels() {
   const kernels = new Map([
     ['Regen', regenKernel],
@@ -89,11 +101,13 @@ export function buildWorkerKernels() {
     ['Hitter', hitterKernel],
     ['Logger', loggerKernel],
     ['LoggerPure', loggerPureKernel],
+    ['Drift', driftKernel],
   ])
   const components = new Map([
     ['health', Health],
     ['mana', Mana],
     ['tally', Tally],
+    ['drift', Drift],
   ])
   const topics = new Map([
     ['hits', Hits],

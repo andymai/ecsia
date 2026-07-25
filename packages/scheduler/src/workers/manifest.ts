@@ -23,8 +23,12 @@ export interface RelationManifestEntry {
 
 export interface WorkerBootstrap {
   readonly workerIndex: number
-  /** Module URL the worker imports to obtain its system kernels by name (the dispatch mechanism). */
-  readonly kernelModule: string
+  /**
+   * Module URL the worker imports to obtain its system kernels by name (the Node dispatch
+   * mechanism). Absent under a browser transport — the worker file bundles its kernels statically
+   * and `ecsiaWorker(...)` supplies them (browser-entry.ts).
+   */
+  readonly kernelModule?: string | undefined
   /** System names indexed by SystemId (the POOL's registration order) — the kernel lookup key. */
   readonly systemNames: readonly string[]
   /** The shared buffer set (SAB columns + regions), by reference. */
@@ -55,7 +59,7 @@ export interface WorkerBootstrap {
   readonly reservationSab: SharedArrayBuffer
   readonly reservationCapacity: number
   readonly waveSab: SharedArrayBuffer
-  /** Work descriptor SAB: [0]=systemId [1]=count [2]=dtBits(f32) [3..]=entity indices. */
+  /** Work descriptor SAB: [0]=systemId [1]=count [2..3]=dt(f64, byte offset 8) [4..]=entity indices. */
   readonly workSab: SharedArrayBuffer
   /** Wake SAB: the worker Atomics.waits on [0]; the main thread bumps it + notifies to dispatch. */
   readonly wakeSab: SharedArrayBuffer

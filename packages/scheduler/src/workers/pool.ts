@@ -7,17 +7,12 @@
 // the per-worker command buffers DETERMINISTICALLY (ascending worker index — flushAll). That fixed
 // merge order is what makes the multi-worker run SERIAL-EQUIVALENT despite nondeterministic completion.
 //
-// Tier: Node main thread blocks on the wave fence directly (selectWaitTier → 'coordinator-block');
-// workers block on their wake word OFF the main thread, so there is no deadlock. NO-SAB contexts take
-// the postMessage fallback (transfer columns per wave) — emitted with a diagnostic, never silent.
-
-import type { Worker } from 'node:worker_threads'
-
-// node:worker_threads / node:url load lazily inside #spawn(): a static `node:*` import here would
-// break every browser bundle that merely *includes* this module, and bundlers resolve literal
-// dynamic specifiers at build time too — the template literal keeps the specifier opaque. Node
-// resolves it at runtime; browsers never reach it (constructing a pool is Node-only by design).
-const nodeImport = <T>(mod: string): Promise<T> => import(`node:${mod}`) as Promise<T>
+// Tier: chosen from the transport. Under the default node:worker_threads transport the main thread
+// blocks on the wave fence directly (selectWaitTier → 'coordinator-block'); under the browser
+// Web Worker transport the main thread takes the non-blocking Atomics.waitAsync tier. Workers block
+// on their wake word OFF the main thread either way, so there is no deadlock. NO-SAB contexts are
+// diagnosed at pool construction and the scheduler falls back to a single-threaded run — loud,
+// never silent.
 import type { World, ComponentId, TopicDef } from '@ecsia/core'
 import { handleIndex, defineComponent } from '@ecsia/core'
 import type { ComponentDef, Schema, SystemId } from '@ecsia/schema'
@@ -31,6 +26,8 @@ import { makeReservationSab, fillReservation, consumedCount } from './reservatio
 import type { WorkerReservationSab } from './reservation.js'
 import type { WorkerBootstrap, ComponentManifestEntry, RelationManifestEntry, ColumnsAddedMessage } from './manifest.js'
 import type { WorkerSystemKernel } from './worker-system.js'
+import type { WorkerPort, WorkerTransport } from './transport.js'
+import { hasWaitAsync } from './atomics-shim.js'
 
 /** A worker-eligible system registered with the pool, indexed by SystemId (registration order). */
 export interface PoolSystem {
@@ -47,13 +44,13 @@ export interface PoolSystem {
   readonly consumeTopics?: readonly TopicDef<Schema>[]
 }
 
-/** One worker's full control-SAB set + Node Worker handle. */
+/** One worker's full control-SAB set + transport port. */
 interface WorkerSlot {
   readonly index: number
-  readonly worker: Worker
+  readonly worker: WorkerPort
   readonly command: CommandBuffer // SAB-backed mirror of the worker's buffer (read after the fence)
   readonly reservation: WorkerReservationSab
-  readonly work: { sab: SharedArrayBuffer; i32: Int32Array; f32: Float32Array }
+  readonly work: { sab: SharedArrayBuffer; i32: Int32Array; f64: Float64Array }
   readonly wake: Int32Array
   /** Re-backing signal SAB ([0] = published column-growth generation). */
   readonly notice: Int32Array
@@ -65,8 +62,12 @@ interface WorkerSlot {
 export interface PoolConfig {
   readonly world: World
   readonly workers: number
-  /** Module URL the workers import for their kernels (the dispatch mechanism). */
-  readonly kernelModule: string
+  /**
+   * Module URL the workers import for their kernels (the Node dispatch mechanism). REQUIRED under
+   * the default node:worker_threads transport; unused under a browser transport, whose worker file
+   * bundles its kernels statically (see browser-entry.ts).
+   */
+  readonly kernelModule?: string | undefined
   readonly systems: readonly PoolSystem[]
   /**
    * Every component a worker may touch — read, written, OR named as an add/set-payload target. Their
@@ -86,15 +87,26 @@ export interface PoolConfig {
   readonly writeCorralEntries?: number
   readonly diagnostic?: (message: string) => void
   /**
-   * Override the worker-entry module URL. Defaults to the dist sibling of this module. Tests running
-   * over TS source (vitest aliases) MUST pass the BUILT `dist/workers/worker-entry.js` URL, because a
-   * raw Node worker_threads Worker has no TS transform and no path aliasing.
+   * Override the worker-entry module URL (Node transport only). Defaults to the dist sibling of the
+   * transport module. Tests running over TS source (vitest aliases) MUST pass the BUILT
+   * `dist/workers/worker-entry.js` URL, because a raw Node worker_threads Worker has no TS transform
+   * and no path aliasing.
    */
   readonly workerEntryUrl?: string
+  /**
+   * The worker spawn/message transport. Default: the node:worker_threads transport (loaded lazily so
+   * browser bundles including this module stay clean). Browsers pass
+   * `browserWorkerTransport(createWorker)` — see browser-transport.ts.
+   */
+  readonly transport?: WorkerTransport
 }
 
 const WAKE = 0
-const WORK_HEADER_WORDS = 3 // [systemId, count, dtBits]
+// Work descriptor header: [0]=systemId [1]=count, then dt as a FULL f64 at byte offset 8 (words
+// 2..3). dt must cross the thread boundary losslessly — an f32 slot would hand kernels fround(dt)
+// while serial bodies compute with the exact f64, a silent serial-equivalence break for any dt
+// that isn't f32-exact (1/60 isn't).
+const WORK_HEADER_WORDS = 4
 
 export class WorkerPool {
   readonly #world: World
@@ -112,15 +124,20 @@ export class WorkerPool {
   // world's live generation gates the whole re-backing fence — zero work when nothing re-backed.
   #appliedGrowthGen = 0
   #disposed = false
-  /** Resolves once every Worker is constructed (the node:* lazy-load + spawn phase). */
+  readonly #transport: WorkerTransport | undefined
+  /** Resolves once every Worker is constructed (the transport lazy-load + spawn phase). */
   readonly #spawning: Promise<void>
 
   constructor(cfg: PoolConfig) {
     this.#world = cfg.world
     this.#systems = cfg.systems
     this.#diag = cfg.diagnostic ?? ((m) => console.warn(`[ecsia] ${m}`))
-    const caps = cfg.world.options // (capabilities live on the world; tier from the probe below)
-    void caps
+    this.#transport = cfg.transport
+    if (cfg.transport === undefined && cfg.kernelModule === undefined) {
+      throw new Error(
+        "WorkerPool: the default node transport requires 'kernelModule' (workers import their kernels from it); browser transports bundle kernels into the worker file instead",
+      )
+    }
 
     const manifest = cfg.world.__exportShared()
     if (manifest.regions.length === 0 && manifest.columns.length === 0) {
@@ -157,9 +174,13 @@ export class WorkerPool {
     }
 
     this.#waveCounter = makeWaveCounter(cfg.workers)
+    // The transport knows whether THIS thread may block in Atomics.wait: Node main blocks directly
+    // (tier 2, the default transport); a browser main thread must take Atomics.waitAsync (tier 1,
+    // falling back to the promise-poll tier on engines without waitAsync).
+    const mayBlock = cfg.transport?.mainThreadMayBlock ?? true
     const tier = selectWaitTier({
-      waitAsync: false, // Node main thread blocks directly (tier 2); browser-main would set this true
-      waitBlocking: typeof Atomics.wait === 'function',
+      waitAsync: !mayBlock && hasWaitAsync(),
+      waitBlocking: mayBlock && typeof Atomics.wait === 'function',
       sabAvailable: typeof SharedArrayBuffer === 'function',
     })
     this.#waveSync = makeWaveSync(tier)
@@ -225,33 +246,31 @@ export class WorkerPool {
     boots: readonly { boot: WorkerBootstrap; command: CommandBuffer; reservation: WorkerReservationSab; workSab: SharedArrayBuffer; wakeSab: SharedArrayBuffer; noticeSab: SharedArrayBuffer; writeCorralSab: SharedArrayBuffer }[],
     workerEntryUrl: string | undefined,
   ): Promise<void> {
-    const [{ Worker: NodeWorker }, { fileURLToPath }] = await Promise.all([
-      nodeImport<typeof import('node:worker_threads')>('worker_threads'),
-      nodeImport<typeof import('node:url')>('url'),
-    ])
-    const here = fileURLToPath(import.meta.url)
-    const entryUrl = workerEntryUrl ?? here.replace(/pool\.(js|ts)$/, 'worker-entry.$1')
+    // The node transport loads lazily so a browser bundle that merely includes this module never
+    // touches node:*.
+    const transport = this.#transport ?? (await import('./node-transport.js')).nodeWorkerTransport
 
     for (const b of boots) {
       if (this.#disposed) return
       const i = b.boot.workerIndex
-      const worker = new NodeWorker(entryUrl, { workerData: b.boot })
+      const port = await transport.spawn(b.boot, { workerEntryUrl })
       const slot: WorkerSlot = {
         index: i,
-        worker,
+        worker: port,
         command: b.command,
         reservation: b.reservation,
-        work: { sab: b.workSab, i32: new Int32Array(b.workSab), f32: new Float32Array(b.workSab) },
+        work: { sab: b.workSab, i32: new Int32Array(b.workSab), f64: new Float64Array(b.workSab, 8, 1) },
         wake: new Int32Array(b.wakeSab),
         notice: new Int32Array(b.noticeSab),
         writeCorral: new Uint32Array(b.writeCorralSab),
         ready: false,
       }
-      worker.on('message', (msg: { kind: string; message?: string; workerIndex?: number }) => {
-        if (msg.kind === 'ready') slot.ready = true
-        else if (msg.kind === 'diagnostic' || msg.kind === 'error') this.#diag(msg.message ?? 'worker error')
+      port.onMessage((raw) => {
+        const msg = raw as { kind?: string; message?: string; workerIndex?: number }
+        if (msg?.kind === 'ready') slot.ready = true
+        else if (msg?.kind === 'diagnostic' || msg?.kind === 'error') this.#diag(msg.message ?? 'worker error')
       })
-      worker.on('error', (err) => this.#diag(`worker ${i} crashed: ${String(err)}`))
+      port.onError((err) => this.#diag(`worker ${i} crashed: ${String(err)}`))
       this.#slots.push(slot)
     }
     this.#spawned = true
@@ -301,14 +320,11 @@ export class WorkerPool {
     for (const b of active) {
       const slot = this.#slots[b.workerIndex]!
       const sys = this.#systems[b.systemId as unknown as number]!
-      const indices = this.#matchedIndices(sys)
       const work = slot.work
+      const count = this.#fillMatchedIndices(sys, work.i32)
       Atomics.store(work.i32, 0, b.systemId as unknown as number)
-      Atomics.store(work.i32, 1, indices.length)
-      work.f32[2] = dt
-      indices.forEach((idx, k) => {
-        work.i32[WORK_HEADER_WORDS + k] = idx
-      })
+      Atomics.store(work.i32, 1, count)
+      work.f64[0] = dt
     }
 
     // ---- dispatch: flip to 'wave', arm the fence, wake the workers ----
@@ -321,7 +337,7 @@ export class WorkerPool {
       Atomics.notify(slot.wake, WAKE)
     }
 
-    // ---- wait on the wave fence (Node main blocks directly, tier 2) ----
+    // ---- wait on the wave fence (blocking tier 2 on Node; waitAsync tier under a browser transport) ----
     const r = this.#waveSync.await(this.#waveCounter)
     if (r !== undefined) await r
 
@@ -411,13 +427,39 @@ export class WorkerPool {
     this.#appliedGrowthGen = gen
   }
 
-  #matchedIndices(sys: PoolSystem): Int32Array {
-    if (sys.matchComponents.length === 0) return new Int32Array(0)
+  /**
+   * Write the matched entity indices for `sys` into `dst` after the header; returns the count.
+   * Fast path: bulk-copy the matched set's dense prefix (denseView — SAME order as the iterator, so
+   * command-emitting kernels keep their apply order). At horde scale per-element iterator-protocol
+   * iteration alone costs more than the whole wave, which is why the bulk copy is the primary path;
+   * plain iteration is only the fallback when denseView is absent.
+   */
+  #fillMatchedIndices(sys: PoolSystem, dst: Int32Array): number {
+    if (sys.matchComponents.length === 0) return 0
     const terms = sys.matchComponents.map((c) => has(c))
-    const q = (this.#world.query as unknown as (...t: unknown[]) => { current: Iterable<number> })(...terms)
-    const out: number[] = []
-    for (const idx of q.current) out.push(idx)
-    return Int32Array.from(out)
+    const q = (this.#world.query as unknown as (...t: unknown[]) => { current: Iterable<number> & { denseView?(): Uint32Array } })(
+      ...terms,
+    )
+    const cap = dst.length - WORK_HEADER_WORDS
+    const dense = q.current.denseView?.()
+    if (dense !== undefined) {
+      const n = Math.min(dense.length, cap)
+      dst.set(n === dense.length ? dense : dense.subarray(0, n), WORK_HEADER_WORDS)
+      if (n < dense.length) {
+        this.#diag(`system '${sys.name}' matched more entities than the work SAB holds (${cap}); batch truncated — raise maxBatchEntities`)
+      }
+      return n
+    }
+    let k = 0
+    for (const idx of q.current) {
+      if (k >= cap) {
+        this.#diag(`system '${sys.name}' matched more entities than the work SAB holds (${cap}); batch truncated — raise maxBatchEntities`)
+        break
+      }
+      dst[WORK_HEADER_WORDS + k] = idx
+      k += 1
+    }
+    return k
   }
 
   #worldApply(): WorldApply {

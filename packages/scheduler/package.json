@@ -37,6 +37,10 @@
     "./workers": {
       "types": "./dist/workers/index.d.ts",
       "default": "./dist/workers/index.js"
+    },
+    "./worker": {
+      "types": "./dist/workers/browser-entry.d.ts",
+      "default": "./dist/workers/browser-entry.js"
     }
   },
   "main": "./dist/index.js",
