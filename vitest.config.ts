@@ -75,6 +75,16 @@ export default defineConfig({
           alias,
         },
       },
+      {
+        // EMBER WORKS sim: determinism, element reactions, and the share-URL codec run headless
+        // (serial scheduler path; the threaded path is covered by the browser-smoke E2E).
+        test: {
+          name: 'embers',
+          include: ['embers/test/**/*.test.ts'],
+          environment: 'node',
+          alias,
+        },
+      },
     ],
     // We measure the published source only — packages/*/src — excluding tests, type-only
     // fixtures, barrels, and the non-published examples/bench.

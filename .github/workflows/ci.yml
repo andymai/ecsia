@@ -141,3 +141,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: Browser smoke (isolated + non-isolated variants)
         run: pnpm smoke:browser
+      - name: Bundle EMBER WORKS demo (esbuild)
+        run: pnpm embers:build
+      - name: EMBER WORKS determinism (threaded field == serial, in a real tab)
+        run: pnpm embers:e2e

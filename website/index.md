@@ -7,10 +7,6 @@ hero:
   tagline: Build simulations out of plain data — typed components and queries, links between entities, and automatic multithreading with results identical to a single-threaded run.
   actions:
     - theme: brand
-      text: 🕹 Play ECHO SURVIVORS — the live demo
-      link: /demo/
-      target: _blank
-    - theme: brand
       text: Get started
       link: /guide/getting-started
     - theme: alt
@@ -21,10 +17,6 @@ hero:
       link: /reference/
 
 features:
-  - title: 🕹 See it run — ECHO SURVIVORS
-    details: "A time-loop survivors game where every death spawns a ghost replaying your exact run: tens of thousands of live entities, steering on a real browser worker pool, and whole runs shared as URLs that re-simulate byte-identically. That determinism isn't a demo trick — it's the engine's tested guarantee."
-    link: /demo/
-    linkText: Enter the loop
   - title: Fast iteration, fully typed
     details: Each component field is stored in its own contiguous array, so loops over thousands of entities walk straight through memory. On top sits a typed API — e.position.x is a number, no casts, no Proxy.
   - title: Multithreading without rewrites

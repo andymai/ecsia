@@ -372,13 +372,18 @@ export class Buffers {
     const rowBytes = col.layout.rowBytes
     const oldView = col.view
     const oldCapacity = col.backing.byteLength / rowBytes
-    const newByteLen = newCapacity * rowBytes
+    // Double on the re-back leg, mirroring growRegion: the resizable fast path amortizes by
+    // over-allocating, but a reservation-exhausted (or non-resizable) backing lands here with the
+    // caller's EXACT need. An exact alloc-copy per append is O(n²) over a spawn burst — doubling
+    // (capped at the world's entity ceiling) keeps it O(n). The tail fill covers the surplus.
+    const targetCapacity = Math.min(this.#maxEntities, Math.max(newCapacity, oldCapacity * 2))
+    const newByteLen = targetCapacity * rowBytes
     const newBacking: Backing = isSab(this.capabilities.backing)
       ? new (plainSab() ?? missingSharedBacking())(newByteLen)
       : new ArrayBuffer(newByteLen)
     const newView = makeView(col.layout.element, newBacking)
     newView.set(oldView as unknown as ArrayLike<number>)
-    this.#fillGrownTail(newView, col.layout, oldCapacity, newCapacity)
+    this.#fillGrownTail(newView, col.layout, oldCapacity, targetCapacity)
     col.backing = newBacking
     col.view = newView
     const holders = this.#accessors.get(col.key)

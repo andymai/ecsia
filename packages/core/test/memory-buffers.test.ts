@@ -112,6 +112,34 @@ describe('length-tracking growth', () => {
     const again = b.column(k('0:4.0'), makeColumnLayout('u32', 1), 4)
     expect(again).toBe(a)
   })
+
+  test('the fallback re-back leg doubles: a grow burst reallocates O(log n), not O(n)', () => {
+    // Force the non-resizable path so every grow past the reservation escalates to #growFallback.
+    const caps = { ...probeCapabilities('single'), backing: 'grow-patch-ab' as const, resizableAb: false }
+    const b = new Buffers({ capabilities: caps, maxEntities: 1 << 20 })
+    const col = b.column(k('0:5.0'), makeColumnLayout('u32', 1), 4)
+    const view0 = col.view as Uint32Array
+    view0[0] = 0
+
+    // One row at a time up to N — the exact-alloc bug re-copied the whole column each step (O(n²));
+    // doubling caps distinct backings at ~log2(N). Each grown row is stamped so we also prove no
+    // data is dropped across the re-backs.
+    const N = 20000
+    let rebacks = 0
+    let prevBacking = col.backing
+    for (let need = 1; need <= N; need++) {
+      b.grow(col, need)
+      if (col.backing !== prevBacking) {
+        rebacks++
+        prevBacking = col.backing
+      }
+      ;(col.view as Uint32Array)[need - 1] = need - 1
+    }
+
+    expect(rebacks).toBeLessThan(40) // ~log2(20000) ≈ 15, never 20000
+    const final = col.view as Uint32Array
+    for (let i = 0; i < N; i++) expect(final[i]).toBe(i)
+  })
 })
 
 describe('region allocation', () => {
