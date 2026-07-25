@@ -1,0 +1,98 @@
+packages/core/src/memory/buffers.ts
+  s_229413ab225903::t_2a28d0c7566ebf 375-380,386
+embers/index.html
+  s_229413ab225903::t_963a1779f5ed86 14
+  s_229413ab225903::t_e137e4deb805c2 1-13,15-169
+website/.vitepress/config.ts
+  s_229413ab225903::t_335db789f133ed 21-23
+embers/worker.ts
+  s_229413ab225903::t_8f32f1029b9a47 1-7
+package.json
+  s_229413ab225903::t_197b0ddcabfd78 29
+  s_229413ab225903::t_c306d7f053514a 16,27-28,34
+embers/build.mjs
+  s_229413ab225903::t_db329d69fbb73d 1-41
+embers/test/codec.test.ts
+  s_229413ab225903::t_c32a3f64ed8b9e 1-40
+embers/test/reactions.test.ts
+  s_229413ab225903::t_393e5636660241 67-69,78-85
+  s_229413ab225903::t_4a2da9875c9baf 77
+  s_229413ab225903::t_3829eaf25ef350 1-66,70-76,86-118
+embers/src/sim/systems.ts
+  s_229413ab225903::t_f3ab5ad3c58cac 1-46,48-137
+  s_229413ab225903::t_f29184ecd48bd9 47
+vitest.config.ts
+  s_229413ab225903::t_3ece26d88e745b 78-87
+embers/src/sim/components.ts
+  s_229413ab225903::t_723833f66a9e3a 1-29
+packages/core/test/memory-buffers.test.ts
+  s_229413ab225903::t_269d3845de1ee6 115-142
+embers/src/sim/world.ts
+  s_229413ab225903::t_0f8728dc20385f 1-171
+demo/src/main.ts
+  s_229413ab225903::t_b98a3651937bcc 758,761,763-768,771-790
+.github/workflows/ci.yml
+  s_229413ab225903::t_01079ea422b9d1 144-147
+.gitignore
+  s_229413ab225903::t_e7a576f8d8cdb6 25,27
+embers/src/render/gl.ts
+  s_229413ab225903::t_bd2b0e6f5021b4 126
+  s_229413ab225903::t_df78a657f3555c 102-103
+  s_229413ab225903::t_6b1791fb20a7fb 1-28,30-101,104-125,127-291,297-300,302-304,306-307,309-312,314-321,327-339
+  s_229413ab225903::t_bfb3b27c0ac700 29
+  s_229413ab225903::t_ba7833d95d2124 292-296,301,305,308,313,322-326
+embers/src/sim/kernels.ts
+  s_229413ab225903::t_0af506c3715a57 1-15,17-86
+  s_229413ab225903::t_b148b4810b3dc4 16
+embers/src/game/codec.ts
+  s_229413ab225903::t_fcc012c6f99db1 1-182
+embers/test/determinism.test.ts
+  s_229413ab225903::t_568a77426ab6f5 1-42
+embers/src/sim/elements.ts
+  s_229413ab225903::t_2669046c501781 1-173
+embers/e2e/embers.spec.ts
+  s_229413ab225903::t_58897e445de0a1 1-73
+embers/README.md
+  s_229413ab225903::t_4e801e23ed4a53 1-53
+embers/src/main.ts
+  s_229413ab225903::t_ee4b677bad2616 134,333,378
+  s_229413ab225903::t_2fdcbdf87fb582 1-7,9-133,135-332,334-377,379-442
+  s_229413ab225903::t_ea614f2d11d33e 8
+embers/tsconfig.json
+  s_229413ab225903::t_76cbbd2415e108 12
+  s_229413ab225903::t_5b2fa68cad747d 9-11
+  s_229413ab225903::t_160a29b445054b 13
+  s_229413ab225903::t_c1e2441e5dcee8 1-8
+embers/src/sim/particles.ts
+  s_229413ab225903::t_48283e95d289bc 1-364,368-717
+  s_229413ab225903::t_71f146dd5d88e1 365-367
+embers/src/game/feed.ts
+  s_229413ab225903::t_cd54d45ca68680 19-20
+  s_229413ab225903::t_427c542ebeae9c 1-18,21-33
+demo/index.html
+  s_229413ab225903::t_a1141c89d45d0a 170-256
+embers/src/game/scripts.ts
+  s_229413ab225903::t_1940c13c5e3c0a 1-148
+embers/src/sim/shared.ts
+  s_229413ab225903::t_86d0416d306170 1-163
+embers/e2e/playwright.config.ts
+  s_229413ab225903::t_090b1492120e14 1-16
+embers/coi-sw.js
+  s_229413ab225903::t_b391b27bebac5f 1-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "03a1eb169cdb6a6c3d4a191e3490f340ea255719",
+  "prompts": {},
+  "sessions": {
+    "s_229413ab225903": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c436b780-ed79-4a76-ace8-9255d1f9fac8",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
