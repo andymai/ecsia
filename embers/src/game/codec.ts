@@ -12,6 +12,8 @@
 //   per event: varint dTick, u8 flags (bit0 full-xy, bit1 stroke-start),
 //              full-xy ? [u8 elem, u8 r, u16 x, u16 y] : [i8 dx, i8 dy]
 
+import { ELEM_COUNT } from '../sim/elements.js'
+
 export interface RecEvent {
   tick: number
   elem: number
@@ -175,7 +177,9 @@ export async function decodeSession(payload: string): Promise<SessionRecord | nu
       y += (raw[at + 1]! << 24) >> 24
       at += 2
     }
-    if (elem > 30 || r > 64 || x < 0 || x > 0xffff || y < 0 || y > 0xffff) return null
+    // The payload is attacker-controlled; an out-of-range element id would produce undefined
+    // table lookups (NaN temps, broken movement) in the sim, so reject anything past the roster.
+    if (elem >= ELEM_COUNT || r > 64 || x < 0 || x > 0xffff || y < 0 || y > 0xffff) return null
     events.push({ tick, elem, x, y, r, stroke })
   }
   return { seed, finalTick, finalHash, events }

@@ -375,8 +375,10 @@ export class Buffers {
     // Double on the re-back leg, mirroring growRegion: the resizable fast path amortizes by
     // over-allocating, but a reservation-exhausted (or non-resizable) backing lands here with the
     // caller's EXACT need. An exact alloc-copy per append is O(n²) over a spawn burst — doubling
-    // (capped at the world's entity ceiling) keeps it O(n). The tail fill covers the surplus.
-    const targetCapacity = Math.min(this.#maxEntities, Math.max(newCapacity, oldCapacity * 2))
+    // (the double itself capped at the world's entity ceiling) keeps it O(n). The outer max
+    // guarantees the result covers `newCapacity` even if it ever exceeds that ceiling, so the
+    // backing is never under-allocated; the tail fill covers the surplus.
+    const targetCapacity = Math.max(newCapacity, Math.min(this.#maxEntities, oldCapacity * 2))
     const newByteLen = targetCapacity * rowBytes
     const newBacking: Backing = isSab(this.capabilities.backing)
       ? new (plainSab() ?? missingSharedBacking())(newByteLen)

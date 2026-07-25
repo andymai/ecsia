@@ -37,4 +37,9 @@ describe('session codec', () => {
     const good = await encodeSession({ seed: 1, finalTick: 10, finalHash: 2, events: [] })
     expect(await decodeSession(good.slice(0, Math.max(1, good.length - 6)))).toBeNull()
   })
+
+  it('rejects an out-of-range element id (attacker-controlled payload)', async () => {
+    const evil = { seed: 1, finalTick: 5, finalHash: 0, events: [{ tick: 0, elem: 99, x: 10, y: 10, r: 4, stroke: true }] }
+    expect(await decodeSession(await encodeSession(evil))).toBeNull()
+  })
 })
