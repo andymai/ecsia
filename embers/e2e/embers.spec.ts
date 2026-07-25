@@ -36,6 +36,8 @@ function listen(server: Server): Promise<number> {
 }
 const close = (server: Server): Promise<void> => new Promise((r) => server.close(() => r()))
 
+const diagnostics: string[] = []
+
 async function bench(
   page: import('@playwright/test').Page,
   port: number,
@@ -43,9 +45,11 @@ async function bench(
   seed: number,
   ticks: number,
 ): Promise<BenchResult> {
-  const diagnostics: string[] = []
-  page.on('pageerror', (err) => diagnostics.push(`pageerror: ${err.stack ?? err.message}`))
-  await page.goto(`http://localhost:${port}/index.html#bench=${kind}&seed=${seed}&ticks=${ticks}`, {
+  page.on('pageerror', (err) => diagnostics.push(`[${kind}] pageerror: ${err.stack ?? err.message}`))
+  // The bench selector lives in the URL HASH, but two goto()s differing only in the fragment are a
+  // same-document navigation in Chromium — the page never reloads and the second bench never runs.
+  // A unique query per kind forces a full navigation so each bench executes from a fresh module.
+  await page.goto(`http://localhost:${port}/index.html?run=${kind}#bench=${kind}&seed=${seed}&ticks=${ticks}`, {
     waitUntil: 'load',
   })
   await page.waitForSelector('#bench-done', { state: 'attached', timeout: 30_000 }).catch((e) => {
@@ -63,9 +67,10 @@ test.describe('EMBER WORKS determinism', () => {
       const ticks = 400
       const serial = await bench(page, port, 'serial', seed, ticks)
       const threaded = await bench(page, port, 'threaded', seed, ticks)
-      expect(serial.live, 'the scripted scene should populate the pool').toBeGreaterThan(200)
-      expect(threaded.threaded, 'the worker pool must actually engage under isolation').toBe(true)
-      expect(threaded.hash, 'threaded hash must equal serial hash').toBe(serial.hash)
+      const ctx = () => `\nserial=${JSON.stringify(serial)}\nthreaded=${JSON.stringify(threaded)}\ndiagnostics:\n${diagnostics.join('\n') || '(none)'}`
+      expect(serial.live, `the scripted scene should populate the pool${ctx()}`).toBeGreaterThan(200)
+      expect(threaded.threaded, `the worker pool must actually engage under isolation${ctx()}`).toBe(true)
+      expect(threaded.hash, `threaded hash must equal serial hash${ctx()}`).toBe(serial.hash)
     } finally {
       await close(server)
     }

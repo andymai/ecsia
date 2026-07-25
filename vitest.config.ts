@@ -77,11 +77,14 @@ export default defineConfig({
       },
       {
         // EMBER WORKS sim: determinism, element reactions, and the share-URL codec run headless
-        // (serial scheduler path; the threaded path is covered by the browser-smoke E2E).
+        // (serial scheduler path; the threaded path is covered by the browser-smoke E2E). Each sim
+        // test builds a full 131k-particle pool (+ hashes every row), so the default 5s timeout is
+        // too tight on slower CI runners — give the project real headroom.
         test: {
           name: 'embers',
           include: ['embers/test/**/*.test.ts'],
           environment: 'node',
+          testTimeout: 60_000,
           alias,
         },
       },
