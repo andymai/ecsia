@@ -1,0 +1,39 @@
+packages/scheduler/src/workers/pool.ts
+  s_21cd80512020e1::t_7027f8ef78f1fa 315
+  s_21cd80512020e1::t_ae557757b6ad82 359
+  s_21cd80512020e1::t_d499de724f42f4 285-289
+  s_21cd80512020e1::t_559f45ef1fac3a 441
+  s_21cd80512020e1::t_02ba7ce2b127a7 127-134
+  s_21cd80512020e1::t_32f7f7ff8764cb 144-147
+  s_21cd80512020e1::t_3b159dd9ed5dff 482-496
+demo/src/game/codec.ts
+  s_21cd80512020e1::t_91bdf0b2cfa496 18-19,30-34
+  s_21cd80512020e1::t_5f6aa74a63aebe 147,149,158,163-165
+  s_21cd80512020e1::t_3128efb4b613d0 66-70,79,83-87
+  s_21cd80512020e1::t_e1a4a492cd643a 49,51-54
+  s_21cd80512020e1::t_003c89102cd88b 141
+  s_21cd80512020e1::t_1226df9f097824 35
+packages/scheduler/src/workers/node-transport.ts
+  s_21cd80512020e1::t_ae8d421b07c66c 23-33,37-39,41
+packages/scheduler/test/browser-transport.integration.test.ts
+  s_21cd80512020e1::t_421b47114332cb 29-37,41-43,45
+  s_21cd80512020e1::t_a2611f16ebe2e3 135-151
+packages/scheduler/test/fixtures/m7-kernels.mjs
+  s_21cd80512020e1::t_dbd6b17006b3e3 96-103,113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "9808f88e794140efda2d451541f545868d01de71",
+  "prompts": {},
+  "sessions": {
+    "s_21cd80512020e1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "723e2811-e43b-4bb2-b1de-85cbe4089fc1",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
