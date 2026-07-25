@@ -8,18 +8,33 @@ import { read } from '@ecsia/kit'
 import { buildLife } from './sim/world.js'
 import type { Life } from './sim/world.js'
 import { DT, LOOP_TICKS, MAX_LIVES, TICKS_PER_SECOND } from './sim/shared.js'
+import { BOSS_HP } from './sim/shared.js'
 import {
   FX_BOSS_DEATH,
   FX_BOSS_SPAWN,
   FX_ENEMY_DEATH,
   FX_GHOST_FADE,
+  FX_HIT,
   FX_NOVA,
   FX_PICKUP,
   FX_PLAYER_DEATH,
 } from './sim/systems.js'
 import { decodeRun, encodeRun } from './game/codec.js'
 import type { RunRecord } from './game/codec.js'
-import { Renderer, SPR_BOSS, SPR_BRUTE, SPR_BULLET, SPR_DOT, SPR_GEM, SPR_MOTH, SPR_PLAYER, SPR_SWARM } from './render/gl.js'
+import {
+  Renderer,
+  SPR_BOSS,
+  SPR_BRUTE,
+  SPR_BULLET,
+  SPR_DOT,
+  SPR_FLAME,
+  SPR_GEM,
+  SPR_MOTH,
+  SPR_MOTH2,
+  SPR_PLAYER,
+  SPR_RING,
+  SPR_SWARM,
+} from './render/gl.js'
 
 // ---------------------------------------------------------------------------------------------
 // Cross-origin isolation bootstrap (GitHub Pages can't send COOP/COEP; the service worker can).
@@ -89,6 +104,31 @@ const part = {
   size: new Float32Array(P_MAX),
   head: 0,
 }
+// Screen flashes (additive glows that decay) — novas, deaths, pickups.
+interface Flash {
+  x: number
+  y: number
+  ttl: number
+  max: number
+  size: number
+  r: number
+  g: number
+  b: number
+}
+const flashes: Flash[] = []
+function flash(x: number, y: number, size: number, ttl: number, r: number, g: number, b: number): void {
+  if (flashes.length < 160) flashes.push({ x, y, ttl, max: ttl, size, r, g, b })
+}
+
+// Short motion trails for player ships (render-only ring buffers, reset per life).
+const TRAIL_N = 10
+const trailX = new Float32Array(8 * TRAIL_N).fill(-999)
+const trailY = new Float32Array(8 * TRAIL_N)
+const trailHead = new Int32Array(8)
+const prevPX = new Float32Array(8).fill(-999)
+const prevPY = new Float32Array(8)
+let trailLife: Life | null = null
+
 function burst(x: number, y: number, n: number, speed: number, color: [number, number, number], life = 0.6, size = 0.22): void {
   for (let i = 0; i < n; i++) {
     const k = part.head++ % P_MAX
@@ -123,7 +163,7 @@ const GHOST_COLORS: [number, number, number][] = [
 const KIND_COLOR: [number, number, number][] = [
   [1, 0.38, 0.5],
   [1, 0.72, 0.32],
-  [0.72, 0.32, 1],
+  [0.6, 0.3, 0.92],
 ]
 const KIND_SPRITE = [SPR_SWARM, SPR_MOTH, SPR_BRUTE]
 const KIND_SIZE = [0.42, 0.48, 0.75]
@@ -440,19 +480,31 @@ function afterTick(): void {
   const l = life
   if (l === null) return
   for (const fx of l.ctx.fx) {
-    if (fx.kind === FX_ENEMY_DEATH) burst(fx.x, fx.y, 5, 55, [1, 0.55, 0.45], 0.45)
-    else if (fx.kind === FX_PLAYER_DEATH) {
+    if (fx.kind === FX_ENEMY_DEATH) {
+      burst(fx.x, fx.y, 5, 55, [1, 0.55, 0.45], 0.45)
+      flash(fx.x, fx.y, 0.9, 0.14, 0.7, 0.32, 0.2)
+    } else if (fx.kind === FX_HIT) {
+      burst(fx.x, fx.y, 2, 75, [1, 0.95, 0.7], 0.22, 0.16)
+    } else if (fx.kind === FX_PLAYER_DEATH) {
       burst(fx.x, fx.y, 90, 150, LIVE_COLOR, 1.1, 0.3)
+      flash(fx.x, fx.y, 7, 0.5, 0.45, 0.92, 1)
       shakeMag = Math.max(shakeMag, 6)
     } else if (fx.kind === FX_GHOST_FADE) burst(fx.x, fx.y, 26, 60, [0.8, 0.8, 1], 0.8)
-    else if (fx.kind === FX_PICKUP) burst(fx.x, fx.y, 10, 45, [0.95, 1, 0.7], 0.5)
-    else if (fx.kind === FX_NOVA) {
+    else if (fx.kind === FX_PICKUP) {
+      burst(fx.x, fx.y, 10, 45, [0.95, 1, 0.7], 0.5)
+      flash(fx.x, fx.y, 2.2, 0.25, 0.6, 1, 0.7)
+    } else if (fx.kind === FX_NOVA) {
       burst(fx.x, fx.y, 140, 220, [0.55, 0.9, 1], 0.7)
+      flash(fx.x, fx.y, 9, 0.4, 0.55, 0.9, 1)
       shakeMag = Math.max(shakeMag, 4)
     } else if (fx.kind === FX_BOSS_DEATH) {
       burst(fx.x, fx.y, 220, 190, [1, 0.5, 0.4], 1.4, 0.34)
+      flash(fx.x, fx.y, 13, 0.7, 1, 0.4, 0.3)
       shakeMag = Math.max(shakeMag, 8)
-    } else if (fx.kind === FX_BOSS_SPAWN) shakeMag = Math.max(shakeMag, 5)
+    } else if (fx.kind === FX_BOSS_SPAWN) {
+      flash(fx.x, fx.y, 9, 0.6, 1, 0.35, 0.3)
+      shakeMag = Math.max(shakeMag, 5)
+    }
   }
   l.ctx.fx.length = 0
 
@@ -487,6 +539,8 @@ function fillScene(): void {
     renderer.sprite(g.x, g.y, SPR_GEM, 0.4, c[0], c[1], c[2], 1)
   }
 
+  const tick = l.tick()
+
   for (let c = 0; c < defs.EPos.length; c++) {
     const q = world.query(read(defs.EPos[c]!))
     q.eachChunk((chunk) => {
@@ -494,10 +548,20 @@ function fillScene(): void {
       const ys = chunk.column(defs.EPos[c]!, 'y') as Float32Array
       const kinds = chunk.column(defs.EMeta, 'kind') as Int32Array
       const n = chunk.count
+      const flap = (tick >> 3) & 1
       for (let r = 0; r < n; r++) {
         const kind = kinds[r]!
         const col = KIND_COLOR[kind]!
-        renderer.sprite(xs[r]!, ys[r]!, KIND_SPRITE[kind]!, KIND_SIZE[kind]!, col[0], col[1], col[2], 1)
+        let sprite = KIND_SPRITE[kind]!
+        let size = KIND_SIZE[kind]!
+        if (kind === 1) {
+          // Moths flap: alternate wing frames, staggered by row so the swarm shimmers.
+          sprite = (flap + (r & 1)) & 1 ? SPR_MOTH2 : SPR_MOTH
+        } else if (kind === 0) {
+          // Swarmers pulse subtly.
+          size += 0.045 * Math.sin(tick * 0.35 + r * 1.7)
+        }
+        renderer.sprite(xs[r]!, ys[r]!, sprite, size, col[0], col[1], col[2], 1)
       }
     })
   }
@@ -506,17 +570,63 @@ function fillScene(): void {
   bq.eachChunk((chunk) => {
     const xs = chunk.column(defs.Bullet, 'x') as Float32Array
     const ys = chunk.column(defs.Bullet, 'y') as Float32Array
+    const vxs = chunk.column(defs.Bullet, 'vx') as Float32Array
+    const vys = chunk.column(defs.Bullet, 'vy') as Float32Array
     const n = chunk.count
-    for (let r = 0; r < n; r++) renderer.sprite(xs[r]!, ys[r]!, SPR_BULLET, 0.3, 0.8, 1, 0.92, 1)
+    for (let r = 0; r < n; r++) {
+      const x = xs[r]!
+      const y = ys[r]!
+      // Tracer: two fading ticks trailing opposite the velocity — bolts read as motion.
+      renderer.sprite(x - vxs[r]! * 0.012, y - vys[r]! * 0.012, SPR_DOT, 0.2, 0.5, 0.9, 0.7, 0.35)
+      renderer.sprite(x - vxs[r]! * 0.006, y - vys[r]! * 0.006, SPR_DOT, 0.24, 0.7, 1, 0.85, 0.6)
+      renderer.sprite(x, y, SPR_BULLET, 0.32, 0.85, 1, 0.95, 1)
+    }
   })
 
   const liveSlot = l.ctx.liveSlot
+  if (trailLife !== l) {
+    trailX.fill(-999)
+    prevPX.fill(-999)
+    trailHead.fill(0)
+    trailLife = l
+  }
   const playerGlows: { x: number; y: number; c: [number, number, number]; live: boolean }[] = []
   for (const e of world.query(read(defs.Player)) as Iterable<{ player: { x: number; y: number; hp: number; slot: number } }>) {
     const p = e.player
     if (p.hp <= 0) continue
     const isLive = p.slot === liveSlot
     const c = isLive ? LIVE_COLOR : GHOST_COLORS[p.slot % GHOST_COLORS.length]!
+    const s = p.slot & 7
+
+    // Motion trail (drawn under the ship — earlier sprites render first).
+    for (let k = 1; k < TRAIL_N; k++) {
+      const i = s * TRAIL_N + ((trailHead[s]! + k) % TRAIL_N)
+      const tx = trailX[i]!
+      if (tx < -900) continue
+      const a = (k / TRAIL_N) * (isLive ? 0.34 : 0.2)
+      renderer.sprite(tx, trailY[i]!, SPR_DOT, 0.16, c[0], c[1], c[2], a)
+    }
+    trailHead[s] = (trailHead[s]! + 1) % TRAIL_N
+    trailX[s * TRAIL_N + trailHead[s]!] = p.x
+    trailY[s * TRAIL_N + trailHead[s]!] = p.y
+
+    // Thruster flame opposite the frame-to-frame motion, flickering.
+    const pdx = prevPX[s]! > -900 ? p.x - prevPX[s]! : 0
+    const pdy = prevPX[s]! > -900 ? p.y - prevPY[s]! : 0
+    const speed2 = pdx * pdx + pdy * pdy
+    if (speed2 > 0.01) {
+      const inv = 1 / Math.sqrt(speed2)
+      const fa = 0.6 + Math.random() * 0.4
+      renderer.sprite(p.x - pdx * inv * 5.5, p.y - pdy * inv * 5.5, SPR_FLAME, 0.4 + Math.random() * 0.1, 1, 0.68, 0.28, fa * (isLive ? 1 : 0.5))
+    }
+    prevPX[s] = p.x
+    prevPY[s] = p.y
+
+    if (isLive) {
+      // The anchor ring: keeps YOUR ship findable inside the melee, breathing gently.
+      const ra = 0.5 + 0.16 * Math.sin(tick * 0.12)
+      renderer.sprite(p.x, p.y, SPR_RING, 0.85 + 0.05 * Math.sin(tick * 0.12), c[0], c[1], c[2], ra)
+    }
     renderer.sprite(p.x, p.y, SPR_PLAYER, 0.55, c[0], c[1], c[2], isLive ? 1 : 0.62)
     playerGlows.push({ x: p.x, y: p.y, c, live: isLive })
   }
@@ -527,7 +637,17 @@ function fillScene(): void {
     break
   }
   if (bossInfo !== null && bossInfo.active !== 0) {
-    renderer.sprite(bossInfo.x, bossInfo.y, SPR_BOSS, 1.1, 1, 0.42, 0.42, 1)
+    const throb = 1.05 + 0.07 * Math.sin(tick * 0.2)
+    renderer.sprite(bossInfo.x, bossInfo.y, SPR_BOSS, throb, 1, 0.42, 0.42, 1)
+    // HP pips above the reaper.
+    const maxHp = BOSS_HP * (1 + 0.3 * l.ctx.echoes)
+    const frac = Math.max(0, Math.min(1, bossInfo.hp / maxHp))
+    const pips = 12
+    const lit = Math.ceil(frac * pips)
+    for (let i = 0; i < pips; i++) {
+      const on = i < lit
+      renderer.sprite(bossInfo.x - 13 + i * 2.3, bossInfo.y - 15, SPR_DOT, 0.13, on ? 1 : 0.25, on ? 0.35 : 0.1, on ? 0.3 : 0.1, on ? 1 : 0.6)
+    }
   }
 
   // Particles (solid pass).
@@ -539,9 +659,13 @@ function fillScene(): void {
 
   // Additive glow pass — last.
   for (const g of playerGlows) {
-    renderer.glow(g.x, g.y, g.live ? 2.6 : 1.8, g.c[0] * 0.5, g.c[1] * 0.5, g.c[2] * 0.5, g.live ? 0.5 : 0.3)
+    renderer.glow(g.x, g.y, g.live ? 3.1 : 1.8, g.c[0] * 0.55, g.c[1] * 0.55, g.c[2] * 0.55, g.live ? 0.65 : 0.3)
   }
   if (bossInfo !== null && bossInfo.active !== 0) renderer.glow(bossInfo.x, bossInfo.y, 4.5, 0.5, 0.12, 0.12, 0.6)
+  for (const f of flashes) {
+    const a = f.ttl / f.max
+    renderer.glow(f.x, f.y, f.size * (1.4 - 0.4 * a), f.r * a, f.g * a, f.b * a, a * 0.85)
+  }
 }
 
 function stepParticles(dt: number): void {
@@ -552,6 +676,10 @@ function stepParticles(dt: number): void {
     part.y[k]! += part.vy[k]! * dt
     part.vx[k]! *= 0.94
     part.vy[k]! *= 0.94
+  }
+  for (let i = flashes.length - 1; i >= 0; i--) {
+    flashes[i]!.ttl -= dt
+    if (flashes[i]!.ttl <= 0) flashes.splice(i, 1)
   }
 }
 
