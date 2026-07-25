@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.29.0](https://github.com/andymai/ecsia/compare/core-v0.28.0...core-v0.29.0) (2026-07-25)
+
+
+### Features
+
+* **scheduler:** browser Web-Worker pool + ECHO SURVIVORS showcase demo ([#170](https://github.com/andymai/ecsia/issues/170)) ([23a2a7a](https://github.com/andymai/ecsia/commit/23a2a7a20f6ee0a9e6fed2b26eb706cdac1bdd16))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.29.0
+
 ## [0.28.0](https://github.com/andymai/ecsia/compare/core-v0.27.0...core-v0.28.0) (2026-07-24)
 
 
