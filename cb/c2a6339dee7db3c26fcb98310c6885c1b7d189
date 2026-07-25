@@ -1,0 +1,124 @@
+packages/scheduler/src/workers/manifest.ts
+  s_21cd80512020e1::t_8f8663128972f1 31
+  s_21cd80512020e1::t_94962229d0a862 62
+  s_21cd80512020e1::t_7af6c3b23f874f 26-30
+packages/scheduler/src/workers/node-transport.ts
+  s_21cd80512020e1::t_c8a1d260bea4d2 15
+  s_21cd80512020e1::t_59fe7d17833bfd 1-14,16-32
+packages/scheduler/test/worker-late-archetype.integration.test.ts
+  s_21cd80512020e1::t_bb3ba665b7be5f 9
+  s_21cd80512020e1::t_7383806cfa27d7 1-8,10-60
+scripts/browser-smoke/threaded-fixture.ts
+  s_21cd80512020e1::t_d0c2bf9909180c 1-54
+scripts/browser-smoke/entry.ts
+  s_21cd80512020e1::t_53dda5730c375c 190-255,265-290,295-311,313-338,340-341
+  s_21cd80512020e1::t_7e1275e356b4e6 9-13,29
+  s_21cd80512020e1::t_ea516d502c2223 256-264
+  s_21cd80512020e1::t_b9c6a80519e118 291-292
+packages/scheduler/src/workers/transport.ts
+  s_21cd80512020e1::t_e07bf5878fd763 1-11,16-27,29
+  s_21cd80512020e1::t_fa8439b881b810 12-15
+  s_21cd80512020e1::t_0d19507d7006c7 28
+packages/scheduler/test/browser-transport.integration.test.ts
+  s_21cd80512020e1::t_ff37303d1dcf1f 1-123
+bundle-budget.json
+  s_21cd80512020e1::t_d6c3ce57022334 5-6,9-10,13-14
+packages/scheduler/test/worker-growth-boundary.test.ts
+  s_21cd80512020e1::t_1421b869e5fa42 311-318
+  s_21cd80512020e1::t_c24a8d64047474 492,494,504
+  s_21cd80512020e1::t_4d4c16cdfb8482 489-491,493,503,507
+  s_21cd80512020e1::t_7123daa8e4bacf 299-301,304
+packages/scheduler/src/workers/worker-entry.ts
+  s_21cd80512020e1::t_83a5b00f86ca9b 1-5,8-10,14-15,17-20,22
+packages/scheduler/package.json
+  s_21cd80512020e1::t_03e4406b5b0820 40-43
+packages/scheduler/src/workers/index.ts
+  s_21cd80512020e1::t_e0a52bd6bc0e69 17-21
+scripts/browser-smoke/README.md
+  s_21cd80512020e1::t_527d151bb1b52e 16-20
+  s_21cd80512020e1::t_a03482256b1d42 35,37,39-46
+  s_21cd80512020e1::t_afa5595c807a1a 3-5
+packages/ecsia/src/index.ts
+  s_21cd80512020e1::t_96d99238a24f17 147-150
+packages/scheduler/src/executor/scheduler.ts
+  s_21cd80512020e1::t_81bdf3f38b6d9f 24
+  s_21cd80512020e1::t_6bbd9f756fc761 36-39,42-49
+  s_21cd80512020e1::t_3a275f9813983c 135-138
+  s_21cd80512020e1::t_f3504722597344 216-222,227,229
+packages/core/src/memory/buffers.ts
+  s_21cd80512020e1::t_a020392441302b 331-334,336
+  s_21cd80512020e1::t_ef9e975089d964 294-301
+  s_21cd80512020e1::t_fba545d0b9f7ff 335
+packages/scheduler/test/fixtures/web-worker-shim-entry.mjs
+  s_21cd80512020e1::t_54fb1b9be07da9 1-20
+packages/scheduler/src/workers/browser-transport.ts
+  s_21cd80512020e1::t_67f4fddfffa0b9 1-39
+scripts/browser-smoke/worker.ts
+  s_21cd80512020e1::t_5534d3115f3c2f 1-10
+packages/scheduler/test/fixtures/m7-kernels.mjs
+  s_21cd80512020e1::t_18e0609ba27d36 84-95,104,110
+packages/scheduler/src/index.ts
+  s_21cd80512020e1::t_fe12c20ed37cc3 42-49
+packages/scheduler/src/workers/worker-body.ts
+  s_21cd80512020e1::t_7c531a25fe371b 301
+  s_21cd80512020e1::t_c2b4c1dc499fd4 1-38,44-50,53-300,302-362,364-400
+  s_21cd80512020e1::t_38583709f4b1c7 39-43
+  s_21cd80512020e1::t_7b9f62d2a12530 51-52
+  s_21cd80512020e1::t_2ddaf866c5d70b 363
+scripts/browser-smoke/build.mjs
+  s_21cd80512020e1::t_0c0694a1d13164 21-24
+  s_21cd80512020e1::t_7ca33ecaef1e92 34,37-41
+website/guide/parallelism.md
+  s_21cd80512020e1::t_b7c82f74007341 92-139
+  s_21cd80512020e1::t_7e4d352ab48ec9 350,352-355
+packages/scheduler/src/workers/browser-entry.ts
+  s_21cd80512020e1::t_c81731c41e1215 1-58
+packages/scheduler/src/workers/pool.ts
+  s_21cd80512020e1::t_fadeee24981071 250
+  s_21cd80512020e1::t_397b2f03254df3 249,251,256,259,268-271,273
+  s_21cd80512020e1::t_d2aa9a4147e994 324,326
+  s_21cd80512020e1::t_6d1e9e4b9d8b13 127-128,135-140
+  s_21cd80512020e1::t_ba5d7943c31729 70
+  s_21cd80512020e1::t_85bc0aa5994bd4 432,440-442,444-449,451,453-460
+  s_21cd80512020e1::t_4fd697abe077a7 90-93,96-101
+  s_21cd80512020e1::t_cd49b272710751 433-435
+  s_21cd80512020e1::t_f8d6aa3c441136 65-69
+  s_21cd80512020e1::t_7a8acc585d7cc3 105-109
+  s_21cd80512020e1::t_ed829a3aac4514 10-12
+  s_21cd80512020e1::t_99deed8ddd8416 262
+  s_21cd80512020e1::t_4cdb619ba4b7ba 340
+  s_21cd80512020e1::t_b307a366a837e9 13-15
+  s_21cd80512020e1::t_2ba27231132413 47,50
+  s_21cd80512020e1::t_10efa54905da2f 29-30
+  s_21cd80512020e1::t_1ba8f0842641ce 430-431,436,452
+  s_21cd80512020e1::t_fe54aa33978aba 53
+  s_21cd80512020e1::t_61ca677953100c 177-180,182-183
+  s_21cd80512020e1::t_67dc0ba2a830f0 437-438,443,450,461-462
+  s_21cd80512020e1::t_849a98a3e42827 327
+packages/scheduler/src/workers/world-view.ts
+  s_21cd80512020e1::t_9570a488a0b561 33-44
+  s_21cd80512020e1::t_5ebbb260b892c5 146-152
+scripts/browser-smoke/playwright.spec.ts
+  s_21cd80512020e1::t_eaecf633d03b92 78-79,86-90,93-94,101-105
+  s_21cd80512020e1::t_954cb5b1b76f12 6-10,28-35
+  s_21cd80512020e1::t_591be9c9940c32 53,64-65,68-71
+  s_21cd80512020e1::t_f80a6b220a45ee 36
+packages/scheduler/test/worker-dt-precision.integration.test.ts
+  s_21cd80512020e1::t_75cc5cc55e6d5e 1-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "cbc2a6339dee7db3c26fcb98310c6885c1b7d189",
+  "prompts": {},
+  "sessions": {
+    "s_21cd80512020e1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "723e2811-e43b-4bb2-b1de-85cbe4089fc1",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
