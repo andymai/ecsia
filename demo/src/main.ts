@@ -755,32 +755,39 @@ function syncOverlay(): void {
   overlay.classList.remove('hidden')
   hideStick()
   if (mode === 'title') {
-    const controls = coarsePointer
-      ? 'drag anywhere to steer · you fire automatically · gems heal, power, or detonate'
-      : 'WASD / arrows — or drag with the mouse · you fire automatically · gems heal, power, or detonate'
+    const moveKeys = coarsePointer ? 'drag anywhere' : 'WASD · arrows · or drag'
     const rotateHint =
       coarsePointer && portraitQuery.matches
-        ? `<p class="warn">tip: rotate to landscape — or go fullscreen — for the full arena</p>`
+        ? `<p class="warn">rotate to landscape — or go fullscreen — for the full arena</p>`
         : ''
-    const fsButton = document.fullscreenEnabled && coarsePointer ? `<button id="btn-fs-title">FULLSCREEN</button>` : ''
-    const thrButton = iso
-      ? `<span>engine</span><button id="btn-thr-title" class="${settings.threaded ? 'on' : ''}">${settings.threaded ? 'THREADED' : 'SERIAL'}</button>`
+    const fsButton = document.fullscreenEnabled && coarsePointer ? `<button id="btn-fs-title">fullscreen</button>` : ''
+    const engineLine = iso
+      ? `steering on a ${workerCount}-worker SharedArrayBuffer pool`
+      : `single-threaded — this page isn't cross-origin isolated`
+    const thrControl = iso
+      ? `<span class="lbl">engine</span><button id="btn-thr-title" class="${settings.threaded ? 'on' : ''}">${settings.threaded ? 'THREADED' : 'SERIAL'}</button>`
       : ''
     overlay.innerHTML = `
-      <h1>ECHO SURVIVORS</h1>
-      <p>Survive the 90-second loop. When you die, time rewinds — and your past self
-      fights beside you, replaying your exact run. Eight lives. One timeline. The horde grows.</p>
-      <p class="keys">${controls}</p>
-      ${rotateHint}
-      <div class="row">
-        <span>overdrive</span>
-        ${[1, 2, 4].map((o) => `<button data-od="${o}" class="${settings.overdrive === o ? 'on' : ''}">${o}×</button>`).join('')}
-        ${thrButton}
-      </div>
-      <div class="row"><button id="btn-start">▶ ENTER THE LOOP</button>${fsButton}</div>
-      <p style="opacity:.6">every enemy is a real entity in <a href="https://github.com/andymai/ecsia" target="_blank" rel="noopener">ecsia</a>'s
-      deterministic ECS — ${iso ? `steering runs on a ${workerCount}-worker SharedArrayBuffer pool` : 'running single-threaded here (no cross-origin isolation)'} ·
-      the hash in the corner is the whole world state, and replays reproduce it byte for byte</p>`
+      <div class="boot">
+        <div class="boot-top"><span>ECSIA CARTRIDGE · <b>time-loop horde</b></span><span>90 s loop · 8 lives</span></div>
+        <div class="boot-word"><i>echo</i><span>SURVIVORS</span></div>
+        <p class="boot-sub">Die and time rewinds — your past self keeps fighting beside you, replaying its
+        exact run. Every echo you leave makes the next loop <b>meaner</b>.</p>
+        <dl class="boot-spec">
+          <dt>move</dt><dd>${moveKeys}</dd>
+          <dt>fire</dt><dd>automatic — you never stop shooting</dd>
+          <dt>gems</dt><dd>heal · power up · or detonate a nova</dd>
+        </dl>
+        ${rotateHint}
+        <div class="boot-settings">
+          <span class="lbl">overdrive</span>
+          ${[1, 2, 4].map((o) => `<button data-od="${o}" class="${settings.overdrive === o ? 'on' : ''}">${o}×</button>`).join('')}
+          ${thrControl}
+        </div>
+        <div class="boot-cta"><button id="btn-start">boot the loop</button>${fsButton}<span class="cursor">█</span></div>
+        <p class="boot-foot">every enemy is a live entity in ecsia — ${engineLine}. the corner hash is the whole
+        world state; a shared run re-simulates to the same hash, bit for bit. <a href="https://github.com/andymai/ecsia" target="_blank" rel="noopener">source →</a></p>
+      </div>`
     overlay.querySelectorAll('button[data-od]').forEach((b) => {
       ;(b as HTMLButtonElement).onclick = () => {
         settings.overdrive = Number((b as HTMLElement).dataset['od'])

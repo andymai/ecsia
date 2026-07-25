@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <title>EMBER WORKS — an ecsia demo</title>
+    <meta name="description" content="A falling-sand playground with 18 reacting elements, a threaded air simulation, and byte-identical replay URLs — powered by ecsia's deterministic ECS." />
+    <style>
+      :root {
+        --ink: #d8cfc0;
+        --ash: #6f6a60;
+        --amber: #ffb454;
+        --coal: #14100c;
+        --line: #2b241a;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        background: radial-gradient(ellipse at 50% 30%, #16100a 0%, #0a0806 60%, #050403 100%);
+        color: var(--ink);
+        font-family: ui-monospace, 'Cascadia Mono', 'JetBrains Mono', Menlo, monospace;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        overflow: hidden;
+        height: 100dvh;
+        overscroll-behavior: none;
+      }
+      #frame {
+        position: relative;
+        width: min(96vw, calc((94dvh - 86px) * 16 / 9));
+        aspect-ratio: 16 / 9;
+        background: #000;
+        border: 1px solid #2b241a;
+        border-radius: 10px;
+        box-shadow: 0 0 0 5px #0d0a07, 0 0 46px rgba(255, 140, 40, 0.08), inset 0 0 60px rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+        touch-action: none;
+      }
+      canvas#screen { width: 100%; height: 100%; display: block; cursor: crosshair; }
+      .hud {
+        position: absolute;
+        pointer-events: none;
+        font-size: 10px;
+        line-height: 1.5;
+        letter-spacing: 0.06em;
+        color: #b3a68f;
+        text-shadow: 0 1px 2px #000;
+        white-space: pre;
+      }
+      #hud-stats { top: 8px; left: 10px; }
+      #hud-mode { top: 8px; right: 10px; text-align: right; color: var(--amber); }
+      #banner {
+        position: absolute;
+        top: 38%;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: clamp(11px, 1.6vw, 15px);
+        letter-spacing: 0.14em;
+        color: var(--amber);
+        text-shadow: 0 0 14px rgba(255, 180, 84, 0.5);
+        opacity: 0;
+        transition: opacity 0.4s;
+        pointer-events: none;
+        white-space: pre-line;
+      }
+      #banner.show { opacity: 1; }
+      #progress {
+        position: absolute;
+        left: 20%;
+        right: 20%;
+        top: 52%;
+        height: 3px;
+        background: #221b12;
+        display: none;
+      }
+      #progress b { display: block; height: 100%; width: 0; background: var(--amber); }
+      #dock {
+        width: min(96vw, calc((94dvh - 86px) * 16 / 9));
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      .rail {
+        display: flex;
+        gap: 4px;
+        overflow-x: auto;
+        scrollbar-width: none;
+        padding-bottom: 2px;
+      }
+      .rail::-webkit-scrollbar { display: none; }
+      .chip {
+        flex: 0 0 auto;
+        font: inherit;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        color: var(--ink);
+        background: #171310;
+        border: 1px solid #2b241a;
+        border-left: 4px solid var(--sw, #444);
+        border-radius: 4px;
+        padding: 7px 9px 6px;
+        cursor: pointer;
+        min-height: 30px;
+      }
+      .chip.on { background: #2a2014; border-color: var(--amber); color: #fff; }
+      .chip:active { transform: translateY(1px); }
+      .btn {
+        flex: 0 0 auto;
+        font: inherit;
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        color: var(--ash);
+        background: transparent;
+        border: 1px solid #2b241a;
+        border-radius: 4px;
+        padding: 7px 10px 6px;
+        cursor: pointer;
+        min-height: 30px;
+      }
+      .btn.on, .btn:hover { color: var(--amber); border-color: #4a3a22; }
+      .sizes { display: flex; gap: 4px; margin-left: auto; }
+      .sizes .btn { min-width: 30px; text-align: center; }
+      #footer {
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        color: #514a3f;
+        text-align: center;
+      }
+      #footer a { color: #8a6f3f; text-decoration: none; }
+      #footer a:hover { color: var(--amber); }
+      #fatal {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        font-size: 13px;
+        color: var(--ash);
+        padding: 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="frame">
+      <canvas id="screen"></canvas>
+      <div id="hud-stats" class="hud"></div>
+      <div id="hud-mode" class="hud"></div>
+      <div id="banner"></div>
+      <div id="progress"><b></b></div>
+      <div id="fatal"></div>
+    </div>
+    <div id="dock">
+      <div class="rail" id="elements"></div>
+      <div class="rail" id="controls"></div>
+    </div>
+    <div id="footer">
+      EMBER WORKS · every grain lives in <a href="https://github.com/andymai/ecsia" target="_blank" rel="noopener">ecsia</a>'s
+      deterministic ECS · draw something, hit share, and the link replays it byte for byte
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

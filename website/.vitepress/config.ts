@@ -18,9 +18,9 @@ export default defineConfig({
   themeConfig: {
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
-      // Base-less on purpose: VPLink's normalizeLink runs withBase (not idempotent), so a
-      // pre-prefixed path would render as /ecsia/ecsia/demo/ and 404.
-      { text: '🕹 Play the demo', link: '/demo/', target: '_blank' },
+      // The /demo/ (ECHO SURVIVORS) and /embers/ (EMBER WORKS) bundles still deploy under
+      // website/public, but they are intentionally UNLINKED from the site — reachable by direct
+      // URL only until they're ready to surface. Re-add nav entries here to relink.
       { text: 'API Reference', link: '/reference/' },
       {
         text: '0.x · unpublished',

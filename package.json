@@ -13,7 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b --noEmit false",
-    "typecheck:extras": "tsc -p examples/tsconfig.json && tsc -p examples/tsconfig.react.json && tsc -p bench/tsconfig.json && tsc -p demo/tsconfig.json",
+    "typecheck:extras": "tsc -p examples/tsconfig.json && tsc -p examples/tsconfig.react.json && tsc -p bench/tsconfig.json && tsc -p demo/tsconfig.json && tsc -p embers/tsconfig.json",
     "typecheck:tests": "tsc -p tsconfig.tests.json",
     "bench:macro": "BENCH_MACRO=1 vitest run --project bench",
     "bench:macro:pool": "BENCH_MACRO=1 vitest run --project bench bench/test/heavy-pool.smoke.test.ts",
@@ -24,11 +24,14 @@
     "size": "node scripts/size-check.mjs",
     "size:update": "node scripts/size-check.mjs --update",
     "demo:build": "node demo/build.mjs",
+    "embers:build": "node embers/build.mjs",
+    "embers:serve": "node scripts/browser-smoke/server.mjs --root website/public/embers --port 8898",
+    "embers:e2e": "playwright test --config embers/e2e/playwright.config.ts",
     "demo:serve": "node scripts/browser-smoke/server.mjs --root website/public/demo --port 8899",
     "docs:api": "typedoc",
     "docs:check": "node scripts/check-doc-snippets.mjs",
     "docs:dev": "vitepress dev website",
-    "docs:build": "pnpm docs:api && pnpm demo:build && vitepress build website && pnpm docs:check"
+    "docs:build": "pnpm docs:api && pnpm demo:build && pnpm embers:build && vitepress build website && pnpm docs:check"
   },
   "devDependencies": {
     "@ecsia/kit": "workspace:*",
