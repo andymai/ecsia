@@ -38,11 +38,22 @@ export function waveErrored(c: WaveCounter): boolean {
   return Atomics.load(c.view, ERROR) === 1
 }
 
+/** Default wave-fence deadline. Real waves complete in microseconds-to-milliseconds; a fence still
+ * unacknowledged after this long means a worker died without ACKing (a crashed/killed worker can
+ * never notify, and on the blocking tier the crash event can't even be delivered to the waiter).
+ * Bounding the wait converts an infinite hang into a loud error. Override via PoolConfig for
+ * legitimately long-running kernels. */
+export const DEFAULT_FENCE_TIMEOUT_MS = 30_000
+
+const fenceTimeout = (ms: number): Error =>
+  new Error(`wave fence timed out after ${ms}ms — a worker likely crashed without acknowledging its wave (raise fenceTimeoutMs if kernels legitimately run this long)`)
+
 /**
  * Build a WaveSync for the chosen tier. `await` MUST loop on Atomics.load(remaining) even after a
- * wake (spurious wakeups + the epoch guard), resolving only when remaining === 0.
+ * wake (spurious wakeups + the epoch guard), resolving only when remaining === 0 — or throw once
+ * the fence deadline passes with the count still nonzero.
  */
-export function makeWaveSync(tier: WaveSyncTier): WaveSync {
+export function makeWaveSync(tier: WaveSyncTier, fenceTimeoutMs: number = DEFAULT_FENCE_TIMEOUT_MS): WaveSync {
   function begin(c: WaveCounter, batchCount: number): void {
     Atomics.store(c.view, REMAINING, batchCount)
     Atomics.add(c.view, EPOCH, 1) // epoch bump: a stale notify from a previous round is ignored
@@ -52,8 +63,11 @@ export function makeWaveSync(tier: WaveSyncTier): WaveSync {
   function awaitTier1(c: WaveCounter): Promise<void> {
     // Tier 1: Atomics.waitAsync — browser main thread (non-blocking). Loop until remaining === 0.
     const step = async (): Promise<void> => {
+      const deadline = Date.now() + fenceTimeoutMs
       while (Atomics.load(c.view, REMAINING) !== 0) {
-        const r = waitAsync(c.view, REMAINING, Atomics.load(c.view, REMAINING) as number)
+        const left = deadline - Date.now()
+        if (left <= 0) throw fenceTimeout(fenceTimeoutMs)
+        const r = waitAsync(c.view, REMAINING, Atomics.load(c.view, REMAINING) as number, Math.min(left, 1000))
         if (r.async) await (r.value as Promise<unknown>)
       }
     }
@@ -62,16 +76,23 @@ export function makeWaveSync(tier: WaveSyncTier): WaveSync {
 
   function awaitTier2(c: WaveCounter): void {
     // Tier 2: blocking Atomics.wait — Node main thread or coordinator/worker may block directly.
+    // Sliced waits: a blocked thread can't receive the crash event, so the deadline is the ONLY
+    // way a dead worker's fence ever resolves here.
+    const deadline = Date.now() + fenceTimeoutMs
     while (true) {
       const remaining = Atomics.load(c.view, REMAINING)
       if (remaining === 0) return
-      Atomics.wait(c.view, REMAINING, remaining)
+      const left = deadline - Date.now()
+      if (left <= 0) throw fenceTimeout(fenceTimeoutMs)
+      Atomics.wait(c.view, REMAINING, remaining, Math.min(left, 1000))
     }
   }
 
   async function awaitTier3(c: WaveCounter): Promise<void> {
     // Tier 3: promise-poll — SAB present, waitAsync absent. Poll on a microtask/timeout.
+    const deadline = Date.now() + fenceTimeoutMs
     while (Atomics.load(c.view, REMAINING) !== 0) {
+      if (Date.now() > deadline) throw fenceTimeout(fenceTimeoutMs)
       await new Promise<void>((resolve) => setTimeout(resolve, 0))
     }
   }

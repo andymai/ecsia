@@ -16,8 +16,8 @@ export function hasWaitAsync(): boolean {
 }
 
 /** Call Atomics.waitAsync. Caller MUST have probed `hasWaitAsync()` first. */
-export function waitAsync(view: Int32Array, index: number, value: number): WaitAsyncResult {
+export function waitAsync(view: Int32Array, index: number, value: number, timeout?: number): WaitAsyncResult {
   const fn = (Atomics as AtomicsWithWaitAsync).waitAsync
   if (fn === undefined) throw new Error('Atomics.waitAsync unavailable (probe with hasWaitAsync first)')
-  return fn(view, index, value)
+  return timeout === undefined ? fn(view, index, value) : fn(view, index, value, timeout)
 }

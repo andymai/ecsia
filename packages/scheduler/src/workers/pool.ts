@@ -85,6 +85,12 @@ export interface PoolConfig {
    * per matched entity). Excess writes are capped (diagnosed at merge), never dropped silently.
    */
   readonly writeCorralEntries?: number
+  /**
+   * Wave-fence deadline in ms (default 30s). A crashed worker can never acknowledge its wave — on
+   * the blocking tier the crash event can't even reach the blocked waiter — so the fence throws
+   * after this long instead of hanging forever. Raise it for legitimately long-running kernels.
+   */
+  readonly fenceTimeoutMs?: number | undefined
   readonly diagnostic?: (message: string) => void
   /**
    * Override the worker-entry module URL (Node transport only). Defaults to the dist sibling of the
@@ -125,10 +131,11 @@ export class WorkerPool {
   #appliedGrowthGen = 0
   #disposed = false
   // A crashed worker (uncaught worker-scope exception / abnormal exit) can never acknowledge a wave
-  // fence. On the async wait tiers the fence await RACES this promise so the frame loop rejects
-  // loudly instead of hanging forever; the pool then latches broken (a crash mid-wave may leave
-  // shared state torn — recreate the pool/world). The blocking Node tier cannot race a promise;
-  // there a crash surfaces through worker 'error'/'exit' diagnostics as before.
+  // fence. Async wait tiers RACE the fence against this promise so the frame loop rejects the
+  // moment the crash event lands; every tier additionally throws past the fence deadline
+  // (fenceTimeoutMs) — the only escape on the blocking tier, where a blocked waiter can't receive
+  // events, and the backstop for silent worker deaths that fire none. Either way the pool latches
+  // broken (a crash mid-wave may leave shared state torn — recreate the pool/world).
   #broken = false
   readonly #failed: Promise<never>
   #failWith!: (err: Error) => void
@@ -195,7 +202,7 @@ export class WorkerPool {
       waitBlocking: mayBlock && typeof Atomics.wait === 'function',
       sabAvailable: typeof SharedArrayBuffer === 'function',
     })
-    this.#waveSync = makeWaveSync(tier)
+    this.#waveSync = makeWaveSync(tier, cfg.fenceTimeoutMs)
 
     const maxBatch = cfg.maxBatchEntities ?? cfg.world.options.maxEntities
     const corralEntries = cfg.writeCorralEntries ?? maxBatch * 4
@@ -355,8 +362,7 @@ export class WorkerPool {
     }
 
     // ---- wait on the wave fence (blocking tier 2 on Node; waitAsync tier under a browser transport) ----
-    const r = this.#waveSync.await(this.#waveCounter)
-    if (r !== undefined) await this.#raceFence(r)
+    await this.#awaitFence()
 
     // ---- serial flush slot: flip back, merge command buffers deterministically ----
     this.#world.__setPhase('serial')
@@ -437,8 +443,7 @@ export class WorkerPool {
         Atomics.store(slot.wake, WAKE, this.#wakeGen)
         Atomics.notify(slot.wake, WAKE)
       }
-      const r = this.#waveSync.await(this.#waveCounter)
-      if (r !== undefined) await this.#raceFence(r)
+      await this.#awaitFence()
       this.#world.__setPhase('serial')
     }
     this.#appliedGrowthGen = gen
@@ -480,13 +485,16 @@ export class WorkerPool {
   }
 
   /**
-   * Await an async-tier fence, racing worker failure so a crash rejects the frame loop instead of
-   * stranding it. On failure the phase flips back to 'serial' (so dispose and serial reads work)
-   * and the pool stays latched broken.
+   * Wait out the armed fence. Async tiers race worker failure (a crash rejects the frame loop
+   * instead of stranding it); every tier throws past its deadline (wave-sync fence timeout — the
+   * only escape on the blocking tier, where a crash event can't reach the blocked waiter). On any
+   * failure the phase flips back to 'serial' (so dispose and serial reads work) and the pool stays
+   * latched broken.
    */
-  async #raceFence(fence: Promise<void>): Promise<void> {
+  async #awaitFence(): Promise<void> {
     try {
-      await Promise.race([fence, this.#failed])
+      const r = this.#waveSync.await(this.#waveCounter)
+      if (r !== undefined) await Promise.race([r, this.#failed])
     } catch (err) {
       this.#broken = true
       this.#world.__setPhase('serial')
