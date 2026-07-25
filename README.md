@@ -7,7 +7,7 @@ Build simulations out of plain data, and let ecsia run them across threads for y
 [![CI](https://github.com/andymai/ecsia/actions/workflows/ci.yml/badge.svg)](https://github.com/andymai/ecsia/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
-**[Getting Started](https://andymai.github.io/ecsia/guide/getting-started)** · **[Core Concepts](https://andymai.github.io/ecsia/guide/core-concepts)** · **[Multithreading](https://andymai.github.io/ecsia/guide/parallelism)** · **[Performance](https://andymai.github.io/ecsia/guide/performance)**
+**[🕹 Play ECHO SURVIVORS — the live demo](https://andymai.github.io/ecsia/demo/)** · **[Getting Started](https://andymai.github.io/ecsia/guide/getting-started)** · **[Core Concepts](https://andymai.github.io/ecsia/guide/core-concepts)** · **[Multithreading](https://andymai.github.io/ecsia/guide/parallelism)** · **[Performance](https://andymai.github.io/ecsia/guide/performance)**
 
 </div>
 
@@ -72,6 +72,11 @@ import { createWorld } from '@ecsia/kit'
 const world = createWorld({ components: [/* ... */], threaded: true })
 ```
 
+The pool runs on Node `worker_threads` and — behind cross-origin isolation — on browser Web
+Workers, where the scheduler waits on the wave fence with `Atomics.waitAsync` so the page's
+main thread never blocks. Both paths are CI-tested byte-identical to the single-threaded run
+(the browser path in a real Chromium tab).
+
 ## Guarantees
 
 - **Threads never change your results.** A threaded run produces exactly the same
@@ -86,6 +91,27 @@ const world = createWorld({ components: [/* ... */], threaded: true })
   browsers that requires cross-origin isolation, a server-side opt-in). Where it's
   unavailable, ecsia logs a warning and runs on one thread. Work is never silently
   dropped.
+
+## The demo: ECHO SURVIVORS
+
+**[Play it in your browser →](https://andymai.github.io/ecsia/demo/)**
+
+A retro-CRT, time-loop survivors game built on ecsia — and a live proof of the guarantees
+above. Survive a 90-second loop against a horde of tens of thousands of entities; when you
+die, time rewinds and **your past self fights beside you, replaying your exact inputs**.
+Eight lives, one timeline.
+
+Everything in it is the real engine, not a staged capture:
+
+- The horde's steering runs on ecsia's **browser Web-Worker pool** over `SharedArrayBuffer`
+  (a service worker supplies the cross-origin-isolation headers GitHub Pages can't). Toggle
+  threading live — the state hash in the corner doesn't change, because parallel equals serial.
+- The **echo mechanic is deterministic replay**: a ghost is nothing but a recorded input
+  stream re-fed into the same simulation.
+- A finished run **compresses into its URL** (seed + inputs). Opening the link re-simulates
+  the whole thing and checks the recorded state hash — byte-identical, on any machine.
+
+The source is in [`demo/`](./demo) — game logic as ordinary ecsia components and systems.
 
 ## What ecsia leaves to you
 

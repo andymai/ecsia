@@ -81,6 +81,26 @@ function loggerPureKernel(view) {
   view.commands.publish(Echo, { count: pureSeen })
 }
 
+// A dt-SENSITIVE float kernel: x += dt * 3 into an f32 column. Exists to pin the work-descriptor's
+// dt transport precision — an f32 dt slot hands the worker fround(dt) while the serial twin computes
+// with the exact f64, silently breaking serial-equivalence for any dt that isn't f32-exact (1/60).
+const Drift = defineComponent({ x: 'f32' }, { name: 'drift' })
+function driftKernel(view, indices, dt) {
+  const id = Drift.id
+  for (let i = 0; i < indices.length; i++) {
+    const idx = indices[i]
+    view.writeField(idx, id, 0, view.readField(idx, id, 0) + dt * 3)
+  }
+}
+
+// Hard-kills the worker BEFORE completing the wave — the stranded-fence scenario the pool must
+// fail fast on (async tiers race the fence against worker failure; a plain throw is the SOFT
+// failure path, caught by the body and ACKed via setWaveError).
+function krashKernel() {
+  if (typeof process !== 'undefined') process.exit(3)
+  throw new Error('krash: no process.exit in this host')
+}
+
 export function buildWorkerKernels() {
   const kernels = new Map([
     ['Regen', regenKernel],
@@ -89,11 +109,14 @@ export function buildWorkerKernels() {
     ['Hitter', hitterKernel],
     ['Logger', loggerKernel],
     ['LoggerPure', loggerPureKernel],
+    ['Drift', driftKernel],
+    ['Krash', krashKernel],
   ])
   const components = new Map([
     ['health', Health],
     ['mana', Mana],
     ['tally', Tally],
+    ['drift', Drift],
   ])
   const topics = new Map([
     ['hits', Hits],

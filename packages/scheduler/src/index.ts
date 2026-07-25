@@ -39,3 +39,11 @@ export type { SystemBox } from './planner/index.js'
 export type { WorkerPool, PoolConfig, PoolSystem } from './workers/index.js'
 export const loadWorkerPool = async (): Promise<typeof import('./workers/index.js').WorkerPool> =>
   (await import('./workers/index.js')).WorkerPool
+
+// --- browser threading: the Web Worker transport types the `threading.createWorker` option uses.
+// Type-only here (the transport value + `ecsiaWorker` live on their own browser-clean paths:
+// '@ecsia/scheduler/workers' exports browserWorkerTransport for hand-built pools, and the app's
+// worker FILE imports `ecsiaWorker` from '@ecsia/scheduler/worker').
+export type { BrowserWorkerLike } from './workers/browser-transport.js'
+export type { WorkerTransport, WorkerPort } from './workers/transport.js'
+export type { WorkerKernelsBundle } from './workers/worker-body.js'

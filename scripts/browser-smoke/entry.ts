@@ -6,11 +6,11 @@
 // isolated (COOP/COEP). The probe must SELECT the SAB backing there.
 // • crossOriginIsolated assertion: in the isolated server variant it MUST be true; in the
 // --no-isolation variant the probe MUST FALL BACK LOUDLY (no SAB path, ArrayBuffer backing).
-//
-// HONEST SCOPING: this browser lane does NOT exercise a threaded worker pool. ecsia's WorkerPool is
-// node:worker_threads based; a browser Web-Worker pool is future work (see README note). The browser
-// claim is strictly: kernel + serialization run in-tab, SAB capability is probed correctly, and the
-// probe's fallback is loud, not silent.
+// • THREADED pool: a real browser Web-Worker pool (threading.createWorker → dist/worker.js running
+// `ecsiaWorker`) drives scheduler.update() in the isolated variant, and its column state must be
+// BYTE-IDENTICAL (snapshot bytes) to a serial run of the same simulation — parallel equals serial,
+// in an actual browser tab. In the non-isolated variant the scheduler must fall back LOUDLY to
+// single-threaded with identical bytes (no silent slowdown, no silent divergence).
 //
 // The page sets `window.__ECSIA_EXPECT_ISOLATED` before importing this module so the SAME bundle covers
 // BOTH server variants: isolated (expect true) and non-isolated (expect false).
@@ -26,6 +26,7 @@ import {
   read,
   write,
 } from '../../packages/ecsia/dist/index.js'
+import { makeDefs, POSITION_STEP, ENERGY_STEP } from './threaded-fixture.js'
 
 interface SmokeResult {
   ok: boolean
@@ -186,29 +187,155 @@ function runSmoke(): SmokeResult {
   }
 }
 
-// Expose to Playwright (page.evaluate) AND auto-run for manual inspection.
+// --- threaded pool smoke ------------------------------------------------------------------------
+// The PUBLIC browser threading path end-to-end: `threading.createWorker` spawns real Web Workers
+// running dist/worker.js (`ecsiaWorker` + statically bundled kernels); the scheduler drives the pool
+// over the Atomics.waitAsync main-thread tier. The serial reference runs the SAME defineSystem
+// bodies; the worker kernels are their arithmetic twins (threaded-fixture.ts). Snapshot bytes decide.
+interface ThreadedSmoke {
+  ok: boolean
+  engaged: boolean
+  fallbackWarned: boolean
+  bytesEqual: boolean
+  workers: number
+  frames: number
+  detail?: string
+}
+
+async function runThreadedSmoke(expectIsolated: boolean): Promise<ThreadedSmoke> {
+  const N = 256
+  const FRAMES = 4
+  const WORKERS = 2
+  const DT = 1 / 60
+
+  const mkWorld = (threaded: boolean) => {
+    const { Position, Energy } = makeDefs()
+    const world = createWorld({
+      components: [Position, Energy],
+      maxEntities: 1 << 10,
+      ...(threaded ? { threaded: true as const, scheduler: { workers: WORKERS } } : {}),
+    })
+    for (let i = 0; i < N; i++) {
+      const h = world.spawnWith(Position, Energy)
+      const p = world.entity(h).write(Position) as { x: number; y: number }
+      p.x = i * 0.25
+      p.y = -i * 0.5
+      ;(world.entity(h).write(Energy) as { e: number }).e = 100 + i
+    }
+    const MoveX = defineSystem({
+      name: 'MoveX',
+      read: [],
+      write: [Position],
+      run({ query, dt }) {
+        for (const e of query(write(Position)) as Iterable<{ position: { x: number } }>) e.position.x += dt * POSITION_STEP
+      },
+    })
+    const Drain = defineSystem({
+      name: 'Drain',
+      read: [],
+      write: [Energy],
+      run({ query, dt }) {
+        for (const e of query(write(Energy)) as Iterable<{ energy: { e: number } }>) e.energy.e -= dt * ENERGY_STEP
+      },
+    })
+    return { world, systems: [MoveX, Drain] }
+  }
+
+  const ref = mkWorld(false)
+  const refSched = createScheduler(ref.world, ref.systems)
+  for (let f = 0; f < FRAMES; f++) refSched.update(DT)
+
+  let lastUpdateWasPromise = false
+  const thr = mkWorld(true)
+  const sched = createScheduler(thr.world, thr.systems, {
+    workers: WORKERS,
+    threading: {
+      createWorker: () => new Worker(new URL('./worker.js', import.meta.url), { type: 'module' }),
+    },
+  })
+  // The scheduler's fallback contract is a ONE-TIME console.warn during update — capture it so the
+  // loud-not-silent property is machine-checked in both variants. Patched only across the update
+  // loop (the try/finally below), so a throw can't leave console.warn hijacked for the page.
+  const warnings: string[] = []
+  const origWarn = console.warn
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args.map(String).join(' '))
+    origWarn.apply(console, args)
+  }
+  try {
+    for (let f = 0; f < FRAMES; f++) {
+      const r = sched.update(DT)
+      // After a fallback the scheduler goes synchronous; a still-async LAST frame is the engagement
+      // signal (the pool survived every frame).
+      if (f === FRAMES - 1) lastUpdateWasPromise = r instanceof Promise
+      if (r instanceof Promise) await r
+    }
+  } finally {
+    console.warn = origWarn
+    await sched.dispose()
+  }
+  const fallbackWarned = warnings.some((w) => w.includes('threaded update unavailable'))
+  const engaged = !fallbackWarned && lastUpdateWasPromise
+
+  const bytesA = createSnapshotSerializer(ref.world).snapshot()
+  const bytesB = createSnapshotSerializer(thr.world).snapshot()
+  const bytesEqual = bytesA.length === bytesB.length && bytesA.every((b, i) => b === bytesB[i])
+
+  // Isolated: the pool must ENGAGE and match bytes with no fallback warning. Non-isolated: it must
+  // fall back LOUDLY and still match bytes (the same system bodies run serially).
+  const ok = expectIsolated ? engaged && bytesEqual && !fallbackWarned : !engaged && fallbackWarned && bytesEqual
+  const detail = fallbackWarned ? warnings.find((w) => w.includes('threaded update unavailable')) : undefined
+  return { ok, engaged, fallbackWarned, bytesEqual, workers: WORKERS, frames: FRAMES, ...(detail !== undefined ? { detail } : {}) }
+}
+
+// Kept for manual console runs; the Playwright harness reads the __ecsiaSmokeResult /
+// __ecsiaThreadedResult objects boot() stores instead of re-invoking this.
 window.__ecsiaBrowserSmoke = runSmoke
 
-// The flag MUST appear even if the smoke crashes — a timeout hides the real error.
-let result: SmokeResult
-try {
-  result = runSmoke()
-} catch (err) {
-  result = {
-    ok: false,
-    isolated: window.crossOriginIsolated === true,
-    sabAvailable: typeof SharedArrayBuffer !== 'undefined',
-    sabPathSelected: false,
-    sabAllocated: false,
-    sections: [{ name: 'module-level crash', ok: false, detail: String(err instanceof Error ? (err.stack ?? err.message) : err) }],
+async function boot(): Promise<void> {
+  // The flag MUST appear even if the smoke crashes — a timeout hides the real error.
+  let result: SmokeResult
+  try {
+    result = runSmoke()
+  } catch (err) {
+    result = {
+      ok: false,
+      isolated: window.crossOriginIsolated === true,
+      expectedIsolated: window.__ECSIA_EXPECT_ISOLATED === true,
+      backing: 'unknown',
+      sabAvailable: typeof SharedArrayBuffer !== 'undefined',
+      sabPathSelected: false,
+      sabAllocated: false,
+      sabGrew: false,
+      sections: [{ name: 'module-level crash', ok: false, detail: String(err instanceof Error ? (err.stack ?? err.message) : err) }],
+    }
   }
+  let threaded: ThreadedSmoke
+  try {
+    threaded = await runThreadedSmoke(window.__ECSIA_EXPECT_ISOLATED === true)
+  } catch (err) {
+    threaded = {
+      ok: false,
+      engaged: false,
+      fallbackWarned: false,
+      bytesEqual: false,
+      workers: 0,
+      frames: 0,
+      detail: String(err instanceof Error ? (err.stack ?? err.message) : err),
+    }
+  }
+  ;(window as unknown as { __ecsiaSmokeResult?: SmokeResult }).__ecsiaSmokeResult = result
+  ;(window as unknown as { __ecsiaThreadedResult?: ThreadedSmoke }).__ecsiaThreadedResult = threaded
+
+  const pre = document.createElement('pre')
+  pre.id = 'smoke-output'
+  pre.textContent = JSON.stringify({ ...result, threaded }, null, 2)
+  document.body.appendChild(pre)
+  // A machine-readable signal for the harness.
+  const flag = document.createElement('div')
+  flag.id = 'smoke-result'
+  flag.dataset['ok'] = String(result.ok && threaded.ok)
+  document.body.appendChild(flag)
 }
-const pre = document.createElement('pre')
-pre.id = 'smoke-output'
-pre.textContent = JSON.stringify(result, null, 2)
-document.body.appendChild(pre)
-// A machine-readable signal for the harness.
-const flag = document.createElement('div')
-flag.id = 'smoke-result'
-flag.dataset['ok'] = String(result.ok)
-document.body.appendChild(flag)
+
+void boot()

@@ -14,3 +14,8 @@ export type { WorkerSystemDef, WorkerSystemKernel, WorkerSystemBox } from './wor
 export type { WorkerBootstrap, ComponentManifestEntry, DispatchMessage } from './manifest.js'
 export { hasWaitAsync, waitAsync } from './atomics-shim.js'
 export type { WaitAsyncResult } from './atomics-shim.js'
+export { browserWorkerTransport } from './browser-transport.js'
+export type { BrowserWorkerLike } from './browser-transport.js'
+export { nodeWorkerTransport } from './node-transport.js'
+export type { WorkerPort, WorkerTransport } from './transport.js'
+export type { WorkerKernelsBundle, KernelModule, WorkerHostPort } from './worker-body.js'

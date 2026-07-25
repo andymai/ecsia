@@ -2,16 +2,16 @@
   "_comment": "Bundle-size budgets: max min+gzip BYTES per tree-shaken entry (scripts/size-check.mjs). The honest \"lean install\" number. Ratchet DOWN with `node scripts/size-check.mjs --update` when a build shrinks; CI fails if a build grows past budget*1.03.",
   "budgets": {
     "kernel": {
-      "gzip": 43602,
-      "min": 135517
+      "gzip": 44998,
+      "min": 140406
     },
     "core-min": {
-      "gzip": 33366,
-      "min": 105512
+      "gzip": 34036,
+      "min": 107995
     },
     "full-umbrella": {
-      "gzip": 65414,
-      "min": 203487
+      "gzip": 66068,
+      "min": 205689
     }
   }
 }

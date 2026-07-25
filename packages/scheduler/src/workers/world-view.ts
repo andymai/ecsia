@@ -30,6 +30,18 @@ export interface WorkerWorldView {
   readField(index: number, componentId: number, fieldIndex: number): number
   /** Write field `fieldIndex` of component `componentId` for entity index `index` (disjoint SAB write). */
   writeField(index: number, componentId: number, fieldIndex: number, value: number): void
+  /**
+   * The raw-column fast path — the worker-side analog of the kernel's `eachChunk`. Resolves one
+   * column's live typed-array view + stride ONCE so a hot loop indexes `view[row * stride]` directly
+   * instead of paying readField/writeField's per-call lookup. `row` comes from `rowOf` (or
+   * `locationOf().row`). Re-resolve after any wave, and per archetype — a re-backing or a matched set
+   * spanning archetypes changes the mapping. Writes through the raw view are NOT staged to the write
+   * corral: `.changed()` filters and onChange observers will not see them — take writeField for
+   * tracked writes, or accept untracked (a pure-compute cohort column nobody observes).
+   */
+  columnView(archetypeId: number, componentId: number, fieldIndex: number): { view: TypedArray; stride: number } | undefined
+  /** The entity-index → archetype row region (pairs with columnView for raw hot loops). */
+  rowOf(index: number): number
   /** The structural-op encoder for this worker (defers create/destroy/add/remove to the command buffer). */
   readonly commands: CommandEncoder
   /**
@@ -130,6 +142,13 @@ export function buildWorkerWorldView(
       // (drives onChange + `.changed` for worker writes). fieldIndex collapses to component granularity
       // — matching the main-thread trackWrite default.
       writeCorral?.push(index, componentId)
+    },
+    columnView(archetypeId, componentId, fieldIndex) {
+      const col = columns.get(colKey(archetypeId, componentId, fieldIndex))
+      return col === undefined ? undefined : { view: col.view, stride: col.stride }
+    },
+    rowOf(index) {
+      return archRowRegion[index]! >>> 0
     },
     commands,
     applyColumnGrowth(notices) {

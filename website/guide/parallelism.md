@@ -89,6 +89,54 @@ control over pool sizing, command-buffer capacity, and worker-entry overrides �
 directly. A pool you inject is yours to dispose.
 :::
 
+## Browsers: the same schedule on Web Workers
+
+The pool also runs on browser **Web Workers**. A browser worker can't be handed a module URL
+to import at runtime the way a Node worker can, so the two things you provide swap shape:
+the kernels ride inside a **worker file** your bundler compiles (no `kernelModule`), and the
+scheduler gets a **`createWorker`** factory instead.
+
+```js
+// sim.worker.js — the worker file. Your kernels bundle statically into it.
+import { ecsiaWorker } from '@ecsia/scheduler/worker'
+import { buildWorkerKernels } from './kernels.js'
+
+ecsiaWorker(buildWorkerKernels)
+```
+
+```js
+// page.js — the same world/system shapes as the Node path, one option swapped.
+const scheduler = createScheduler(world, [Move], {
+  threading: {
+    createWorker: () =>
+      new Worker(new URL('./sim.worker.js', import.meta.url), { type: 'module' }),
+  },
+})
+
+await scheduler.update(1 / 60)
+await scheduler.dispose()
+```
+
+The `new Worker(new URL('./sim.worker.js', import.meta.url), { type: 'module' })` shape is
+the one bundlers (Vite, esbuild, webpack) understand statically, so the worker file compiles
+and resolves correctly in production builds.
+
+Two browser-specific facts:
+
+- **The page's main thread never blocks.** Node's pool may block on the wave fence; on a
+  page the scheduler waits with `Atomics.waitAsync`, so rendering and input stay live while
+  workers run a wave.
+- **Cross-origin isolation is required** for `SharedArrayBuffer` (headers below). Without it
+  the scheduler warns once and runs the same systems single-threaded — identical output,
+  loudly, never silently.
+
+::: tip Tested in a real browser
+CI drives this path end-to-end in Chromium: the same simulation runs serially and across a
+real Web-Worker pool under COOP/COEP, and the two snapshot byte streams must be identical.
+It then runs again WITHOUT the isolation headers, where the loud single-threaded fallback
+must still produce the same bytes. The harness lives in `scripts/browser-smoke/`.
+:::
+
 ## How the scheduler derives waves
 
 Every system declares which components it reads and which it writes (`{ read, write }`).
@@ -299,13 +347,12 @@ When the context **isn't** cross-origin-isolated, `SharedArrayBuffer` doesn't ex
 worker pool cannot share columns by reference. ecsia logs a warning and runs the same systems
 single-threaded — the fallback is loud, and no work is dropped.
 
-### Node is the pool path today
+### Runtimes
 
-::: warning Worker pool is Node-only right now
-The OS-thread pool uses `worker_threads` + `Atomics` and runs under **Node `>=22.13`**. The
-*same user code* runs single-threaded in every runtime; the multi-threaded executor is the
-Node path. Browser `SharedArrayBuffer` parallelism is gated on the COOP/COEP headers above.
-:::
+The pool runs under **Node `>=22.13`** (`worker_threads` + `Atomics`) and in **browsers**
+(Web Workers + `Atomics.waitAsync`, behind the cross-origin-isolation headers above) via the
+`createWorker` path. The *same user code* runs single-threaded in every other runtime — the
+executor choice changes your program's speed, never its output.
 
 ## See also
 

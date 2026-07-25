@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ECHO SURVIVORS — an ecsia demo</title>
+    <meta name="description" content="A time-loop survivors game where every death spawns a ghost of your past run — powered by ecsia's deterministic, multithreaded ECS. Byte-identical replays in a URL." />
+    <style>
+      :root {
+        --phos: #7dffb3;
+        --cyan: #6ae7ff;
+        --amber: #ffc46a;
+        --red: #ff5c7a;
+        --dim: #3a5a4a;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        background: radial-gradient(ellipse at 50% 40%, #0b1210 0%, #050807 65%, #020303 100%);
+        color: var(--phos);
+        font-family: 'Courier New', ui-monospace, monospace;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+      #frame {
+        position: relative;
+        width: min(96vw, calc(96vh * 16 / 9));
+        aspect-ratio: 16 / 9;
+        background: #000;
+        border-radius: 18px;
+        box-shadow:
+          0 0 0 6px #1a1f1c,
+          0 0 0 8px #0c0f0d,
+          0 0 60px rgba(60, 255, 160, 0.07),
+          inset 0 0 80px rgba(0, 0, 0, 0.55);
+        overflow: hidden;
+      }
+      canvas#screen { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+      .hud {
+        position: absolute;
+        font-size: clamp(9px, 1.1vw, 13px);
+        letter-spacing: 0.08em;
+        text-shadow: 0 0 6px rgba(125, 255, 179, 0.55);
+        pointer-events: none;
+        white-space: pre;
+        line-height: 1.5;
+      }
+      #hud-perf { top: 10px; left: 14px; }
+      #hud-right { top: 10px; right: 14px; text-align: right; pointer-events: auto; }
+      #hud-bottom { bottom: 10px; left: 14px; }
+      #hud-score { bottom: 10px; right: 14px; text-align: right; }
+      #spark { image-rendering: pixelated; opacity: 0.9; display: block; margin-top: 2px; }
+      .badge { color: var(--cyan); }
+      .warn { color: var(--amber); }
+      .bad { color: var(--red); }
+      button, .btn {
+        pointer-events: auto;
+        font: inherit;
+        letter-spacing: inherit;
+        color: var(--phos);
+        background: rgba(10, 30, 20, 0.7);
+        border: 1px solid var(--dim);
+        border-radius: 3px;
+        padding: 2px 8px;
+        cursor: pointer;
+        text-shadow: inherit;
+      }
+      button:hover { border-color: var(--phos); }
+      button.on { color: #061410; background: var(--phos); text-shadow: none; }
+      #overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        text-align: center;
+        background: radial-gradient(ellipse at center, rgba(2, 8, 5, 0.25) 0%, rgba(2, 8, 5, 0.78) 100%);
+        transition: opacity 0.25s;
+      }
+      #overlay.hidden { opacity: 0; pointer-events: none; }
+      #overlay h1 {
+        font-size: clamp(26px, 5vw, 64px);
+        letter-spacing: 0.18em;
+        color: var(--cyan);
+        text-shadow: 0 0 18px rgba(106, 231, 255, 0.7), 0 0 3px #fff;
+      }
+      #overlay h2 { font-size: clamp(16px, 2.6vw, 30px); letter-spacing: 0.2em; }
+      #overlay p { font-size: clamp(10px, 1.4vw, 15px); letter-spacing: 0.1em; max-width: 60ch; line-height: 1.7; }
+      #overlay .keys { color: var(--amber); }
+      #overlay a { color: var(--cyan); }
+      #sharebox {
+        pointer-events: auto;
+        font-size: clamp(9px, 1.1vw, 12px);
+        max-width: 72ch;
+        word-break: break-all;
+        background: rgba(8, 20, 14, 0.85);
+        border: 1px solid var(--dim);
+        border-radius: 4px;
+        padding: 8px 10px;
+        user-select: all;
+      }
+      .row { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+      #glitch {
+        position: absolute; inset: 0; pointer-events: none; opacity: 0; background:
+          repeating-linear-gradient(0deg, rgba(255,255,255,0.06) 0 1px, transparent 1px 3px);
+        mix-blend-mode: screen;
+      }
+      #glitch.on { animation: glitch 0.9s steps(12) forwards; }
+      @keyframes glitch {
+        0% { opacity: 1; transform: translateX(0); filter: hue-rotate(0deg); }
+        30% { transform: translateX(-6px) scaleY(1.02); }
+        55% { transform: translateX(5px); filter: hue-rotate(120deg); }
+        100% { opacity: 0; transform: none; filter: none; }
+      }
+      #footer {
+        position: fixed; bottom: 6px; left: 0; right: 0; text-align: center;
+        font-size: 11px; letter-spacing: 0.1em; color: #2f4a3d;
+      }
+      #footer a { color: #4a7a62; text-decoration: none; }
+      #footer a:hover { color: var(--phos); }
+    </style>
+  </head>
+  <body>
+    <div id="frame">
+      <canvas id="screen"></canvas>
+      <div id="glitch"></div>
+      <div id="hud-perf" class="hud"></div>
+      <div id="hud-right" class="hud"></div>
+      <div id="hud-bottom" class="hud"></div>
+      <div id="hud-score" class="hud"></div>
+      <div id="overlay"></div>
+    </div>
+    <div id="footer">
+      powered by <a href="https://github.com/andymai/ecsia" target="_blank" rel="noopener">ecsia</a> —
+      the multithreaded, deterministic ECS for TypeScript · every frame you see is running its real
+      worker-pool scheduler
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

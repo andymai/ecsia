@@ -21,6 +21,7 @@ import { IS_DEV } from '@ecsia/core'
 // no static executor→workers edge, and a browser bundle of the serial path never touches
 // node:worker_threads through this module).
 import type { PoolConfig, PoolSystem, WorkerPool } from '../workers/pool.js'
+import type { BrowserWorkerLike } from '../workers/browser-transport.js'
 
 /**
  * Auto-dispatch configuration: with `threading` set (and a worker count), `scheduler.update()`
@@ -32,11 +33,20 @@ import type { PoolConfig, PoolSystem, WorkerPool } from '../workers/pool.js'
  */
 export interface SchedulerThreadingOptions extends Partial<Omit<PoolConfig, 'world' | 'workers' | 'systems'>> {
   /**
-   * Module URL the workers import for their kernels (`buildWorkerKernels` export). REQUIRED unless
-   * `pool` is injected — system `run` closures cannot cross a worker boundary, so worker-eligible
-   * systems express their bodies as kernels in a module workers can load.
+   * Module URL the workers import for their kernels (`buildWorkerKernels` export). REQUIRED on the
+   * Node path unless `pool` or `createWorker` is provided — system `run` closures cannot cross a
+   * worker boundary, so worker-eligible systems express their bodies as kernels in a module workers
+   * can load.
    */
   readonly kernelModule?: string
+  /**
+   * Browser path: construct one Web Worker per pool slot. The worker file must call
+   * `ecsiaWorker(buildWorkerKernels)` from '@ecsia/scheduler/worker' (kernels bundle statically —
+   * no kernelModule needed). The scheduler drives the pool over the Atomics.waitAsync tier, so the
+   * page's main thread never blocks. Requires cross-origin isolation for SharedArrayBuffer; without
+   * it the scheduler warns once and runs single-threaded (output identical).
+   */
+  readonly createWorker?: (index: number) => BrowserWorkerLike
   /** Bring-your-own pool. The caller owns its lifecycle; `dispose()` will NOT terminate it. */
   readonly pool?: RoundDispatcher
 }
@@ -122,8 +132,10 @@ export function createScheduler(
   const workers = opts?.workers ?? (typeof worldWorkers === 'number' ? worldWorkers : 0)
   const dev = opts?.dev ?? IS_DEV
   const threading = opts?.threading
-  if (threading !== undefined && threading.pool === undefined && threading.kernelModule === undefined) {
-    throw new Error("createScheduler: threading requires either 'kernelModule' (workers import their kernels from it) or an injected 'pool'")
+  if (threading !== undefined && threading.pool === undefined && threading.kernelModule === undefined && threading.createWorker === undefined) {
+    throw new Error(
+      "createScheduler: threading requires 'kernelModule' (Node: workers import their kernels from it), 'createWorker' (browser: the worker file bundles its kernels), or an injected 'pool'",
+    )
   }
 
   const accessStrideWords = strideFor(lowerSystems(defs, 1), opts?.registeredComponentCount)
@@ -201,12 +213,20 @@ export function createScheduler(
     try {
       // Dynamic: no static executor→workers edge, and the serial path never loads node:worker_threads.
       const workersModule = await import('../workers/pool.js')
+      // Browser path: `createWorker` wraps into the Web Worker transport; kernels bundle statically
+      // in the worker file, so no kernelModule is required or used.
+      const transport =
+        threading!.transport ??
+        (threading!.createWorker !== undefined
+          ? (await import('../workers/browser-transport.js')).browserWorkerTransport(threading!.createWorker)
+          : undefined)
       const own = new workersModule.WorkerPool({
         ...threading,
         world,
         workers,
-        kernelModule: threading!.kernelModule as string,
+        kernelModule: threading!.kernelModule,
         systems: poolSystems(),
+        ...(transport !== undefined ? { transport } : {}),
       })
       await own.ready()
       ownedPool = own
