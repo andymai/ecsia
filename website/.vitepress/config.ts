@@ -18,6 +18,9 @@ export default defineConfig({
   themeConfig: {
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
+      // Base-less on purpose: VPLink's normalizeLink runs withBase (not idempotent), so a
+      // pre-prefixed path would render as /ecsia/ecsia/demo/ and 404.
+      { text: '🕹 Play the demo', link: '/demo/', target: '_blank' },
       { text: 'API Reference', link: '/reference/' },
       {
         text: '0.x · unpublished',
