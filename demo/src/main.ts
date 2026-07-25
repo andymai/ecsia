@@ -48,7 +48,13 @@ addEventListener('keydown', (e) => {
 addEventListener('keyup', (e) => held.delete(e.key.toLowerCase()))
 addEventListener('blur', () => held.clear())
 
+// Set by the pointer joystick below; touch/drag input wins over held keys while a drag is active.
+// Both feed the SAME 8-way dir stream the sim records, so replays are input-source-agnostic.
+let touchActive = false
+let touchDir = 0
+
 function sampleDir(): number {
+  if (touchActive) return touchDir
   const left = held.has('a') || held.has('arrowleft')
   const right = held.has('d') || held.has('arrowright')
   const up = held.has('w') || held.has('arrowup')
@@ -126,6 +132,7 @@ const GEM_COLOR: [number, number, number][] = [
 // DOM
 // ---------------------------------------------------------------------------------------------
 const $ = (id: string): HTMLElement => document.getElementById(id)!
+const frameEl = $('frame')
 const canvas = $('screen') as HTMLCanvasElement
 const overlay = $('overlay')
 const hudPerf = $('hud-perf')
@@ -133,6 +140,78 @@ const hudRight = $('hud-right')
 const hudBottom = $('hud-bottom')
 const hudScore = $('hud-score')
 const glitchEl = $('glitch')
+
+// ---------------------------------------------------------------------------------------------
+// Pointer joystick — the touch control surface (also works as mouse-drag on desktop). A drag
+// anywhere on the canvas plants a virtual stick at the touch point; the drag vector maps to the
+// same 8-way dir the keyboard produces.
+// ---------------------------------------------------------------------------------------------
+const stickEl = $('stick')
+const stickNub = $('stick-nub')
+const coarsePointer = matchMedia('(pointer: coarse)').matches
+const portraitQuery = matchMedia('(orientation: portrait)')
+const STICK_DEAD = 12
+const STICK_RANGE = 34
+
+let stickPointer = -1
+let stickOx = 0
+let stickOy = 0
+
+function dirFromVector(dx: number, dy: number): number {
+  if (dx * dx + dy * dy < STICK_DEAD * STICK_DEAD) return 0
+  // Screen y grows downward; game dirs count 1=E counter-clockwise, so negate dy. Octant rounding
+  // gives each of the 8 directions a 45° wedge.
+  const oct = Math.round(Math.atan2(-dy, dx) / (Math.PI / 4))
+  return ((oct + 8) % 8) + 1
+}
+
+function hideStick(): void {
+  stickPointer = -1
+  touchActive = false
+  touchDir = 0
+  stickEl.style.display = 'none'
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (mode !== 'playing' || (e.pointerType === 'mouse' && e.button !== 0)) return
+  e.preventDefault()
+  stickPointer = e.pointerId
+  stickOx = e.clientX
+  stickOy = e.clientY
+  touchActive = true
+  touchDir = 0
+  canvas.setPointerCapture(e.pointerId)
+  const rect = frameEl.getBoundingClientRect()
+  stickEl.style.display = 'block'
+  stickEl.style.left = `${e.clientX - rect.left}px`
+  stickEl.style.top = `${e.clientY - rect.top}px`
+  stickNub.style.transform = 'translate(0px, 0px)'
+})
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== stickPointer) return
+  const dx = e.clientX - stickOx
+  const dy = e.clientY - stickOy
+  touchDir = dirFromVector(dx, dy)
+  const len = Math.sqrt(dx * dx + dy * dy) || 1
+  const c = Math.min(len, STICK_RANGE) / len
+  stickNub.style.transform = `translate(${dx * c}px, ${dy * c}px)`
+})
+const endStick = (e: PointerEvent): void => {
+  if (e.pointerId === stickPointer) hideStick()
+}
+canvas.addEventListener('pointerup', endStick)
+canvas.addEventListener('pointercancel', endStick)
+
+async function toggleFullscreen(): Promise<void> {
+  if (document.fullscreenElement !== null) {
+    await document.exitFullscreen().catch(() => {})
+    return
+  }
+  await frameEl.requestFullscreen().catch(() => {})
+  // Best-effort: phones that support it get the arena in landscape.
+  const so = screen.orientation as unknown as { lock?: (o: string) => Promise<void> }
+  await so.lock?.('landscape')?.catch(() => {})
+}
 
 const SPARK_W = 96
 const SPARK_H = 22
@@ -478,7 +557,8 @@ function hudTick(frameMs: number): void {
       ? `<span class="warn">single-thread (toggle off)</span>`
       : `<span class="warn">single-thread — no cross-origin isolation</span>`
   const toggle = `<button id="btn-thr" class="${settings.threaded ? 'on' : ''}">${settings.threaded ? 'THREADED' : 'SERIAL'}</button>`
-  hudRight.innerHTML = `${badge}<br/>${iso ? toggle : ''}<span style="opacity:.55"> ecsia worker pool</span>`
+  const fs = document.fullscreenEnabled ? `<button id="btn-fs" title="fullscreen">FS</button>` : ''
+  hudRight.innerHTML = `${badge}<br/>${iso ? toggle : ''}${fs}<span style="opacity:.55"> ecsia worker pool</span>`
   const btn = document.getElementById('btn-thr')
   if (btn !== null) {
     btn.onclick = () => {
@@ -486,6 +566,8 @@ function hudTick(frameMs: number): void {
       localStorage.setItem('echo-threaded', settings.threaded ? '1' : '0')
     }
   }
+  const fsBtn = document.getElementById('btn-fs')
+  if (fsBtn !== null) fsBtn.onclick = () => void toggleFullscreen()
 
   if (l !== null && (mode === 'playing' || mode === 'replay')) {
     const t = l.tick()
@@ -525,17 +607,31 @@ function syncOverlay(): void {
     return
   }
   overlay.classList.remove('hidden')
+  hideStick()
   if (mode === 'title') {
+    const controls = coarsePointer
+      ? 'drag anywhere to steer · you fire automatically · gems heal, power, or detonate'
+      : 'WASD / arrows — or drag with the mouse · you fire automatically · gems heal, power, or detonate'
+    const rotateHint =
+      coarsePointer && portraitQuery.matches
+        ? `<p class="warn">tip: rotate to landscape — or go fullscreen — for the full arena</p>`
+        : ''
+    const fsButton = document.fullscreenEnabled && coarsePointer ? `<button id="btn-fs-title">FULLSCREEN</button>` : ''
+    const thrButton = iso
+      ? `<span>engine</span><button id="btn-thr-title" class="${settings.threaded ? 'on' : ''}">${settings.threaded ? 'THREADED' : 'SERIAL'}</button>`
+      : ''
     overlay.innerHTML = `
       <h1>ECHO SURVIVORS</h1>
       <p>Survive the 90-second loop. When you die, time rewinds — and your past self
       fights beside you, replaying your exact run. Eight lives. One timeline. The horde grows.</p>
-      <p class="keys">WASD / arrows to move · you fire automatically · gems heal, power, or detonate</p>
+      <p class="keys">${controls}</p>
+      ${rotateHint}
       <div class="row">
         <span>overdrive</span>
         ${[1, 2, 4].map((o) => `<button data-od="${o}" class="${settings.overdrive === o ? 'on' : ''}">${o}×</button>`).join('')}
+        ${thrButton}
       </div>
-      <div class="row"><button id="btn-start">▶ ENTER THE LOOP</button></div>
+      <div class="row"><button id="btn-start">▶ ENTER THE LOOP</button>${fsButton}</div>
       <p style="opacity:.6">every enemy is a real entity in <a href="https://github.com/andymai/ecsia" target="_blank" rel="noopener">ecsia</a>'s
       deterministic ECS — ${iso ? `steering runs on a ${workerCount}-worker SharedArrayBuffer pool` : 'running single-threaded here (no cross-origin isolation)'} ·
       the hash in the corner is the whole world state, and replays reproduce it byte for byte</p>`
@@ -546,6 +642,16 @@ function syncOverlay(): void {
       }
     })
     ;(document.getElementById('btn-start') as HTMLButtonElement).onclick = () => void startRun()
+    const fsTitle = document.getElementById('btn-fs-title')
+    if (fsTitle !== null) (fsTitle as HTMLButtonElement).onclick = () => void toggleFullscreen()
+    const thrTitle = document.getElementById('btn-thr-title')
+    if (thrTitle !== null) {
+      ;(thrTitle as HTMLButtonElement).onclick = () => {
+        settings.threaded = !settings.threaded
+        localStorage.setItem('echo-threaded', settings.threaded ? '1' : '0')
+        syncOverlay()
+      }
+    }
   } else if (mode === 'fracture') {
     overlay.innerHTML = `
       <h2 class="bad">TIME FRACTURE</h2>
@@ -720,5 +826,10 @@ async function boot(): Promise<void> {
   syncOverlay()
   requestAnimationFrame(frame)
 }
+
+// Re-render the title's rotate hint when the device flips orientation.
+portraitQuery.addEventListener('change', () => {
+  if (mode === 'title') syncOverlay()
+})
 
 void boot()

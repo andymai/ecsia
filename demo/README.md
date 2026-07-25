@@ -7,6 +7,11 @@ adds a ghost of your past self, replaying your exact recorded inputs. Eight live
 scales with your echoes. Finished runs share as URLs that any machine re-simulates and verifies
 **byte-identically** — the demo is a continuously running proof of ecsia's determinism guarantee.
 
+Playable on desktop (WASD/arrows or mouse-drag) and mobile (touch joystick — drag anywhere to
+steer; menus go full-screen in portrait, fullscreen + landscape-lock offered where supported).
+Touch and keys feed the same 8-way input stream the sim records, so replay URLs are
+input-source-agnostic.
+
 ## How it uses ecsia
 
 | Feature | Where |
