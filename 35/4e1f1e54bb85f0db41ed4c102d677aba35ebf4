@@ -1,0 +1,49 @@
+demo/README.md
+  s_21cd80512020e1::t_df3f9a1baf605e 10-14
+demo/index.html
+  s_21cd80512020e1::t_a32d6fed27fadd 43-55
+  s_21cd80512020e1::t_dc3355f151b618 56-88
+  s_21cd80512020e1::t_1bb3bd9d69409f 26-28
+  s_21cd80512020e1::t_aa796fc19dd183 120-123,132
+  s_21cd80512020e1::t_3fae454744f072 124-131
+  s_21cd80512020e1::t_c07e91c20e007b 152-156
+  s_21cd80512020e1::t_ffe34a08db69a7 139-140,144-145,147-150,157-159
+  s_21cd80512020e1::t_0e2820cc41eeec 5
+  s_21cd80512020e1::t_86fdc77e4baa84 205
+demo/src/main.ts
+  s_21cd80512020e1::t_4af9a264feb25e 610,612-618,627-628,634
+  s_21cd80512020e1::t_13e04deb23b61e 135,144-214
+  s_21cd80512020e1::t_c89bc02376f8e7 645-646
+  s_21cd80512020e1::t_be1214c112b204 619-622
+  s_21cd80512020e1::t_427fe7560198cc 560
+  s_21cd80512020e1::t_88d43139ef3257 561,569-570
+  s_21cd80512020e1::t_05d46d5a3ebb8c 51-55,57
+  s_21cd80512020e1::t_d56ca384e1c519 647-654
+  s_21cd80512020e1::t_1616b46b11061f 632
+  s_21cd80512020e1::t_0b5503b31cf099 830-834
+  s_99d37f4fdc733e::t_40f97daa397ffa 215
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "354e1f1e54bb85f0db41ed4c102d677aba35ebf4",
+  "prompts": {},
+  "sessions": {
+    "s_21cd80512020e1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "723e2811-e43b-4bb2-b1de-85cbe4089fc1",
+        "model": "unknown"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    },
+    "s_99d37f4fdc733e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "33c63dc1-751d-48c7-a9a9-69c3049f47c7",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
