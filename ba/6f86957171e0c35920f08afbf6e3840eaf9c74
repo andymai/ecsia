@@ -1,0 +1,24 @@
+embers/test/codec.test.ts
+  s_229413ab225903::t_02f0db8763f07e 40-44
+embers/src/game/codec.ts
+  s_229413ab225903::t_f0354601a49114 15-16
+  s_229413ab225903::t_17e68daba9ae4b 180-182
+packages/core/src/memory/buffers.ts
+  s_229413ab225903::t_cc3178ed815563 378-381
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "ba6f86957171e0c35920f08afbf6e3840eaf9c74",
+  "prompts": {},
+  "sessions": {
+    "s_229413ab225903": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c436b780-ed79-4a76-ace8-9255d1f9fac8",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
