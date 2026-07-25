@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.30.0](https://github.com/andymai/ecsia/compare/core-v0.29.0...core-v0.30.0) (2026-07-25)
+
+
+### Features
+
+* **demo:** add EMBER WORKS falling-sand showcase + fix O(n²) spawn burst ([#173](https://github.com/andymai/ecsia/issues/173)) ([552acae](https://github.com/andymai/ecsia/commit/552acaef113b31c1955353a4308430c9e0be561a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/schema bumped to 0.30.0
+
 ## [0.29.0](https://github.com/andymai/ecsia/compare/core-v0.28.0...core-v0.29.0) (2026-07-25)
 
 
