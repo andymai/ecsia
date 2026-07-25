@@ -61,6 +61,7 @@ export const FX_NOVA = 3
 export const FX_BOSS_DEATH = 4
 export const FX_GHOST_FADE = 5
 export const FX_BOSS_SPAWN = 6
+export const FX_HIT = 7
 
 export interface FxEvent {
   x: number
@@ -266,6 +267,7 @@ export function makeSystems(defs: SimDefs, ctx: RunCtx): SystemDef[] {
         const wasAlive = m.hp > 0
         m.hp -= dmg
         if (wasAlive && m.hp <= 0) deadEnemies.push({ h, x: ex, y: ey, kind: m.kind })
+        else ctx.fx.push({ x: ex, y: ey, kind: FX_HIT })
         return true
       }
 
@@ -315,6 +317,7 @@ export function makeSystems(defs: SimDefs, ctx: RunCtx): SystemDef[] {
           if (dx * dx + dy * dy <= rr * rr) {
             bossHp -= dmg
             consumed = true
+            ctx.fx.push({ x: bx, y: by, kind: FX_HIT })
             if (bossHp <= 0 && bossActive !== 0) {
               bossActive = 0
               ctx.bossDown = true

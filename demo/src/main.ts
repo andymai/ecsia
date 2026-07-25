@@ -8,18 +8,33 @@ import { read } from '@ecsia/kit'
 import { buildLife } from './sim/world.js'
 import type { Life } from './sim/world.js'
 import { DT, LOOP_TICKS, MAX_LIVES, TICKS_PER_SECOND } from './sim/shared.js'
+import { BOSS_HP } from './sim/shared.js'
 import {
   FX_BOSS_DEATH,
   FX_BOSS_SPAWN,
   FX_ENEMY_DEATH,
   FX_GHOST_FADE,
+  FX_HIT,
   FX_NOVA,
   FX_PICKUP,
   FX_PLAYER_DEATH,
 } from './sim/systems.js'
 import { decodeRun, encodeRun } from './game/codec.js'
 import type { RunRecord } from './game/codec.js'
-import { Renderer, SPR_BOSS, SPR_BRUTE, SPR_BULLET, SPR_DOT, SPR_GEM, SPR_MOTH, SPR_PLAYER, SPR_SWARM } from './render/gl.js'
+import {
+  Renderer,
+  SPR_BOSS,
+  SPR_BRUTE,
+  SPR_BULLET,
+  SPR_DOT,
+  SPR_FLAME,
+  SPR_GEM,
+  SPR_MOTH,
+  SPR_MOTH2,
+  SPR_PLAYER,
+  SPR_RING,
+  SPR_SWARM,
+} from './render/gl.js'
 
 // ---------------------------------------------------------------------------------------------
 // Cross-origin isolation bootstrap (GitHub Pages can't send COOP/COEP; the service worker can).
@@ -46,9 +61,20 @@ addEventListener('keydown', (e) => {
   held.add(e.key.toLowerCase())
 })
 addEventListener('keyup', (e) => held.delete(e.key.toLowerCase()))
-addEventListener('blur', () => held.clear())
+addEventListener('blur', () => {
+  held.clear()
+  // A drag never gets its pointerup if focus is lost mid-press (app switcher, notification) —
+  // release the joystick too or the ship steers forever.
+  hideStick()
+})
+
+// Set by the pointer joystick below; touch/drag input wins over held keys while a drag is active.
+// Both feed the SAME 8-way dir stream the sim records, so replays are input-source-agnostic.
+let touchActive = false
+let touchDir = 0
 
 function sampleDir(): number {
+  if (touchActive) return touchDir
   const left = held.has('a') || held.has('arrowleft')
   const right = held.has('d') || held.has('arrowright')
   const up = held.has('w') || held.has('arrowup')
@@ -78,6 +104,31 @@ const part = {
   size: new Float32Array(P_MAX),
   head: 0,
 }
+// Screen flashes (additive glows that decay) — novas, deaths, pickups.
+interface Flash {
+  x: number
+  y: number
+  ttl: number
+  max: number
+  size: number
+  r: number
+  g: number
+  b: number
+}
+const flashes: Flash[] = []
+function flash(x: number, y: number, size: number, ttl: number, r: number, g: number, b: number): void {
+  if (flashes.length < 160) flashes.push({ x, y, ttl, max: ttl, size, r, g, b })
+}
+
+// Short motion trails for player ships (render-only ring buffers, reset per life).
+const TRAIL_N = 10
+const trailX = new Float32Array(8 * TRAIL_N).fill(-999)
+const trailY = new Float32Array(8 * TRAIL_N)
+const trailHead = new Int32Array(8)
+const prevPX = new Float32Array(8).fill(-999)
+const prevPY = new Float32Array(8)
+let trailLife: Life | null = null
+
 function burst(x: number, y: number, n: number, speed: number, color: [number, number, number], life = 0.6, size = 0.22): void {
   for (let i = 0; i < n; i++) {
     const k = part.head++ % P_MAX
@@ -112,7 +163,7 @@ const GHOST_COLORS: [number, number, number][] = [
 const KIND_COLOR: [number, number, number][] = [
   [1, 0.38, 0.5],
   [1, 0.72, 0.32],
-  [0.72, 0.32, 1],
+  [0.6, 0.3, 0.92],
 ]
 const KIND_SPRITE = [SPR_SWARM, SPR_MOTH, SPR_BRUTE]
 const KIND_SIZE = [0.42, 0.48, 0.75]
@@ -126,6 +177,7 @@ const GEM_COLOR: [number, number, number][] = [
 // DOM
 // ---------------------------------------------------------------------------------------------
 const $ = (id: string): HTMLElement => document.getElementById(id)!
+const frameEl = $('frame')
 const canvas = $('screen') as HTMLCanvasElement
 const overlay = $('overlay')
 const hudPerf = $('hud-perf')
@@ -133,6 +185,98 @@ const hudRight = $('hud-right')
 const hudBottom = $('hud-bottom')
 const hudScore = $('hud-score')
 const glitchEl = $('glitch')
+
+// ---------------------------------------------------------------------------------------------
+// Pointer joystick — the touch control surface (also works as mouse-drag on desktop). A drag
+// anywhere on the canvas plants a virtual stick at the touch point; the drag vector maps to the
+// same 8-way dir the keyboard produces.
+// ---------------------------------------------------------------------------------------------
+const stickEl = $('stick')
+const stickNub = $('stick-nub')
+const coarsePointer = matchMedia('(pointer: coarse)').matches
+const portraitQuery = matchMedia('(orientation: portrait)')
+const STICK_DEAD = 12
+const STICK_RANGE = 34
+
+let stickPointer = -1
+let stickOx = 0
+let stickOy = 0
+
+function dirFromVector(dx: number, dy: number): number {
+  if (dx * dx + dy * dy < STICK_DEAD * STICK_DEAD) return 0
+  // Screen y grows downward; game dirs count 1=E counter-clockwise, so negate dy. Octant rounding
+  // gives each of the 8 directions a 45° wedge.
+  const oct = Math.round(Math.atan2(-dy, dx) / (Math.PI / 4))
+  return ((oct + 8) % 8) + 1
+}
+
+function hideStick(): void {
+  stickPointer = -1
+  touchActive = false
+  touchDir = 0
+  stickEl.style.display = 'none'
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (mode !== 'playing' || (e.pointerType === 'mouse' && e.button !== 0)) return
+  e.preventDefault()
+  stickPointer = e.pointerId
+  stickOx = e.clientX
+  stickOy = e.clientY
+  touchActive = true
+  touchDir = 0
+  canvas.setPointerCapture(e.pointerId)
+  const rect = frameEl.getBoundingClientRect()
+  stickEl.style.display = 'block'
+  stickEl.style.left = `${e.clientX - rect.left}px`
+  stickEl.style.top = `${e.clientY - rect.top}px`
+  stickNub.style.transform = 'translate(0px, 0px)'
+})
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== stickPointer) return
+  const dx = e.clientX - stickOx
+  const dy = e.clientY - stickOy
+  touchDir = dirFromVector(dx, dy)
+  const len = Math.sqrt(dx * dx + dy * dy) || 1
+  const c = Math.min(len, STICK_RANGE) / len
+  stickNub.style.transform = `translate(${dx * c}px, ${dy * c}px)`
+})
+const endStick = (e: PointerEvent): void => {
+  if (e.pointerId === stickPointer) hideStick()
+}
+canvas.addEventListener('pointerup', endStick)
+canvas.addEventListener('pointercancel', endStick)
+
+async function toggleFullscreen(): Promise<void> {
+  if (document.fullscreenElement !== null) {
+    await document.exitFullscreen().catch(() => {})
+    return
+  }
+  await frameEl.requestFullscreen().catch(() => {})
+  // Best-effort: phones that support it get the arena in landscape.
+  const so = screen.orientation as unknown as { lock?: (o: string) => Promise<void> }
+  await so.lock?.('landscape')?.catch(() => {})
+}
+
+// ---------------------------------------------------------------------------------------------
+// Corner HUD controls — built ONCE with persistent listeners. hudTick only updates labels: a
+// per-frame innerHTML rebuild destroys the element mid-press, so taps spanning an animation
+// frame (all touch taps) would drop their click.
+// ---------------------------------------------------------------------------------------------
+const hudBadge = document.createElement('span')
+const hudThrBtn = document.createElement('button')
+const hudFsBtn = document.createElement('button')
+const hudPoolLbl = document.createElement('span')
+hudPoolLbl.style.opacity = '.55'
+hudPoolLbl.textContent = ' ecsia worker pool'
+hudFsBtn.textContent = 'FS'
+hudFsBtn.title = 'fullscreen'
+hudFsBtn.onclick = () => void toggleFullscreen()
+hudThrBtn.onclick = () => {
+  settings.threaded = !settings.threaded
+  localStorage.setItem('echo-threaded', settings.threaded ? '1' : '0')
+}
+hudRight.append(hudBadge, document.createElement('br'), hudThrBtn, hudFsBtn, hudPoolLbl)
 
 const SPARK_W = 96
 const SPARK_H = 22
@@ -336,19 +480,31 @@ function afterTick(): void {
   const l = life
   if (l === null) return
   for (const fx of l.ctx.fx) {
-    if (fx.kind === FX_ENEMY_DEATH) burst(fx.x, fx.y, 5, 55, [1, 0.55, 0.45], 0.45)
-    else if (fx.kind === FX_PLAYER_DEATH) {
+    if (fx.kind === FX_ENEMY_DEATH) {
+      burst(fx.x, fx.y, 5, 55, [1, 0.55, 0.45], 0.45)
+      flash(fx.x, fx.y, 0.9, 0.14, 0.7, 0.32, 0.2)
+    } else if (fx.kind === FX_HIT) {
+      burst(fx.x, fx.y, 2, 75, [1, 0.95, 0.7], 0.22, 0.16)
+    } else if (fx.kind === FX_PLAYER_DEATH) {
       burst(fx.x, fx.y, 90, 150, LIVE_COLOR, 1.1, 0.3)
+      flash(fx.x, fx.y, 7, 0.5, 0.45, 0.92, 1)
       shakeMag = Math.max(shakeMag, 6)
     } else if (fx.kind === FX_GHOST_FADE) burst(fx.x, fx.y, 26, 60, [0.8, 0.8, 1], 0.8)
-    else if (fx.kind === FX_PICKUP) burst(fx.x, fx.y, 10, 45, [0.95, 1, 0.7], 0.5)
-    else if (fx.kind === FX_NOVA) {
+    else if (fx.kind === FX_PICKUP) {
+      burst(fx.x, fx.y, 10, 45, [0.95, 1, 0.7], 0.5)
+      flash(fx.x, fx.y, 2.2, 0.25, 0.6, 1, 0.7)
+    } else if (fx.kind === FX_NOVA) {
       burst(fx.x, fx.y, 140, 220, [0.55, 0.9, 1], 0.7)
+      flash(fx.x, fx.y, 9, 0.4, 0.55, 0.9, 1)
       shakeMag = Math.max(shakeMag, 4)
     } else if (fx.kind === FX_BOSS_DEATH) {
       burst(fx.x, fx.y, 220, 190, [1, 0.5, 0.4], 1.4, 0.34)
+      flash(fx.x, fx.y, 13, 0.7, 1, 0.4, 0.3)
       shakeMag = Math.max(shakeMag, 8)
-    } else if (fx.kind === FX_BOSS_SPAWN) shakeMag = Math.max(shakeMag, 5)
+    } else if (fx.kind === FX_BOSS_SPAWN) {
+      flash(fx.x, fx.y, 9, 0.6, 1, 0.35, 0.3)
+      shakeMag = Math.max(shakeMag, 5)
+    }
   }
   l.ctx.fx.length = 0
 
@@ -383,6 +539,8 @@ function fillScene(): void {
     renderer.sprite(g.x, g.y, SPR_GEM, 0.4, c[0], c[1], c[2], 1)
   }
 
+  const tick = l.tick()
+
   for (let c = 0; c < defs.EPos.length; c++) {
     const q = world.query(read(defs.EPos[c]!))
     q.eachChunk((chunk) => {
@@ -390,10 +548,20 @@ function fillScene(): void {
       const ys = chunk.column(defs.EPos[c]!, 'y') as Float32Array
       const kinds = chunk.column(defs.EMeta, 'kind') as Int32Array
       const n = chunk.count
+      const flap = (tick >> 3) & 1
       for (let r = 0; r < n; r++) {
         const kind = kinds[r]!
         const col = KIND_COLOR[kind]!
-        renderer.sprite(xs[r]!, ys[r]!, KIND_SPRITE[kind]!, KIND_SIZE[kind]!, col[0], col[1], col[2], 1)
+        let sprite = KIND_SPRITE[kind]!
+        let size = KIND_SIZE[kind]!
+        if (kind === 1) {
+          // Moths flap: alternate wing frames, staggered by row so the swarm shimmers.
+          sprite = (flap + (r & 1)) & 1 ? SPR_MOTH2 : SPR_MOTH
+        } else if (kind === 0) {
+          // Swarmers pulse subtly.
+          size += 0.045 * Math.sin(tick * 0.35 + r * 1.7)
+        }
+        renderer.sprite(xs[r]!, ys[r]!, sprite, size, col[0], col[1], col[2], 1)
       }
     })
   }
@@ -402,17 +570,63 @@ function fillScene(): void {
   bq.eachChunk((chunk) => {
     const xs = chunk.column(defs.Bullet, 'x') as Float32Array
     const ys = chunk.column(defs.Bullet, 'y') as Float32Array
+    const vxs = chunk.column(defs.Bullet, 'vx') as Float32Array
+    const vys = chunk.column(defs.Bullet, 'vy') as Float32Array
     const n = chunk.count
-    for (let r = 0; r < n; r++) renderer.sprite(xs[r]!, ys[r]!, SPR_BULLET, 0.3, 0.8, 1, 0.92, 1)
+    for (let r = 0; r < n; r++) {
+      const x = xs[r]!
+      const y = ys[r]!
+      // Tracer: two fading ticks trailing opposite the velocity — bolts read as motion.
+      renderer.sprite(x - vxs[r]! * 0.012, y - vys[r]! * 0.012, SPR_DOT, 0.2, 0.5, 0.9, 0.7, 0.35)
+      renderer.sprite(x - vxs[r]! * 0.006, y - vys[r]! * 0.006, SPR_DOT, 0.24, 0.7, 1, 0.85, 0.6)
+      renderer.sprite(x, y, SPR_BULLET, 0.32, 0.85, 1, 0.95, 1)
+    }
   })
 
   const liveSlot = l.ctx.liveSlot
+  if (trailLife !== l) {
+    trailX.fill(-999)
+    prevPX.fill(-999)
+    trailHead.fill(0)
+    trailLife = l
+  }
   const playerGlows: { x: number; y: number; c: [number, number, number]; live: boolean }[] = []
   for (const e of world.query(read(defs.Player)) as Iterable<{ player: { x: number; y: number; hp: number; slot: number } }>) {
     const p = e.player
     if (p.hp <= 0) continue
     const isLive = p.slot === liveSlot
     const c = isLive ? LIVE_COLOR : GHOST_COLORS[p.slot % GHOST_COLORS.length]!
+    const s = p.slot & 7
+
+    // Motion trail (drawn under the ship — earlier sprites render first).
+    for (let k = 1; k < TRAIL_N; k++) {
+      const i = s * TRAIL_N + ((trailHead[s]! + k) % TRAIL_N)
+      const tx = trailX[i]!
+      if (tx < -900) continue
+      const a = (k / TRAIL_N) * (isLive ? 0.34 : 0.2)
+      renderer.sprite(tx, trailY[i]!, SPR_DOT, 0.16, c[0], c[1], c[2], a)
+    }
+    trailHead[s] = (trailHead[s]! + 1) % TRAIL_N
+    trailX[s * TRAIL_N + trailHead[s]!] = p.x
+    trailY[s * TRAIL_N + trailHead[s]!] = p.y
+
+    // Thruster flame opposite the frame-to-frame motion, flickering.
+    const pdx = prevPX[s]! > -900 ? p.x - prevPX[s]! : 0
+    const pdy = prevPX[s]! > -900 ? p.y - prevPY[s]! : 0
+    const speed2 = pdx * pdx + pdy * pdy
+    if (speed2 > 0.01) {
+      const inv = 1 / Math.sqrt(speed2)
+      const fa = 0.6 + Math.random() * 0.4
+      renderer.sprite(p.x - pdx * inv * 5.5, p.y - pdy * inv * 5.5, SPR_FLAME, 0.4 + Math.random() * 0.1, 1, 0.68, 0.28, fa * (isLive ? 1 : 0.5))
+    }
+    prevPX[s] = p.x
+    prevPY[s] = p.y
+
+    if (isLive) {
+      // The anchor ring: keeps YOUR ship findable inside the melee, breathing gently.
+      const ra = 0.5 + 0.16 * Math.sin(tick * 0.12)
+      renderer.sprite(p.x, p.y, SPR_RING, 0.85 + 0.05 * Math.sin(tick * 0.12), c[0], c[1], c[2], ra)
+    }
     renderer.sprite(p.x, p.y, SPR_PLAYER, 0.55, c[0], c[1], c[2], isLive ? 1 : 0.62)
     playerGlows.push({ x: p.x, y: p.y, c, live: isLive })
   }
@@ -423,7 +637,17 @@ function fillScene(): void {
     break
   }
   if (bossInfo !== null && bossInfo.active !== 0) {
-    renderer.sprite(bossInfo.x, bossInfo.y, SPR_BOSS, 1.1, 1, 0.42, 0.42, 1)
+    const throb = 1.05 + 0.07 * Math.sin(tick * 0.2)
+    renderer.sprite(bossInfo.x, bossInfo.y, SPR_BOSS, throb, 1, 0.42, 0.42, 1)
+    // HP pips above the reaper.
+    const maxHp = BOSS_HP * (1 + 0.3 * l.ctx.echoes)
+    const frac = Math.max(0, Math.min(1, bossInfo.hp / maxHp))
+    const pips = 12
+    const lit = Math.ceil(frac * pips)
+    for (let i = 0; i < pips; i++) {
+      const on = i < lit
+      renderer.sprite(bossInfo.x - 13 + i * 2.3, bossInfo.y - 15, SPR_DOT, 0.13, on ? 1 : 0.25, on ? 0.35 : 0.1, on ? 0.3 : 0.1, on ? 1 : 0.6)
+    }
   }
 
   // Particles (solid pass).
@@ -435,9 +659,13 @@ function fillScene(): void {
 
   // Additive glow pass — last.
   for (const g of playerGlows) {
-    renderer.glow(g.x, g.y, g.live ? 2.6 : 1.8, g.c[0] * 0.5, g.c[1] * 0.5, g.c[2] * 0.5, g.live ? 0.5 : 0.3)
+    renderer.glow(g.x, g.y, g.live ? 3.1 : 1.8, g.c[0] * 0.55, g.c[1] * 0.55, g.c[2] * 0.55, g.live ? 0.65 : 0.3)
   }
   if (bossInfo !== null && bossInfo.active !== 0) renderer.glow(bossInfo.x, bossInfo.y, 4.5, 0.5, 0.12, 0.12, 0.6)
+  for (const f of flashes) {
+    const a = f.ttl / f.max
+    renderer.glow(f.x, f.y, f.size * (1.4 - 0.4 * a), f.r * a, f.g * a, f.b * a, a * 0.85)
+  }
 }
 
 function stepParticles(dt: number): void {
@@ -448,6 +676,10 @@ function stepParticles(dt: number): void {
     part.y[k]! += part.vy[k]! * dt
     part.vx[k]! *= 0.94
     part.vy[k]! *= 0.94
+  }
+  for (let i = flashes.length - 1; i >= 0; i--) {
+    flashes[i]!.ttl -= dt
+    if (flashes[i]!.ttl <= 0) flashes.splice(i, 1)
   }
 }
 
@@ -472,20 +704,16 @@ function hudTick(frameMs: number): void {
 
   const iso = isolationOk()
   const thr = l !== null ? l.threaded : settings.threaded && iso
-  const badge = thr
-    ? `<span class="badge">threaded · ${workerCount} workers · SAB ✓</span>`
+  hudBadge.className = thr ? 'badge' : 'warn'
+  hudBadge.textContent = thr
+    ? `threaded · ${workerCount} workers · SAB ✓`
     : iso
-      ? `<span class="warn">single-thread (toggle off)</span>`
-      : `<span class="warn">single-thread — no cross-origin isolation</span>`
-  const toggle = `<button id="btn-thr" class="${settings.threaded ? 'on' : ''}">${settings.threaded ? 'THREADED' : 'SERIAL'}</button>`
-  hudRight.innerHTML = `${badge}<br/>${iso ? toggle : ''}<span style="opacity:.55"> ecsia worker pool</span>`
-  const btn = document.getElementById('btn-thr')
-  if (btn !== null) {
-    btn.onclick = () => {
-      settings.threaded = !settings.threaded
-      localStorage.setItem('echo-threaded', settings.threaded ? '1' : '0')
-    }
-  }
+      ? 'single-thread (toggle off)'
+      : 'single-thread — no cross-origin isolation'
+  hudThrBtn.style.display = iso ? '' : 'none'
+  hudThrBtn.className = settings.threaded ? 'on' : ''
+  hudThrBtn.textContent = settings.threaded ? 'THREADED' : 'SERIAL'
+  hudFsBtn.style.display = document.fullscreenEnabled ? '' : 'none'
 
   if (l !== null && (mode === 'playing' || mode === 'replay')) {
     const t = l.tick()
@@ -525,17 +753,31 @@ function syncOverlay(): void {
     return
   }
   overlay.classList.remove('hidden')
+  hideStick()
   if (mode === 'title') {
+    const controls = coarsePointer
+      ? 'drag anywhere to steer · you fire automatically · gems heal, power, or detonate'
+      : 'WASD / arrows — or drag with the mouse · you fire automatically · gems heal, power, or detonate'
+    const rotateHint =
+      coarsePointer && portraitQuery.matches
+        ? `<p class="warn">tip: rotate to landscape — or go fullscreen — for the full arena</p>`
+        : ''
+    const fsButton = document.fullscreenEnabled && coarsePointer ? `<button id="btn-fs-title">FULLSCREEN</button>` : ''
+    const thrButton = iso
+      ? `<span>engine</span><button id="btn-thr-title" class="${settings.threaded ? 'on' : ''}">${settings.threaded ? 'THREADED' : 'SERIAL'}</button>`
+      : ''
     overlay.innerHTML = `
       <h1>ECHO SURVIVORS</h1>
       <p>Survive the 90-second loop. When you die, time rewinds — and your past self
       fights beside you, replaying your exact run. Eight lives. One timeline. The horde grows.</p>
-      <p class="keys">WASD / arrows to move · you fire automatically · gems heal, power, or detonate</p>
+      <p class="keys">${controls}</p>
+      ${rotateHint}
       <div class="row">
         <span>overdrive</span>
         ${[1, 2, 4].map((o) => `<button data-od="${o}" class="${settings.overdrive === o ? 'on' : ''}">${o}×</button>`).join('')}
+        ${thrButton}
       </div>
-      <div class="row"><button id="btn-start">▶ ENTER THE LOOP</button></div>
+      <div class="row"><button id="btn-start">▶ ENTER THE LOOP</button>${fsButton}</div>
       <p style="opacity:.6">every enemy is a real entity in <a href="https://github.com/andymai/ecsia" target="_blank" rel="noopener">ecsia</a>'s
       deterministic ECS — ${iso ? `steering runs on a ${workerCount}-worker SharedArrayBuffer pool` : 'running single-threaded here (no cross-origin isolation)'} ·
       the hash in the corner is the whole world state, and replays reproduce it byte for byte</p>`
@@ -546,6 +788,16 @@ function syncOverlay(): void {
       }
     })
     ;(document.getElementById('btn-start') as HTMLButtonElement).onclick = () => void startRun()
+    const fsTitle = document.getElementById('btn-fs-title')
+    if (fsTitle !== null) (fsTitle as HTMLButtonElement).onclick = () => void toggleFullscreen()
+    const thrTitle = document.getElementById('btn-thr-title')
+    if (thrTitle !== null) {
+      ;(thrTitle as HTMLButtonElement).onclick = () => {
+        settings.threaded = !settings.threaded
+        localStorage.setItem('echo-threaded', settings.threaded ? '1' : '0')
+        syncOverlay()
+      }
+    }
   } else if (mode === 'fracture') {
     overlay.innerHTML = `
       <h2 class="bad">TIME FRACTURE</h2>
@@ -720,5 +972,10 @@ async function boot(): Promise<void> {
   syncOverlay()
   requestAnimationFrame(frame)
 }
+
+// Re-render the title's rotate hint when the device flips orientation.
+portraitQuery.addEventListener('change', () => {
+  if (mode === 'title') syncOverlay()
+})
 
 void boot()

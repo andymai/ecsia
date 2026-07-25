@@ -17,6 +17,9 @@ export const SPR_GEM = 5
 export const SPR_BOSS = 6
 export const SPR_DOT = 7
 export const SPR_GLOW = 8
+export const SPR_MOTH2 = 9
+export const SPR_FLAME = 10
+export const SPR_RING = 11
 
 const ATLAS = 128
 const CELL = 16 // atlas grid cell (pixels); sprite quads sample one cell
@@ -35,59 +38,95 @@ function drawAtlas(): HTMLCanvasElement {
     g.fillStyle = `rgba(255,255,255,${v})`
     g.fillRect(cx + x, cy + y, size, size)
   }
-  // Sprites draw around cell center (8,8), grayscale; instances tint them.
-  // 0: player ship — a chunky arrow.
-  const ship = [
-    '...X...',
-    '..XXX..',
-    '..XXX..',
-    '.XXXXX.',
-    'XXXXXXX',
-    'X.XXX.X',
-    '..X.X..',
-  ]
-  ship.forEach((row, y) => row.split('').forEach((c, x) => c === 'X' && px(SPR_PLAYER, x + 4, y + 4, 1)))
-  // 1: swarm — a 5px diamond.
-  const swarm = ['..X..', '.XXX.', 'XXXXX', '.XXX.', '..X..']
-  swarm.forEach((row, y) => row.split('').forEach((c, x) => c === 'X' && px(SPR_SWARM, x + 5, y + 5, 1)))
-  // 2: moth — a fluttery X.
-  const moth = ['X...X', 'XX.XX', '.XXX.', 'XX.XX', 'X...X']
-  moth.forEach((row, y) => row.split('').forEach((c, x) => c === 'X' && px(SPR_MOTH, x + 5, y + 5, 1)))
-  // 3: brute — a heavy block with eyes (eyes darker).
-  for (let y = 0; y < 9; y++)
-    for (let x = 0; x < 9; x++) {
-      const edge = x === 0 || x === 8 || y === 0 || y === 8
-      if (!(edge && (x + y) % 2 === 1)) px(SPR_BRUTE, x + 3, y + 3, 1)
-    }
-  px(SPR_BRUTE, 5, 6, 0.15)
-  px(SPR_BRUTE, 9, 6, 0.15)
-  // 4: bullet — a bright 2×3 streak.
-  px(SPR_BULLET, 7, 6, 1)
-  px(SPR_BULLET, 8, 6, 1)
-  px(SPR_BULLET, 7, 7, 1)
-  px(SPR_BULLET, 8, 7, 1)
-  px(SPR_BULLET, 7, 8, 0.6)
-  px(SPR_BULLET, 8, 8, 0.6)
-  // 5: gem — a 4×4 rotated square sparkle.
-  const gem = ['.XX.', 'XXXX', 'XXXX', '.XX.']
-  gem.forEach((row, y) => row.split('').forEach((c, x) => c === 'X' && px(SPR_GEM, x + 6, y + 6, 1)))
-  px(SPR_GEM, 6, 6, 0.4)
-  // 6: boss — a 14×14 skull.
-  const boss = [
-    '..XXXXXXXXXX..',
-    '.XXXXXXXXXXXX.',
+  // Sprites draw around cell center (8,8) in grayscale VALUE layers (instances tint them):
+  // 'X' = 1.0 bright body, 'o' = 0.6 mid, '.' = 0.28 dark shade, ' ' = empty.
+  const art = (cell: number, rows: string[], ox: number, oy: number): void => {
+    rows.forEach((row, y) =>
+      row.split('').forEach((c, x) => {
+        if (c === 'X') px(cell, x + ox, y + oy, 1)
+        else if (c === 'o') px(cell, x + ox, y + oy, 0.6)
+        else if (c === '.') px(cell, x + ox, y + oy, 0.28)
+      }),
+    )
+  }
+  // 0: player ship — a finned interceptor with a bright cockpit.
+  art(SPR_PLAYER, [
+    '   oXo   ',
+    '   XXX   ',
+    '  .XXX.  ',
+    '  oXXXo  ',
+    ' oXXXXXo ',
+    'oXX.XXXo ',
+    'XXo XXXoX',
+    'X. oXo .X',
+    '    o    ',
+  ], 3, 3)
+  // 1: swarm — a spiky mite: bright core, dark spikes.
+  art(SPR_SWARM, [
+    '.  X  .',
+    ' .oXo. ',
+    'XoXXXoX',
+    ' .oXo. ',
+    '.  X  .',
+  ], 4, 5)
+  // 2/9: moth — two wing frames (spread / folded) for the flap cycle.
+  art(SPR_MOTH, [
+    'X.   .X',
+    'XXo oXX',
+    '.XXoXX.',
+    ' oXXXo ',
+    '.XXoXX.',
+    'XXo oXX',
+    'X.   .X',
+  ], 4, 4)
+  art(SPR_MOTH2, [
+    '       ',
+    'X.   .X',
+    'XXX.XXX',
+    ' oXXXo ',
+    'XXX.XXX',
+    'X.   .X',
+    '       ',
+  ], 4, 4)
+  // 3: brute — armored slab, glowing eyes, dark plating seams.
+  art(SPR_BRUTE, [
+    ' .XXXXXXX. ',
+    '.XXXXXXXXX.',
+    'XX.XXXXX.XX',
+    'XXoXXXXXoXX',
+    'XX.XXXXX.XX',
+    'XXXXXXXXXXX',
+    '.XX.XXX.XX.',
+    '.XXXXXXXXX.',
+    ' .X.X.X.X. ',
+  ], 2, 3)
+  // 4: bullet — a bright bolt with a hot head and fading tail.
+  art(SPR_BULLET, ['oXo', 'XXX', 'oXo', '.o.'], 6, 5)
+  // 5: gem — faceted diamond with a specular corner.
+  art(SPR_GEM, [
+    ' oXo ',
+    'oXXXo',
+    'XXoXX',
+    'oXXXo',
+    ' .o. ',
+  ], 5, 5)
+  px(SPR_GEM, 6, 6, 1)
+  // 6: boss — a horned reaper skull.
+  art(SPR_BOSS, [
+    'X.          .X',
+    'XX. .XXXX. .XX',
     'XXXXXXXXXXXXXX',
+    '.XXXXXXXXXXXX.',
     'XXXXXXXXXXXXXX',
     'XX..XXXXXX..XX',
     'XX..XXXXXX..XX',
-    'XXXXXXXXXXXXXX',
+    'XXXXXX..XXXXXX',
     'XXXXXXXXXXXXXX',
     '.XXXXXXXXXXXX.',
-    '.XXX.XX.XX.XX.',
-    '.XX..XX.XX.XX.',
-    '..X..X...X..X.',
-  ]
-  boss.forEach((row, y) => row.split('').forEach((c, x) => c === 'X' && px(SPR_BOSS, x + 1, y + 2, 1)))
+    '.XX.XX.XX.XX. ',
+    ' oX.XX.XX.Xo  ',
+    '  o .o .o o   ',
+  ], 1, 1)
   // 7: dot particle.
   px(SPR_DOT, 7, 7, 1)
   px(SPR_DOT, 8, 7, 1)
@@ -102,6 +141,50 @@ function drawAtlas(): HTMLCanvasElement {
       const v = Math.max(0, 1 - d)
       if (v > 0.02) px(SPR_GLOW, x, y, v * v)
     }
+  // 10: thruster flame — a small teardrop, drawn additive behind ships.
+  art(SPR_FLAME, ['oXo', 'XXX', 'oXo', '.X.', ' o '], 6, 5)
+  // 11: a crisp circle outline — the live player's anchor ring in the melee.
+  for (let y = 0; y < CELL; y++)
+    for (let x = 0; x < CELL; x++) {
+      const d = Math.sqrt((x - 7.5) * (x - 7.5) + (y - 7.5) * (y - 7.5))
+      if (d >= 6.1 && d <= 7.2) px(SPR_RING, x, y, d <= 6.7 ? 1 : 0.45)
+    }
+  return cv
+}
+
+/** Procedural arena backdrop: soft radial haze, a fine grid, drifting dust, and bounds. */
+function drawBackground(w: number, h: number): HTMLCanvasElement {
+  const cv = document.createElement('canvas')
+  cv.width = w
+  cv.height = h
+  const g = cv.getContext('2d')!
+  const grad = g.createRadialGradient(w / 2, h / 2, 20, w / 2, h / 2, w * 0.62)
+  grad.addColorStop(0, '#0a1018')
+  grad.addColorStop(0.55, '#060a10')
+  grad.addColorStop(1, '#03050a')
+  g.fillStyle = grad
+  g.fillRect(0, 0, w, h)
+  // Fine grid with brighter majors — the CRT tabletop.
+  for (let x = 0; x <= w; x += 24) {
+    g.fillStyle = x % 96 === 0 ? 'rgba(110,200,255,0.055)' : 'rgba(110,200,255,0.028)'
+    g.fillRect(x, 0, 1, h)
+  }
+  for (let y = 0; y <= h; y += 24) {
+    g.fillStyle = y % 96 === 0 ? 'rgba(110,200,255,0.055)' : 'rgba(110,200,255,0.028)'
+    g.fillRect(0, y, w, 1)
+  }
+  // Dust motes (render-only randomness — never touches the sim).
+  for (let i = 0; i < 110; i++) {
+    const a = 0.04 + Math.random() * 0.1
+    g.fillStyle = `rgba(${150 + Math.random() * 60}, ${200 + Math.random() * 40}, 255, ${a})`
+    g.fillRect(Math.floor(Math.random() * w), Math.floor(Math.random() * h), 1, 1)
+  }
+  // Arena bounds — a phosphor edge so the walls read.
+  g.strokeStyle = 'rgba(120,255,190,0.22)'
+  g.lineWidth = 1
+  g.strokeRect(1.5, 1.5, w - 3, h - 3)
+  g.strokeStyle = 'rgba(120,255,190,0.07)'
+  g.strokeRect(3.5, 3.5, w - 7, h - 7)
   return cv
 }
 
@@ -144,6 +227,13 @@ layout(location=0) in vec2 p;
 out vec2 uv;
 void main() { uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }`
 
+const BG_FS = `#version 300 es
+precision mediump float;
+in vec2 uv;
+uniform sampler2D bg;
+out vec4 color;
+void main() { color = texture(bg, vec2(uv.x, 1.0 - uv.y)); }`
+
 const POST_FS = `#version 300 es
 precision highp float;
 in vec2 uv;
@@ -170,9 +260,12 @@ void main() {
   float g = texture(scene, buv).g;
   float b = texture(scene, buv - vec2(ca, 0.0)).b;
   vec3 col = vec3(r, g, b);
-  // Bloom from mip.
+  // Thresholded bloom from the mip chain: only genuinely bright pixels halo, so the backdrop
+  // stays inky while ships, bolts, and novas burn. Soft-clipped so stacked kills glow, not nuke.
   vec3 blur = textureLod(scene, buv, 2.5).rgb;
-  col += blur * 0.34;
+  vec3 wide = textureLod(scene, buv, 4.0).rgb;
+  vec3 bloom = max(blur - 0.26, 0.0) * 0.75 + max(wide - 0.3, 0.0) * 0.35;
+  col += bloom / (1.0 + bloom);
   // Scanlines at internal-res lines.
   float line = sin(buv.y * ${ARENA_H}.0 * 3.14159265 * 2.0);
   col *= 0.82 + 0.18 * line * line;
@@ -219,6 +312,8 @@ export class Renderer {
   readonly #fbo: WebGLFramebuffer
   readonly #fboTex: WebGLTexture
   readonly #atlasTex: WebGLTexture
+  readonly #bgTex: WebGLTexture
+  readonly #bgProg: WebGLProgram
   #count = 0
   #glowStart = -1
   #uViewport: WebGLUniformLocation
@@ -233,6 +328,7 @@ export class Renderer {
 
     this.#scene = compile(gl, SCENE_VS, SCENE_FS)
     this.#post = compile(gl, POST_VS, POST_FS)
+    this.#bgProg = compile(gl, POST_VS, BG_FS)
     this.#uViewport = gl.getUniformLocation(this.#scene, 'viewport')!
     this.#uShake = gl.getUniformLocation(this.#scene, 'shake')!
     this.#uTime = gl.getUniformLocation(this.#post, 'time')!
@@ -243,6 +339,15 @@ export class Renderer {
     this.#atlasTex = atlasTex
     gl.bindTexture(gl.TEXTURE_2D, atlasTex)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, drawAtlas())
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
+    // Arena backdrop texture (drawn once, blitted under the instances every frame).
+    this.#bgTex = gl.createTexture()!
+    gl.bindTexture(gl.TEXTURE_2D, this.#bgTex)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, drawBackground(ARENA_W, ARENA_H))
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
@@ -337,6 +442,14 @@ export class Renderer {
     gl.viewport(0, 0, ARENA_W, ARENA_H)
     gl.clearColor(0.012, 0.016, 0.028, 1)
     gl.clear(gl.COLOR_BUFFER_BIT)
+
+    // Backdrop first — grid, dust, and bounds under everything.
+    gl.useProgram(this.#bgProg)
+    gl.bindTexture(gl.TEXTURE_2D, this.#bgTex)
+    gl.blendFunc(gl.ONE, gl.ZERO)
+    gl.bindVertexArray(this.#postVao)
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+    gl.bindVertexArray(null)
 
     gl.useProgram(this.#scene)
     gl.uniform2f(this.#uViewport, ARENA_W, ARENA_H)
