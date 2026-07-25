@@ -46,7 +46,12 @@ addEventListener('keydown', (e) => {
   held.add(e.key.toLowerCase())
 })
 addEventListener('keyup', (e) => held.delete(e.key.toLowerCase()))
-addEventListener('blur', () => held.clear())
+addEventListener('blur', () => {
+  held.clear()
+  // A drag never gets its pointerup if focus is lost mid-press (app switcher, notification) —
+  // release the joystick too or the ship steers forever.
+  hideStick()
+})
 
 // Set by the pointer joystick below; touch/drag input wins over held keys while a drag is active.
 // Both feed the SAME 8-way dir stream the sim records, so replays are input-source-agnostic.
@@ -212,6 +217,26 @@ async function toggleFullscreen(): Promise<void> {
   const so = screen.orientation as unknown as { lock?: (o: string) => Promise<void> }
   await so.lock?.('landscape')?.catch(() => {})
 }
+
+// ---------------------------------------------------------------------------------------------
+// Corner HUD controls — built ONCE with persistent listeners. hudTick only updates labels: a
+// per-frame innerHTML rebuild destroys the element mid-press, so taps spanning an animation
+// frame (all touch taps) would drop their click.
+// ---------------------------------------------------------------------------------------------
+const hudBadge = document.createElement('span')
+const hudThrBtn = document.createElement('button')
+const hudFsBtn = document.createElement('button')
+const hudPoolLbl = document.createElement('span')
+hudPoolLbl.style.opacity = '.55'
+hudPoolLbl.textContent = ' ecsia worker pool'
+hudFsBtn.textContent = 'FS'
+hudFsBtn.title = 'fullscreen'
+hudFsBtn.onclick = () => void toggleFullscreen()
+hudThrBtn.onclick = () => {
+  settings.threaded = !settings.threaded
+  localStorage.setItem('echo-threaded', settings.threaded ? '1' : '0')
+}
+hudRight.append(hudBadge, document.createElement('br'), hudThrBtn, hudFsBtn, hudPoolLbl)
 
 const SPARK_W = 96
 const SPARK_H = 22
@@ -551,23 +576,16 @@ function hudTick(frameMs: number): void {
 
   const iso = isolationOk()
   const thr = l !== null ? l.threaded : settings.threaded && iso
-  const badge = thr
-    ? `<span class="badge">threaded · ${workerCount} workers · SAB ✓</span>`
+  hudBadge.className = thr ? 'badge' : 'warn'
+  hudBadge.textContent = thr
+    ? `threaded · ${workerCount} workers · SAB ✓`
     : iso
-      ? `<span class="warn">single-thread (toggle off)</span>`
-      : `<span class="warn">single-thread — no cross-origin isolation</span>`
-  const toggle = `<button id="btn-thr" class="${settings.threaded ? 'on' : ''}">${settings.threaded ? 'THREADED' : 'SERIAL'}</button>`
-  const fs = document.fullscreenEnabled ? `<button id="btn-fs" title="fullscreen">FS</button>` : ''
-  hudRight.innerHTML = `${badge}<br/>${iso ? toggle : ''}${fs}<span style="opacity:.55"> ecsia worker pool</span>`
-  const btn = document.getElementById('btn-thr')
-  if (btn !== null) {
-    btn.onclick = () => {
-      settings.threaded = !settings.threaded
-      localStorage.setItem('echo-threaded', settings.threaded ? '1' : '0')
-    }
-  }
-  const fsBtn = document.getElementById('btn-fs')
-  if (fsBtn !== null) fsBtn.onclick = () => void toggleFullscreen()
+      ? 'single-thread (toggle off)'
+      : 'single-thread — no cross-origin isolation'
+  hudThrBtn.style.display = iso ? '' : 'none'
+  hudThrBtn.className = settings.threaded ? 'on' : ''
+  hudThrBtn.textContent = settings.threaded ? 'THREADED' : 'SERIAL'
+  hudFsBtn.style.display = document.fullscreenEnabled ? '' : 'none'
 
   if (l !== null && (mode === 'playing' || mode === 'replay')) {
     const t = l.tick()
