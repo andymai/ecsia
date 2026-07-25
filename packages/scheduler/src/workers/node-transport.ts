@@ -20,11 +20,25 @@ export const nodeWorkerTransport: WorkerTransport = {
     const here = fileURLToPath(import.meta.url)
     const entryUrl = opts.workerEntryUrl ?? here.replace(/node-transport\.(js|ts)$/, 'worker-entry.$1')
     const worker = new NodeWorker(entryUrl, { workerData: boot })
+    const errCbs: ((err: unknown) => void)[] = []
+    let terminated = false
+    worker.on('error', (err) => {
+      for (const cb of errCbs) cb(err)
+    })
+    // An abnormal exit (process.exit in a kernel, OOM kill) fires 'exit' without 'error' — surface
+    // it through the same tap so the pool can fail the wave fence instead of stranding it.
+    worker.on('exit', (code) => {
+      if (terminated || code === 0) return
+      for (const cb of errCbs) cb(new Error(`worker exited unexpectedly with code ${code}`))
+    })
     return {
       postMessage: (msg) => worker.postMessage(msg),
       onMessage: (cb) => worker.on('message', cb),
-      onError: (cb) => worker.on('error', cb),
+      onError: (cb) => {
+        errCbs.push(cb)
+      },
       terminate: async () => {
+        terminated = true
         await worker.terminate()
       },
     }

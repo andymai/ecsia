@@ -26,11 +26,23 @@ function browserishTransport(): WorkerTransport {
     spawn(boot) {
       const worker = new NodeWorker(SHIM_ENTRY)
       worker.postMessage({ kind: 'ecsia:bootstrap', boot })
+      const errCbs: ((err: unknown) => void)[] = []
+      let terminated = false
+      worker.on('error', (err) => {
+        for (const cb of errCbs) cb(err)
+      })
+      worker.on('exit', (code) => {
+        if (terminated || code === 0) return
+        for (const cb of errCbs) cb(new Error(`worker exited unexpectedly with code ${code}`))
+      })
       return {
         postMessage: (msg) => worker.postMessage(msg),
         onMessage: (cb) => worker.on('message', cb),
-        onError: (cb) => worker.on('error', cb),
+        onError: (cb) => {
+          errCbs.push(cb)
+        },
         terminate: async () => {
+          terminated = true
           await worker.terminate()
         },
       }
@@ -119,5 +131,22 @@ describe('browser transport path (waitAsync tier + ecsiaWorker bootstrap) reprod
       { id: 0 as unknown as SystemId, name: 'Regen', matchComponents: [thr.Health], kernel: () => {}, maxSpawnsPerWave: 0 },
     ]
     expect(() => new WorkerPool({ world: thr.world, workers: 1, systems })).toThrow(/kernelModule/)
+  })
+
+  test('a worker crash mid-wave rejects the update (fence raced against failure) and latches the pool broken', async () => {
+    const thr = seedWorld(true, 1, 4)
+    const KrashT = defineSystem({ name: 'Krash', read: [], write: [thr.Health], run() {} })
+    const thrSched = createScheduler(thr.world, [KrashT], { workers: 1 })
+    const systems: PoolSystem[] = [
+      { id: 0 as unknown as SystemId, name: 'Krash', matchComponents: [thr.Health], kernel: () => {}, maxSpawnsPerWave: 0 },
+    ]
+    pool = new WorkerPool({ world: thr.world, workers: 1, systems, transport: browserishTransport(), diagnostic: () => {} })
+    await pool.ready()
+
+    // The Krash kernel process.exit(3)s BEFORE completing the wave: without the failure race this
+    // await would strand forever. It must reject loudly instead.
+    await expect(thrSched.updateThreaded(pool, 1)).rejects.toThrow(/crashed|exited/)
+    // And the pool stays latched broken — further rounds refuse instead of dispatching into a dead pool.
+    await expect(pool.runRound([{ systemId: 0 as unknown as SystemId, workerIndex: 0 }], 1)).rejects.toThrow(/failed|crashed/)
   })
 })

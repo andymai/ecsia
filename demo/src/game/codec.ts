@@ -15,6 +15,8 @@
 //   u32 finalTick
 //   u32 kills
 
+import { LOOP_TICKS, MAX_LIVES } from '../sim/shared.js'
+
 export interface RunRecord {
   seed: number
   overdrive: number
@@ -24,6 +26,12 @@ export interface RunRecord {
   finalTick: number
   kills: number
 }
+
+// Decode-side allocation caps. The payload is attacker-controlled (anyone can craft a #r= URL), so
+// every size that drives an allocation is bounded BEFORE the allocation: a legit run tops out
+// around 130 KB uncompressed (8 lives × 5400 ticks × 3 RLE bytes) and ~200 bytes deflated.
+const MAX_DEFLATED = 64 * 1024
+const MAX_INFLATED = 512 * 1024
 
 function rleEncode(dirs: Uint8Array): Uint8Array {
   const out: number[] = []
@@ -38,9 +46,12 @@ function rleEncode(dirs: Uint8Array): Uint8Array {
   return Uint8Array.from(out)
 }
 
-function rleDecode(bytes: Uint8Array): Uint8Array {
+function rleDecode(bytes: Uint8Array, maxTotal: number): Uint8Array | null {
   let total = 0
-  for (let i = 0; i + 3 <= bytes.length; i += 3) total += bytes[i + 1]! | (bytes[i + 2]! << 8)
+  for (let i = 0; i + 3 <= bytes.length; i += 3) {
+    total += bytes[i + 1]! | (bytes[i + 2]! << 8)
+    if (total > maxTotal) return null
+  }
   const out = new Uint8Array(total)
   let at = 0
   for (let i = 0; i + 3 <= bytes.length; i += 3) {
@@ -52,7 +63,11 @@ function rleDecode(bytes: Uint8Array): Uint8Array {
   return out
 }
 
-async function pipeThrough(bytes: Uint8Array, stream: { readable: ReadableStream; writable: WritableStream }): Promise<Uint8Array> {
+async function pipeThrough(
+  bytes: Uint8Array,
+  stream: { readable: ReadableStream; writable: WritableStream },
+  maxBytes: number,
+): Promise<Uint8Array> {
   const writer = stream.writable.getWriter()
   // Fire-and-forget (awaiting before the read loop can deadlock on backpressure), but swallow the
   // rejections: on malformed input the transform errors, the read side throws for the caller, and
@@ -61,13 +76,17 @@ async function pipeThrough(bytes: Uint8Array, stream: { readable: ReadableStream
   void writer.close().catch(() => {})
   const chunks: Uint8Array[] = []
   const reader = stream.readable.getReader()
+  let total = 0
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
+    total += (value as Uint8Array).length
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {})
+      throw new Error('payload exceeds size cap')
+    }
     chunks.push(value as Uint8Array)
   }
-  let total = 0
-  for (const c of chunks) total += c.length
   const out = new Uint8Array(total)
   let at = 0
   for (const c of chunks) {
@@ -119,14 +138,15 @@ export async function encodeRun(rec: RunRecord): Promise<string> {
   at += 4
   dv.setUint32(at, rec.kills >>> 0, true)
   at += 4
-  const deflated = await pipeThrough(buf, new CompressionStream('deflate-raw'))
+  const deflated = await pipeThrough(buf, new CompressionStream('deflate-raw'), MAX_DEFLATED)
   return toBase64Url(deflated)
 }
 
 export async function decodeRun(payload: string): Promise<RunRecord | null> {
   try {
+    if (payload.length > (MAX_DEFLATED * 4) / 3 + 4) return null
     const deflated = fromBase64Url(payload)
-    const buf = await pipeThrough(deflated, new DecompressionStream('deflate-raw'))
+    const buf = await pipeThrough(deflated, new DecompressionStream('deflate-raw'), MAX_INFLATED)
     if (buf.length < 21 || buf[0] !== 0x45 || buf[1] !== 0x31) return null
     const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
     let at = 2
@@ -135,11 +155,14 @@ export async function decodeRun(payload: string): Promise<RunRecord | null> {
     const overdrive = buf[at++]!
     const outcome = buf[at++]!
     const lifeCount = buf[at++]!
+    if (lifeCount > MAX_LIVES) return null
     const streams: Uint8Array[] = []
     for (let l = 0; l < lifeCount; l++) {
       const len = dv.getUint32(at, true)
       at += 4
-      streams.push(rleDecode(buf.subarray(at, at + len)))
+      const decoded = rleDecode(buf.subarray(at, at + len), LOOP_TICKS)
+      if (decoded === null) return null
+      streams.push(decoded)
       at += len
     }
     const finalHash = dv.getUint32(at, true)

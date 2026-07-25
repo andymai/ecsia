@@ -93,6 +93,14 @@ function driftKernel(view, indices, dt) {
   }
 }
 
+// Hard-kills the worker BEFORE completing the wave — the stranded-fence scenario the pool must
+// fail fast on (async tiers race the fence against worker failure; a plain throw is the SOFT
+// failure path, caught by the body and ACKed via setWaveError).
+function krashKernel() {
+  if (typeof process !== 'undefined') process.exit(3)
+  throw new Error('krash: no process.exit in this host')
+}
+
 export function buildWorkerKernels() {
   const kernels = new Map([
     ['Regen', regenKernel],
@@ -102,6 +110,7 @@ export function buildWorkerKernels() {
     ['Logger', loggerKernel],
     ['LoggerPure', loggerPureKernel],
     ['Drift', driftKernel],
+    ['Krash', krashKernel],
   ])
   const components = new Map([
     ['health', Health],

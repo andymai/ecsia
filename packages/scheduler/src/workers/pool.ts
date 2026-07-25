@@ -124,6 +124,14 @@ export class WorkerPool {
   // world's live generation gates the whole re-backing fence — zero work when nothing re-backed.
   #appliedGrowthGen = 0
   #disposed = false
+  // A crashed worker (uncaught worker-scope exception / abnormal exit) can never acknowledge a wave
+  // fence. On the async wait tiers the fence await RACES this promise so the frame loop rejects
+  // loudly instead of hanging forever; the pool then latches broken (a crash mid-wave may leave
+  // shared state torn — recreate the pool/world). The blocking Node tier cannot race a promise;
+  // there a crash surfaces through worker 'error'/'exit' diagnostics as before.
+  #broken = false
+  readonly #failed: Promise<never>
+  #failWith!: (err: Error) => void
   readonly #transport: WorkerTransport | undefined
   /** Resolves once every Worker is constructed (the transport lazy-load + spawn phase). */
   readonly #spawning: Promise<void>
@@ -133,6 +141,10 @@ export class WorkerPool {
     this.#systems = cfg.systems
     this.#diag = cfg.diagnostic ?? ((m) => console.warn(`[ecsia] ${m}`))
     this.#transport = cfg.transport
+    this.#failed = new Promise<never>((_, reject) => {
+      this.#failWith = reject
+    })
+    this.#failed.catch(() => {}) // consumed via race; never an unhandled rejection on its own
     if (cfg.transport === undefined && cfg.kernelModule === undefined) {
       throw new Error(
         "WorkerPool: the default node transport requires 'kernelModule' (workers import their kernels from it); browser transports bundle kernels into the worker file instead",
@@ -270,7 +282,11 @@ export class WorkerPool {
         if (msg?.kind === 'ready') slot.ready = true
         else if (msg?.kind === 'diagnostic' || msg?.kind === 'error') this.#diag(msg.message ?? 'worker error')
       })
-      port.onError((err) => this.#diag(`worker ${i} crashed: ${String(err)}`))
+      port.onError((err) => {
+        this.#diag(`worker ${i} crashed: ${String(err)}`)
+        this.#broken = true
+        this.#failWith(new Error(`worker ${i} crashed: ${String(err)}`))
+      })
       this.#slots.push(slot)
     }
     this.#spawned = true
@@ -296,6 +312,7 @@ export class WorkerPool {
    */
   async runRound(batches: readonly { systemId: SystemId; workerIndex: number }[], dt: number): Promise<void> {
     if (this.#disposed) throw new Error('worker pool disposed')
+    if (this.#broken) throw new Error('worker pool failed (a worker crashed); dispose it and recreate the pool')
     // Workers now spawn asynchronously (lazy node:* load) — before ready() resolves there are no
     // slots, and silently dispatching to zero workers would read as "ran instantly". Fail loud.
     if (!this.#spawned) throw new Error('worker pool not ready — await pool.ready() before runRound()')
@@ -339,7 +356,7 @@ export class WorkerPool {
 
     // ---- wait on the wave fence (blocking tier 2 on Node; waitAsync tier under a browser transport) ----
     const r = this.#waveSync.await(this.#waveCounter)
-    if (r !== undefined) await r
+    if (r !== undefined) await this.#raceFence(r)
 
     // ---- serial flush slot: flip back, merge command buffers deterministically ----
     this.#world.__setPhase('serial')
@@ -421,7 +438,7 @@ export class WorkerPool {
         Atomics.notify(slot.wake, WAKE)
       }
       const r = this.#waveSync.await(this.#waveCounter)
-      if (r !== undefined) await r
+      if (r !== undefined) await this.#raceFence(r)
       this.#world.__setPhase('serial')
     }
     this.#appliedGrowthGen = gen
@@ -460,6 +477,21 @@ export class WorkerPool {
       k += 1
     }
     return k
+  }
+
+  /**
+   * Await an async-tier fence, racing worker failure so a crash rejects the frame loop instead of
+   * stranding it. On failure the phase flips back to 'serial' (so dispose and serial reads work)
+   * and the pool stays latched broken.
+   */
+  async #raceFence(fence: Promise<void>): Promise<void> {
+    try {
+      await Promise.race([fence, this.#failed])
+    } catch (err) {
+      this.#broken = true
+      this.#world.__setPhase('serial')
+      throw err
+    }
   }
 
   #worldApply(): WorldApply {
