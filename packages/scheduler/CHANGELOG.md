@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.30.1](https://github.com/andymai/ecsia/compare/scheduler-v0.30.0...scheduler-v0.30.1) (2026-07-26)
+
+
+### Bug Fixes
+
+* **scheduler:** close two parallel==serial gaps in the command-buffer/worker path ([#175](https://github.com/andymai/ecsia/issues/175)) ([b4cdefb](https://github.com/andymai/ecsia/commit/b4cdefb0249daba901f4957d58f0daf32f0e173b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.30.1
+    * @ecsia/schema bumped to 0.30.1
+  * devDependencies
+    * @ecsia/relations bumped to 0.30.1
+
 ## [0.30.0](https://github.com/andymai/ecsia/compare/scheduler-v0.29.0...scheduler-v0.30.0) (2026-07-25)
 
 
