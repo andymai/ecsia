@@ -90,6 +90,25 @@ power-user scoped packages `@ecsia/core`, `@ecsia/schema`, `@ecsia/relations`,
   any column size. Boundary-tested by
   `packages/scheduler/test/worker-growth-boundary.test.ts` (1024 in-place grow + 1025/1040
   re-backing) and the above-reservation case in the heavy-pool smoke.
+- **Command-buffer gate bypass on same-flush create→destroy→touch.** `validateSubject` checked the
+  `newlyCreated` whitelist before the `tombstones` set, and `OP_DESTROY` never dropped the handle from
+  that whitelist — so a handle created, destroyed, and then referenced again within one flush
+  (`w.create(e); w.destroy(e); e.add(C)`) slipped past the drop-if-dead gate. A payload-free `ADD`
+  migrated a zombie row onto the freed index (a query then iterated a dead entity as live); a
+  payload-carrying `ADD` threw out of the guarded accessor mid-flush, aborting the frame. Destroying a
+  handle now removes it from `newlyCreated`, so a later op on it falls through to the tombstone check
+  and is dropped with a warning — matching a pre-existing entity destroyed mid-flush. Same-flush index
+  reuse (a fresh create that recycles the freed index gets a new handle) is unaffected. Regression-tested
+  in `packages/scheduler/test/cov-apply-edge.test.ts`.
+- **Worker write-corral overflow was silent.** The worker's corral writer saturated its count word at
+  capacity on overflow, so the pool's merge-time `count > capacity` check was unreachable dead code:
+  when a worker staged more field-writes than the corral held, the value writes still landed in the
+  shared column but their change-tracking staging was dropped with **no diagnostic** — silently
+  under-sending `.changed()`/`onChange` and delta `changedSince` for those entities (the unsafe
+  direction). The writer now counts every attempt before the capacity guard, so overflow is detected
+  and reported at the wave fence (`raise writeCorralEntries`), consistent with the work-SAB and
+  command-buffer overflow diagnostics. Regression-tested in
+  `packages/scheduler/test/corral-overflow.integration.test.ts`.
 
 ### Known issues
 

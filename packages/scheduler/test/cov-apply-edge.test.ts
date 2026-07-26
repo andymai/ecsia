@@ -257,6 +257,54 @@ describe('apply.ts: CREATE then ADD/SET in same flush treats the reserved handle
     expect(world.isAlive(e as unknown as EntityHandle)).toBe(false)
     expect(warns.some((m) => /destroyed earlier this flush/i.test(m))).toBe(true)
   })
+
+  test('CREATE then DESTROY then payload-free ADD on the same handle drops the ADD (no zombie row)', () => {
+    const { world, Health, codecById } = kit()
+    const h = world.reserveEntityBlock(0, 1).handles[0]! as number
+    const warns: string[] = []
+    // Same-flush create→destroy→add. The gate must treat h as dead (newlyCreated must not shadow the
+    // tombstone), or the payload-free ADD migrates a zombie Health row onto the freed index.
+    const cb = new Rec().create(h).destroy(h).add(h, cidOf(Health)).buffer()
+    flushAll(worldApplyOf(world, codecById, warns), [cb])
+    expect(world.isAlive(h as unknown as EntityHandle)).toBe(false)
+    expect(warns.some((m) => /destroyed earlier this flush|dead entity/i.test(m))).toBe(true)
+    let seen = 0
+    world.query(Health).each(() => seen++)
+    expect(seen).toBe(0) // no live entity has Health; the dropped ADD must not create a zombie
+  })
+
+  test('CREATE then DESTROY then payload-carrying ADD on the same handle drops the ADD (no mid-flush throw)', () => {
+    const { world, Health, codecById } = kit()
+    const h = world.reserveEntityBlock(0, 1).handles[0]! as number
+    const warns: string[] = []
+    // Payload-carrying variant: before the fix this reached the guarded writePayload on a dead
+    // handle and threw out of flushAll, aborting the frame. It must now drop cleanly.
+    const cb = new Rec().create(h).destroy(h).add(h, cidOf(Health), codecById.get(cidOf(Health)), { hp: 7 }).buffer()
+    expect(() => flushAll(worldApplyOf(world, codecById, warns), [cb])).not.toThrow()
+    expect(world.isAlive(h as unknown as EntityHandle)).toBe(false)
+    expect(warns.some((m) => /destroyed earlier this flush|dead entity/i.test(m))).toBe(true)
+  })
+
+  test('destroying one same-flush-created handle does not poison a different one created in the same flush', () => {
+    const { world, Health, codecById } = kit()
+    const block = world.reserveEntityBlock(0, 2)
+    const h1 = block.handles[0]! as number
+    const h2 = block.handles[1]! as number
+    const warns: string[] = []
+    // CREATE h1, DESTROY h1, CREATE h2, ADD h2 — h2 must still count as alive (the delete must be
+    // handle-scoped, not clear the whole whitelist).
+    const cb = new Rec()
+      .create(h1)
+      .destroy(h1)
+      .create(h2)
+      .add(h2, cidOf(Health), codecById.get(cidOf(Health)), { hp: 3 })
+      .buffer()
+    flushAll(worldApplyOf(world, codecById, warns), [cb])
+    expect(world.isAlive(h1 as unknown as EntityHandle)).toBe(false)
+    expect(world.isAlive(h2 as unknown as EntityHandle)).toBe(true)
+    expect(world.has(h2 as unknown as EntityHandle, Health)).toBe(true)
+    expect(readHp(world, h2, Health)).toBe(3)
+  })
 })
 
 describe('apply.ts: relation ops (ADD_PAIR/REMOVE_PAIR, lines 218-227, 235-238)', () => {

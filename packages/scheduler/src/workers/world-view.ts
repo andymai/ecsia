@@ -86,11 +86,17 @@ export function makeWriteCorralWriter(sab: SharedArrayBuffer): WriteCorralWriter
   return {
     push(index, componentId) {
       const n = view[CORRAL_COUNT_WORD]!
-      if (n >= capacityPairs) return // capped; pool diagnoses on merge
+      // Count every attempt BEFORE the capacity guard, so the count word carries true demand: on
+      // overflow it exceeds capacityPairs, which is exactly what lets the pool detect the overflow at
+      // merge (and clamp to what fits). Bumping only on success — as before — saturated the count at
+      // capacity, so `count > capPairs` in the merge was unreachable and the excess writes' change
+      // tracking was dropped with no diagnostic. Over-count is safe (the store truncates to u32; a
+      // single wave never approaches 2^32 pushes); the merge only ever reads the pairs that fit.
+      view[CORRAL_COUNT_WORD] = n + 1
+      if (n >= capacityPairs) return // no room to stage the pair; the attempt is still counted above
       const base = CORRAL_HEADER_WORDS + n * 2
       view[base] = index >>> 0
       view[base + 1] = componentId >>> 0
-      view[CORRAL_COUNT_WORD] = n + 1
     },
     reset() {
       view[CORRAL_COUNT_WORD] = 0
