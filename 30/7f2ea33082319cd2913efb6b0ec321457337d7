@@ -1,0 +1,28 @@
+packages/scheduler/test/cov-apply-edge.test.ts
+  s_8a2bfec8455a19::t_944b0f81f81a26 260-307
+packages/scheduler/test/corral-overflow.integration.test.ts
+  s_8a2bfec8455a19::t_00ca0cf328236c 1-96
+packages/scheduler/src/commands/apply.ts
+  s_8a2bfec8455a19::t_d00466d1d54351 173-177
+packages/scheduler/src/workers/world-view.ts
+  s_8a2bfec8455a19::t_a53bd962584b4e 89-94
+  s_8a2bfec8455a19::t_9866615833c484 95-96
+CHANGELOG.md
+  s_8a2bfec8455a19::t_52f96f1e879e22 93-111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "307f2ea33082319cd2913efb6b0ec321457337d7",
+  "prompts": {},
+  "sessions": {
+    "s_8a2bfec8455a19": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5a907ac9-ef2b-4e25-8112-d3bd94c18dd9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
