@@ -170,6 +170,11 @@ function applyBuffer(world: WorldApply, cb: CommandBuffer, newlyCreated: Set<num
           drain(h) // flush any pending structure before the entity disappears
           world.despawn(h)
           tombstones.add(world.handleIndex(h))
+          // validateSubject checks newlyCreated BEFORE tombstones, so a handle both created and
+          // destroyed this flush must drop out of the whitelist — otherwise a later op on it would
+          // pass the gate against a freed index and migrate a zombie row. (A fresh create that reuses
+          // this index gets a new handle and re-enters newlyCreated, so index reuse is unaffected.)
+          newlyCreated.delete(h as number)
         }
         break
       }
