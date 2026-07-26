@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.30.1](https://github.com/andymai/ecsia/compare/rollback-v0.30.0...rollback-v0.30.1) (2026-07-26)
+
+
+### Miscellaneous
+
+* **rollback:** Synchronize ecsia versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.30.1
+    * @ecsia/schema bumped to 0.30.1
+  * devDependencies
+    * @ecsia/relations bumped to 0.30.1
+
 ## [0.30.0](https://github.com/andymai/ecsia/compare/rollback-v0.29.0...rollback-v0.30.0) (2026-07-25)
 
 
