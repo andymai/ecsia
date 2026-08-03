@@ -1,15 +1,15 @@
 {
   "files": [],
   "references": [
-    { "path": "./packages/schema" },
-    { "path": "./packages/core" },
-    { "path": "./packages/relations" },
-    { "path": "./packages/scheduler" },
-    { "path": "./packages/serialization" },
-    { "path": "./packages/rollback" },
-    { "path": "./packages/ecsia" },
-    { "path": "./packages/three" },
-    { "path": "./packages/react" },
-    { "path": "./packages/devtools" }
+    { "path": "./packages/schema/tsconfig.json" },
+    { "path": "./packages/core/tsconfig.json" },
+    { "path": "./packages/relations/tsconfig.json" },
+    { "path": "./packages/scheduler/tsconfig.json" },
+    { "path": "./packages/serialization/tsconfig.json" },
+    { "path": "./packages/rollback/tsconfig.json" },
+    { "path": "./packages/ecsia/tsconfig.json" },
+    { "path": "./packages/three/tsconfig.json" },
+    { "path": "./packages/react/tsconfig.json" },
+    { "path": "./packages/devtools/tsconfig.json" }
   ]
 }
