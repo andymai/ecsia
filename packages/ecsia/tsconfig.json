@@ -5,11 +5,11 @@
     "rootDir": "./src"
   },
   "references": [
-    { "path": "../schema" },
-    { "path": "../core" },
-    { "path": "../relations" },
-    { "path": "../scheduler" },
-    { "path": "../serialization" }
+    { "path": "../schema/tsconfig.json" },
+    { "path": "../core/tsconfig.json" },
+    { "path": "../relations/tsconfig.json" },
+    { "path": "../scheduler/tsconfig.json" },
+    { "path": "../serialization/tsconfig.json" }
   ],
   "include": ["src/**/*"]
 }

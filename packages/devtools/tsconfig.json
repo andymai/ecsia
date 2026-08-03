@@ -4,6 +4,6 @@
     "outDir": "./dist",
     "rootDir": "./src"
   },
-  "references": [{ "path": "../core" }, { "path": "../schema" }, { "path": "../scheduler" }],
+  "references": [{ "path": "../core/tsconfig.json" }, { "path": "../schema/tsconfig.json" }, { "path": "../scheduler/tsconfig.json" }],
   "include": ["src/**/*"]
 }

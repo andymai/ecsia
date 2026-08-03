@@ -5,6 +5,6 @@
     "rootDir": "./src",
     "types": ["three"]
   },
-  "references": [{ "path": "../core" }, { "path": "../schema" }],
+  "references": [{ "path": "../core/tsconfig.json" }, { "path": "../schema/tsconfig.json" }],
   "include": ["src/**/*"]
 }
