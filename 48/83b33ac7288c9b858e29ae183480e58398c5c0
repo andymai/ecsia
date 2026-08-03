@@ -1,0 +1,37 @@
+packages/core/tsconfig.json
+  s_5017e1c375e8e6::t_429331735410ca 7
+packages/devtools/tsconfig.json
+  s_5017e1c375e8e6::t_8c12e5aceb9766 7
+packages/ecsia/tsconfig.json
+  s_5017e1c375e8e6::t_eb799e69a4b514 8-12
+packages/react/tsconfig.json
+  s_5017e1c375e8e6::t_df0cd8381165b2 7
+packages/relations/tsconfig.json
+  s_5017e1c375e8e6::t_d6e35c48f360a0 7
+packages/rollback/tsconfig.json
+  s_5017e1c375e8e6::t_0b7c1566ee543c 7
+packages/scheduler/tsconfig.json
+  s_5017e1c375e8e6::t_731d07f4838b59 7
+packages/serialization/tsconfig.json
+  s_5017e1c375e8e6::t_cb96e1314cdecd 7
+packages/three/tsconfig.json
+  s_5017e1c375e8e6::t_d0e0bbed25b822 8
+tsconfig.json
+  s_5017e1c375e8e6::t_25fb890e00d214 4-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "4883b33ac7288c9b858e29ae183480e58398c5c0",
+  "prompts": {},
+  "sessions": {
+    "s_5017e1c375e8e6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b8c1b943-6f39-44c5-a35d-1669e0072291",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
