@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.30.2](https://github.com/andymai/ecsia/compare/serialization-v0.30.1...serialization-v0.30.2) (2026-08-03)
+
+
+### Bug Fixes
+
+* **tsconfig:** point project references at explicit tsconfig.json files ([#180](https://github.com/andymai/ecsia/issues/180)) ([13215ad](https://github.com/andymai/ecsia/commit/13215ad06b7dc1811fd6705dc66e4e64b55b1b63))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @ecsia/core bumped to 0.30.2
+    * @ecsia/schema bumped to 0.30.2
+  * devDependencies
+    * @ecsia/relations bumped to 0.30.2
+
 ## [0.30.1](https://github.com/andymai/ecsia/compare/serialization-v0.30.0...serialization-v0.30.1) (2026-07-26)
 
 
