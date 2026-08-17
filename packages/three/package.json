@@ -55,7 +55,7 @@
   },
   "devDependencies": {
     "@ecsia/scheduler": "workspace:*",
-    "@types/three": "^0.185.3",
+    "@types/three": "^0.185.4",
     "three": "^0.185.1"
   }
 }
