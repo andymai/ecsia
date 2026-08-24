@@ -25,6 +25,11 @@ updates:
       # engines pin node >=22.13 — types track the minimum supported runtime, not latest
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # typedoc 0.28.20 is its latest release and peers typescript up to 6.0.x.
+      # On 7.x (the native rewrite) it dies reading ts.SyntaxKind.PropertyDeclaration
+      # and takes `pnpm docs:api` with it. Lift once typedoc supports 7.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: chore
   - package-ecosystem: github-actions
