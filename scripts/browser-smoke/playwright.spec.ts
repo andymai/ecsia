@@ -43,8 +43,13 @@ function listen(server: Server): Promise<number> {
     })
   })
 }
+// Chromium holds the Web Workers' keep-alive connections open while the page lives, and close()
+// waits for them, so drop them first.
 function close(server: Server): Promise<void> {
-  return new Promise((resolve) => server.close(() => resolve()))
+  return new Promise((resolve) => {
+    server.close(() => resolve())
+    server.closeAllConnections()
+  })
 }
 
 async function runVariant(
