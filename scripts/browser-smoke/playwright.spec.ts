@@ -43,19 +43,21 @@ function listen(server: Server): Promise<number> {
     })
   })
 }
+// Chromium holds the Web Workers' keep-alive connections open while the page lives, and close()
+// waits for them, so drop them first.
 function close(server: Server): Promise<void> {
-  return new Promise((resolve) => server.close(() => resolve()))
+  return new Promise((resolve) => {
+    server.close(() => resolve())
+    server.closeAllConnections()
+  })
 }
 
 async function runVariant(
   page: import('@playwright/test').Page,
   { isolation }: { isolation: boolean },
 ): Promise<{ smoke: SmokeResult; threaded: ThreadedSmoke }> {
-  const t0 = Date.now(); const lap = (m: string) => console.log(`[diag isolation=${isolation}] +${Date.now() - t0}ms ${m}`)
   const server = createSmokeServer({ isolation })
-  server.on('request', (req) => lap(`req ${req.url}`))
   const port = await listen(server)
-  lap('listening')
   const diagnostics: string[] = []
   page.on('pageerror', (err) => diagnostics.push(`pageerror: ${err.stack ?? err.message}`))
   page.on('console', (msg) => { if (msg.type() === 'error' || msg.type() === 'warning') diagnostics.push(`console.${msg.type()}: ${msg.text()}`) })
@@ -65,19 +67,15 @@ async function runVariant(
       waitUntil: 'load',
     })
     // The threaded smoke is async (real Web Workers); #smoke-result appears only after BOTH smokes settle.
-    lap('goto done')
     await page.waitForSelector('#smoke-result', { state: 'attached', timeout: 20_000 }).catch((e) => {
       throw new Error(`#smoke-result never appeared. In-page diagnostics:\n${diagnostics.join('\n') || '(none captured)'}\n${e}`)
     })
-    lap('selector attached')
     return (await page.evaluate(() => ({
       smoke: (window as unknown as { __ecsiaSmokeResult: SmokeResult }).__ecsiaSmokeResult,
       threaded: (window as unknown as { __ecsiaThreadedResult: ThreadedSmoke }).__ecsiaThreadedResult,
     }))) as { smoke: SmokeResult; threaded: ThreadedSmoke }
   } finally {
-    lap(`closing; diagnostics=${JSON.stringify(diagnostics)}`)
     await close(server)
-    lap('closed')
   }
 }
 
