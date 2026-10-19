@@ -34,7 +34,13 @@ function listen(server: Server): Promise<number> {
     })
   })
 }
-const close = (server: Server): Promise<void> => new Promise((r) => server.close(() => r()))
+// Chromium holds the Web Workers' keep-alive connections open while the page lives, and close()
+// waits for them, so drop them first.
+const close = (server: Server): Promise<void> =>
+  new Promise((r) => {
+    server.close(() => r())
+    server.closeAllConnections()
+  })
 
 const diagnostics: string[] = []
 
