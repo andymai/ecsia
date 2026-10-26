@@ -56,6 +56,6 @@
     "@ecsia/relations": "workspace:*",
     "@ecsia/scheduler": "workspace:*",
     "@types/react": "^19.3.0",
-    "react": "^19.3.0"
+    "react": "^19.3.1"
   }
 }
