@@ -1,0 +1,19 @@
+osv-scanner.toml
+  s_5a82da45ced147::t_b24a669cdb8dce 1-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "30cf6750691940a1c6c222dd0aff18d81bc72500",
+  "prompts": {},
+  "sessions": {
+    "s_5a82da45ced147": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5a9fab01-056b-4ad2-8570-01423f7609e3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Andy Aragon <hi@andymai.com>"
+    }
+  }
+}
