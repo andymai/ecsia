@@ -1,0 +1,14 @@
+# OSV-Scanner suppressions, auto-discovered next to pnpm-lock.yaml. Each entry
+# carries a reason and a review date.
+
+# minimatch 10.2.5 arrives only through typedoc 0.28.20 (docs build). The fix
+# exists only in minimatch 11.0.1 and typedoc still declares ^10.2.5. The
+# amplification runs only for globs compiled with optimizationLevel >= 2;
+# typedoc never passes optimizationLevel, so it takes minimatch's default
+# level 1, and its globs come from typedoc config in this repo.
+#
+# Delete when typedoc accepts minimatch >= 11.0.1.
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2026-12-01
+reason = "dev-only via typedoc, which never sets optimizationLevel >= 2 (the only amplifying path); globs are repo-authored"
