@@ -2,7 +2,7 @@
 
 # ecsia
 
-An entity component system (ECS) for TypeScript. One flag turns on worker threads, and the result matches a run on one thread, byte for byte.
+An entity component system (ECS) for TypeScript. It can run systems on worker threads, and the result matches a run on one thread, byte for byte.
 
 [![CI](https://github.com/andymai/ecsia/actions/workflows/ci.yml/badge.svg)](https://github.com/andymai/ecsia/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
@@ -51,7 +51,9 @@ const scheduler = createScheduler(world, [Movement])
 scheduler.update(dt) // run one frame
 ```
 
-The `read` and `write` declarations are more than documentation. The scheduler uses them to find the systems that can never interfere with each other. It runs those systems at the same time on worker threads. To turn on threads, set one flag. You do not change any system, query, or accessor code:
+The `read` and `write` declarations are more than documentation. The scheduler uses them to find the systems that can never interfere with each other. It runs those systems at the same time on worker threads.
+
+To turn on threads, create the world with `threaded: true`. Then move the body of each system into a worker kernel module, and give that module to the scheduler. Queries and accessors stay the same. The [Multithreading guide](https://andymai.github.io/ecsia/guide/parallelism) shows the kernel module. The world takes the flag when you create it:
 
 ```ts
 import { createWorld } from '@ecsia/kit'
@@ -125,6 +127,8 @@ The full site is at **[andymai.github.io/ecsia](https://andymai.github.io/ecsia/
 | `@ecsia/serialization` | snapshots, change payloads, worker bootstrap |
 | `@ecsia/three` | three.js bindings (opt-in, not in the umbrella) |
 | `@ecsia/devtools` | world inspector and schedule explainer (opt-in) |
+| `@ecsia/react` | React hooks that render entity lists and component values (opt-in) |
+| `@ecsia/rollback` | capture and restore of the whole world, for rollback netcode and prediction (opt-in) |
 
 `@ecsia/core` alone is a complete ECS that runs on one thread. The scheduler, relations, and serialization packages plug into it, and core does not know about them. No package imports a package above it. All packages are `sideEffects: false`, so bundlers drop the code that you do not use.
 
